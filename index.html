@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HR CXO Dashboard — CMS IT Services</title>
 <style>
@@ -1718,6 +1721,33 @@ function switchTab(id, btn) {
   currentTab = id;
 }
 
+
+// ── INIT (v3 compatible) ─────────────────────────────────────────────────
+function init() {
+  const wKeys = WEEK_ORDER.filter(k => WEEKS_DATA[k]);
+  const latestKey = wKeys[wKeys.length - 1];
+  currentWeek = latestKey;
+
+  // Clear and rebuild week buttons
+  const container = document.getElementById('weekBtns');
+  if (container) {
+    container.innerHTML = '';
+    wKeys.forEach((key, i) => {
+      const w = WEEKS_DATA[key];
+      const btn = document.createElement('button');
+      btn.className = 'week-btn' + (key === latestKey ? ' active latest' : '');
+      btn.textContent = (WEEK_NAMES[key] || key) + '  ' + w.label;
+      btn.onclick = () => {
+        currentWeek = key;
+        document.querySelectorAll('.week-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        render();
+      };
+      container.appendChild(btn);
+    });
+  }
+  render();
+}
 
 // ── SUPABASE AUTH ─────────────────────────────────────────────────────────
 async function sbLogin() {
