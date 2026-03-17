@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CMS IT · HR Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--muted2:#6e7681;--accent:#3b82f6;--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--purple:#a78bfa;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.auth-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:40px;width:100%;max-width:380px}
+.auth-logo{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+.auth-title{font-size:22px;font-weight:600;margin-bottom:4px}
+.auth-sub{font-size:13px;color:var(--muted);margin-bottom:28px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:11px;font-weight:500;color:var(--muted);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase}
+.field input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:14px;outline:none;transition:border .15s}
+.field input:focus{border-color:var(--accent)}
+.btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:600;cursor:pointer}
+.btn:hover{opacity:.88}.btn:disabled{opacity:.5;cursor:not-allowed}
+.err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;font-size:12px;padding:10px 14px;border-radius:8px;margin-top:12px}
+.app{display:none;flex-direction:column;min-height:100vh}
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100}
+.topbar-brand{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)}
+.topbar-week{font-size:11px;color:var(--muted);background:var(--bg3);padding:4px 10px;border-radius:20px;border:1px solid var(--border)}
+.role-badge{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:3px 10px;border-radius:20px}
+.role-admin{background:rgba(167,139,250,.15);color:var(--purple)}
+.role-executive{background:rgba(59,130,246,.15);color:var(--accent)}
+.role-hrbp{background:rgba(34,197,94,.15);color:var(--green)}
+.so-btn{font-size:12px;color:var(--muted);background:none;border:1px solid var(--border);padding:5px 12px;border-radius:6px;cursor:pointer}
+.so-btn:hover{border-color:var(--muted);color:var(--text)}
+.tabs{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab{padding:12px 16px;font-size:12px;font-weight:500;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.tab:hover{color:var(--text)}.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.main{padding:24px;max-width:1400px;margin:0 auto;width:100%}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+.ct{font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px}
+.kv{font-size:30px;font-weight:700;line-height:1;margin-bottom:4px}
+.kl{font-size:11px;color:var(--muted);letter-spacing:.5px}
+.ks{font-size:11px;color:var(--muted2);margin-top:4px}
+.wpills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.wp{padding:6px 14px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--border);cursor:pointer;color:var(--muted);background:none}
+.wp:hover{border-color:var(--accent);color:var(--accent)}.wp.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.tag{display:inline-block;font-size:9px;font-weight:700;padding:2px 8px;border-radius:20px;letter-spacing:.5px;text-transform:uppercase}
+.tn{background:rgba(59,130,246,.15);color:#60a5fa}.ts{background:rgba(34,197,94,.15);color:#4ade80}
+.te{background:rgba(251,191,36,.15);color:#fbbf24}.tw{background:rgba(167,139,250,.15);color:#a78bfa}.tp{background:rgba(148,163,184,.15);color:#94a3b8}
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{font-family:monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);padding:0 10px 10px;border-bottom:1px solid var(--border);text-align:left}
+.tbl th:not(:first-child){text-align:right}
+.tbl td{padding:9px 10px;border-bottom:1px solid rgba(48,54,61,.5)}
+.tbl td:not(:first-child){text-align:right;font-family:monospace;font-size:11px;color:var(--muted)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.srow{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:12px}
+.srow:last-child{border-bottom:none}
+.pbw{background:var(--bg3);border-radius:3px;height:4px;flex:1;margin:0 10px;overflow:hidden}
+.pbf{height:100%;border-radius:3px}
+.empty{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+.loader{display:flex;align-items:center;justify-content:center;padding:60px;gap:10px;color:var(--muted);font-size:13px}
+.spin{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.notice{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);color:#93c5fd;font-size:12px;padding:10px 14px;border-radius:8px;margin-bottom:16px;line-height:1.5}
+.urow{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:13px}
+.urow:last-child{border-bottom:none}
+.ssel{background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:6px;font-size:11px}
+.wb-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.wb-lbl{font-size:11px;color:var(--muted);min-width:90px}
+.wb-track{flex:1;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.wb-fill{height:100%;border-radius:3px;transition:width .8s ease}
+.wb-num{font-family:monospace;font-size:10px;color:var(--muted);min-width:40px;text-align:right}
+.stitle{font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:16px}
+.cc{padding:10px 0;border-bottom:1px solid rgba(48,54,61,.4)}.cc:last-child{border-bottom:none}
+.uz{border:2px dashed var(--border);border-radius:10px;padding:40px;text-align:center;cursor:pointer}
+.uz:hover,.uz.drag{border-color:var(--accent);background:rgba(59,130,246,.04)}
+@media(max-width:768px){.g4,.g3{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}.main{padding:16px}.topbar{padding:0 14px}}
+@media(max-width:480px){.g4,.g3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="auth-wrap" id="authWrap">
+  <div class="auth-card">
+    <div class="auth-logo">CMS IT Services</div>
+    <div class="auth-title">HR Dashboard</div>
+    <div class="auth-sub">Sign in to access your weekly HR intelligence</div>
+    <div class="field"><label>Email</label><input type="email" id="lEmail" placeholder="you@cmsit.com" autocomplete="email"></div>
+    <div class="field"><label>Password</label><input type="password" id="lPwd" placeholder="••••••••" autocomplete="current-password"></div>
+    <button class="btn" id="lBtn" onclick="doLogin()">Sign In</button>
+    <div id="lErr"></div>
+  </div>
+</div>
+<div class="app" id="appWrap">
+  <div class="topbar">
+    <div style="display:flex;align-items:center;gap:14px">
+      <span class="topbar-brand">CMS IT · HR</span>
+      <span class="topbar-week" id="topWeek">—</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="role-badge" id="roleBadge"></span>
+      <button class="so-btn" onclick="doSignOut()">Sign out</button>
+    </div>
+  </div>
+  <div class="tabs" id="tabBar"></div>
+  <div class="main" id="mainArea"><div class="loader"><div class="spin"></div>Loading…</div></div>
+</div>
+<script>
+const SB_URL='https://mzyrcrkwgbqgwajkjdnp.supabase.co';const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16eXJjcmt3Z2JxZ3dhamtqZG5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MjM0MzgsImV4cCI6MjA4OTI5OTQzOH0.lXmA5LoBQrWHMSMAaJtn3cwEpDDbMt2EvzyEy5mykbc';const WI={"active_hc_mar": 2819, "total_wage_bill_cr": 132.25, "female_count": 216, "female_pct": 7.7, "ctc_brackets": {"4-6L": 511, "10-15L": 78, ">15L": 72, "2.5-4L": 1412, "<2.5L": 423, "6-10L": 310}, "tenure_dist": {">10 yrs": 242, "5-10 yrs": 260, "3-5 yrs": 471, "1-3 yrs": 745, "6m-1yr": 419, "<6 months": 669}, "age_dist": {">45": 274, "35-45": 648, "25-30": 865, "30-35": 550, "<25": 469}, "regions": {"North": {"hc": 523, "wage_cr": 27.2, "female_pct": 4.5, "female": 23, "ta_sourced": 36, "ta_joined": 21}, "South": {"hc": 681, "wage_cr": 33.18, "female_pct": 8.5, "female": 57, "ta_sourced": 58, "ta_joined": 40}, "East": {"hc": 509, "wage_cr": 16.4, "female_pct": 3.3, "female": 17, "ta_sourced": 34, "ta_joined": 22}, "West": {"hc": 1095, "wage_cr": 53.81, "female_pct": 10.8, "female": 118, "ta_sourced": 127, "ta_joined": 90}}, "attrition": {"Jan": {"exits": 20, "active_hc": 2810, "rate": 0.7, "ctc_vacated_l": 117.1, "region": {"North": 1, "West": 3, "East": 1}, "acct": {"TCS": 1, "HDB Financial Services": 1}}, "Feb": {"exits": 8, "active_hc": 2878, "rate": 0.3, "ctc_vacated_l": 25.9, "region": {}, "acct": {}}, "Mar": {"exits": 57, "active_hc": 2950, "rate": 1.9, "ctc_vacated_l": 246.1, "region": {"West": 2, "South": 1}, "acct": {}}, "Apr": {"exits": 68, "active_hc": 0, "rate": 0, "ctc_vacated_l": 425.5, "region": {"West": 3, "South": 2}, "acct": {"HDB Financial Services": 2}}, "May": {"exits": 44, "active_hc": 0, "rate": 0, "ctc_vacated_l": 337.9, "region": {"West": 14, "South": 15, "East": 2, "North": 1}, "acct": {"SBI General Insurance": 2, "TCS": 1, "Avenue Supermarts": 3, "HDB Financial Services": 2, "Torrent Power": 1}}}, "ta_monthly": {"Jan": {"sourced": 83, "offered": 75, "joined": 54}, "Feb": {"sourced": 132, "offered": 89, "joined": 68}, "Mar": {"sourced": 40, "offered": 50, "joined": 51}}, "ta_region": {"North": {"sourced": 36, "joined": 21, "accepted": 24}, "South": {"sourced": 58, "joined": 40, "accepted": 46}, "East": {"sourced": 34, "joined": 22, "accepted": 26}, "West": {"sourced": 127, "joined": 90, "accepted": 62}}, "source_stats": {"Internal-Referral": {"total": 88, "offers_made": 67, "accepted": 66, "joined": 65, "acc_rate": 99, "yield_rate": 74}, "Naukri": {"total": 92, "offers_made": 55, "accepted": 55, "joined": 70, "acc_rate": 100, "yield_rate": 76}, "Other Source": {"total": 28, "offers_made": 22, "accepted": 22, "joined": 23, "acc_rate": 100, "yield_rate": 82}, "Job-Portals": {"total": 16, "offers_made": 9, "accepted": 9, "joined": 10, "acc_rate": 100, "yield_rate": 62}, "Consultant": {"total": 3, "offers_made": 3, "accepted": 3, "joined": 3, "acc_rate": 100, "yield_rate": 100}, "Internal-Submission": {"total": 22, "offers_made": 0, "accepted": 0, "joined": 0, "acc_rate": 0, "yield_rate": 0}, "_total": {"total": 256, "offers_made": 159, "accepted": 158, "joined": 173, "acc_rate": 99, "yield_rate": 68}}, "accounts": [{"name": "ABFRL", "tier": "Platinum", "hc": 155, "wage_cr": 5.88, "female": 8, "female_pct": 5.2, "ta_in_pipeline": 8, "ta_accepted": 4, "ta_joined": 3, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "IHCL / Taj Hotels", "tier": "Platinum", "hc": 120, "wage_cr": 7.73, "female": 1, "female_pct": 0.8, "ta_in_pipeline": 2, "ta_accepted": 2, "ta_joined": 2, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "HDB Financial Services", "tier": "Platinum", "hc": 105, "wage_cr": 3.64, "female": 7, "female_pct": 6.7, "ta_in_pipeline": 7, "ta_accepted": 2, "ta_joined": 1, "exits_2026": 5, "attrition_rate_ann": 11.4}, {"name": "SBI General Insurance", "tier": "Platinum", "hc": 91, "wage_cr": 4.76, "female": 6, "female_pct": 6.6, "ta_in_pipeline": 3, "ta_accepted": 1, "ta_joined": 0, "exits_2026": 2, "attrition_rate_ann": 5.3}, {"name": "Reliance Projects & PM", "tier": "Platinum", "hc": 79, "wage_cr": 3.33, "female": 7, "female_pct": 8.9, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Tata AIG", "tier": "Platinum", "hc": 52, "wage_cr": 2.07, "female": 2, "female_pct": 3.8, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Avenue Supermarts", "tier": "Platinum", "hc": 46, "wage_cr": 1.49, "female": 1, "female_pct": 2.2, "ta_in_pipeline": 1, "ta_accepted": 1, "ta_joined": 1, "exits_2026": 3, "attrition_rate_ann": 15.7}, {"name": "LIC West", "tier": "Platinum", "hc": 25, "wage_cr": 1.07, "female": 1, "female_pct": 4.0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Reliance Capital", "tier": "Gold", "hc": 38, "wage_cr": 1.7, "female": 3, "female_pct": 7.9, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Torrent Power", "tier": "Gold", "hc": 29, "wage_cr": 1.02, "female": 0, "female_pct": 0.0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 1, "attrition_rate_ann": 8.3}, {"name": "TCS", "tier": "Gold", "hc": 28, "wage_cr": 1.29, "female": 1, "female_pct": 3.6, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 2, "attrition_rate_ann": 17.1}, {"name": "Majesco", "tier": "Gold", "hc": 21, "wage_cr": 1.04, "female": 6, "female_pct": 28.6, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "RCOM", "tier": "Gold", "hc": 19, "wage_cr": 0.54, "female": 3, "female_pct": 15.8, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Exide Life Insurance", "tier": "Gold", "hc": 16, "wage_cr": 0.72, "female": 1, "female_pct": 6.2, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "CEAT", "tier": "Gold", "hc": 15, "wage_cr": 0.46, "female": 0, "female_pct": 0.0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "AMUL", "tier": "Gold", "hc": 0, "wage_cr": 0, "female": 0, "female_pct": 0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "CLSA India", "tier": "Gold", "hc": 0, "wage_cr": 0, "female": 0, "female_pct": 0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Kaiser / Garfield", "tier": "Gold", "hc": 0, "wage_cr": 0, "female": 0, "female_pct": 0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Synapsewave", "tier": "Gold", "hc": 0, "wage_cr": 0, "female": 0, "female_pct": 0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}], "fnf": {"total_cases": 154, "total_liability": 3348872, "by_status": {"Payment not cleared -(Bank account Issue)": {"count": 69, "amount": 418085}, "Priority": {"count": 34, "amount": 1659969}, "Pending": {"count": 51, "amount": 1270818}}, "by_aging": {">1 year": {"count": 64, "amount": 386403}, "180-365 days": {"count": 5, "amount": 1160874}, "90-180 days": {"count": 4, "amount": 75340}, "45-90 days": {"count": 50, "amount": 1052088}, "<45 days": {"count": 31, "amount": 674167}}}, "attrition_by_tenure": {"<3 months": {"total_2026": 10, "jan_mar": 7}, "3m-1yr": {"total_2026": 41, "jan_mar": 21}, "1-2 yrs": {"total_2026": 62, "jan_mar": 18}, "2-5 yrs": {"total_2026": 67, "jan_mar": 32}, ">5 yrs": {"total_2026": 17, "jan_mar": 7}}};
+const sb=supabase.createClient(SB_URL,SB_KEY);
+let ME=null,ROLE=null,CUR_WEEK=null,WEEKS={},CUR_TAB='overview';
+
+async function doLogin(){
+  const email=document.getElementById('lEmail').value.trim();
+  const pwd=document.getElementById('lPwd').value;
+  const btn=document.getElementById('lBtn');
+  const err=document.getElementById('lErr');
+  err.innerHTML='';btn.disabled=true;btn.textContent='Signing in…';
+  const {data,error}=await sb.auth.signInWithPassword({email,password:pwd});
+  btn.disabled=false;btn.textContent='Sign In';
+  if(error){err.innerHTML=`<div class="err">${error.message}</div>`;return;}
+  await bootApp(data.user);
+}
+async function doSignOut(){
+  await sb.auth.signOut();
+  document.getElementById('appWrap').style.display='none';
+  document.getElementById('authWrap').style.display='flex';
+  ME=null;ROLE=null;WEEKS={};
+}
+async function bootApp(user){
+  ME=user;
+  document.getElementById('authWrap').style.display='none';
+  document.getElementById('appWrap').style.display='flex';
+  await loadRole();await loadWeeks();buildTabs();showTab('overview');
+}
+async function loadRole(){
+  const {data}=await sb.from('user_profiles').select('role,region').eq('id',ME.id).single();
+  ROLE=data||{role:'viewer',region:null};
+  const b=document.getElementById('roleBadge');
+  b.textContent=ROLE.role;
+  b.className='role-badge role-'+(ROLE.role==='admin'?'admin':ROLE.role==='executive'?'executive':'hrbp');
+}
+async function loadWeeks(){
+  const {data,error}=await sb.from('weekly_reports').select('*').order('week_num',{ascending:false}).limit(20);
+  if(!error&&data&&data.length){
+    data.forEach(r=>WEEKS[r.week_key]=r);
+    CUR_WEEK=data[0].week_key;
+    document.getElementById('topWeek').textContent='W'+data[0].week_num+' · '+data[0].label;
+  }else{document.getElementById('topWeek').textContent='No data yet';}
+}
+function getTabs(){
+  const t=[{id:'overview',l:'Overview'},{id:'ta',l:'Talent Acquisition'},{id:'hrbp',l:'HRBP & Engagement'},{id:'ops',l:'HR Ops & Payroll'},{id:'ld',l:'L&D'}];
+  if(ROLE.role==='admin'||ROLE.role==='executive')t.push({id:'workforce',l:'Workforce Intel'});
+  if(ROLE.role==='admin')t.push({id:'upload',l:'Upload Data'},{id:'users',l:'Users'});
+  return t;
+}
+function buildTabs(){
+  document.getElementById('tabBar').innerHTML=getTabs().map(t=>`<button class="tab${t.id===CUR_TAB?' active':''}" onclick="showTab('${t.id}')">${t.l}</button>`).join('');
+}
+function showTab(id){
+  CUR_TAB=id;buildTabs();
+  const mc=document.getElementById('mainArea');
+  const w=CUR_WEEK?WEEKS[CUR_WEEK]:null;
+  const wk=Object.keys(WEEKS).sort((a,b)=>(WEEKS[b].week_num||0)-(WEEKS[a].week_num||0));
+  const pw=wk[1]?WEEKS[wk[1]]:null;
+  if(id==='overview')mc.innerHTML=renderOverview(w,pw,wk);
+  else if(id==='ta')mc.innerHTML=renderTA(w,pw);
+  else if(id==='hrbp')mc.innerHTML=renderHRBP(w);
+  else if(id==='ops')mc.innerHTML=renderOps(w);
+  else if(id==='ld')mc.innerHTML=renderLD(w);
+  else if(id==='workforce')mc.innerHTML=renderWorkforce();
+  else if(id==='upload')mc.innerHTML=renderUpload();
+  else if(id==='users')loadUsers(mc);
+}
+function switchWeek(k){
+  CUR_WEEK=k;document.getElementById('topWeek').textContent='W'+WEEKS[k].week_num+' · '+WEEKS[k].label;showTab(CUR_TAB);
+}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function noData(){return'<div class="empty"><div style="font-size:32px;margin-bottom:12px">📭</div><div style="font-size:15px;font-weight:500;margin-bottom:8px">No data yet</div><div>Go to Upload Data to add your first report</div></div>';}
+function pills(wk){return`<div class="wpills">${wk.map(k=>`<button class="wp${k===CUR_WEEK?' active':''}" onclick="switchWeek('${k}')">W${WEEKS[k].week_num} · ${WEEKS[k].label}</button>`).join('')}</div>`;}
+function kpi(label,val,prev,color,inv){
+  const diff=prev!=null?(val||0)-(prev||0):null;
+  const dc=diff==null?'':diff===0?'var(--muted)':diff>0?(inv?'var(--red)':'var(--green)'):(inv?'var(--green)':'var(--red)');
+  return`<div class="kpi"><div class="kv" style="color:${color}">${val??'—'}</div><div class="kl">${label}</div>${diff!=null?`<div class="ks" style="color:${dc}">${diff>=0?'+':''}${diff} vs last wk</div>`:''}</div>`;
+}
+function rtag(r){const cls={North:'tn',South:'ts',East:'te',West:'tw'}[r]||'tp';return`<span class="tag ${cls}">${r||'—'}</span>`;}
+function getRegion(name){
+  const n=(name||'').toLowerCase();
+  if(n.includes('abhishek')||n.includes('rekha')||n.includes('salma'))return'North';
+  if(n.includes('priya')||n.includes('suhail')||n.includes('mousumi')||n.includes('caral'))return'South';
+  if(n.includes('pijush')||n.includes('surajit'))return'East';
+  if(n.includes('somasri')||n.includes('ayush')||n.includes('shambhavi')||n.includes('kumari')||n.includes('nilam')||n.includes('nikita')||n.includes('juee'))return'West';
+  return'Pan-India';
+}
+function rlist(arr,label,color){
+  const items=(arr||[]).filter(i=>i&&i.length>5);
+  if(!items.length)return'';
+  return`<div style="margin-top:10px"><div style="font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:${color};margin-bottom:6px">${label}</div>${items.map(i=>`<div style="padding:5px 0;border-bottom:1px solid rgba(48,54,61,.3);font-size:12px;color:var(--muted)">${esc(i.substring(0,220))}</div>`).join('')}</div>`;
+}
+
+/* OVERVIEW */
+function renderOverview(w,pw,wk){
+  if(!w)return noData();
+  return`${pills(wk)}<div class="g4">${kpi('Positions Opened',w.ta_opened,pw?.ta_opened,'var(--accent)')}${kpi('Positions Closed',w.ta_closed,pw?.ta_closed,'var(--green)')}${kpi('Offers Released',w.ta_offers,pw?.ta_offers,'var(--purple)')}${kpi('Offer Dropouts',w.ta_dropouts,pw?.ta_dropouts,'var(--amber)',true)}</div>
+  <div class="g3">${kpi('Payroll HC',w.payroll_hc,pw?.payroll_hc,'var(--text)')}${kpi('HRBP Site Visits',w.hrbp_visits,pw?.hrbp_visits,'var(--accent)')}${kpi('Escalations',w.hrops_esc,pw?.hrops_esc,'var(--amber)',true)}</div>
+  <div class="g2">
+    <div class="card"><div class="ct">TA by Region · ${esc(w.label||'')}</div>${taByRegion(w.ta_detail||[])}</div>
+    <div class="card"><div class="ct">Key Flags</div>${weekFlags(w)}</div>
+  </div>`;
+}
+function taByRegion(det){
+  const r={North:0,South:0,East:0,West:0,'Pan-India':0};
+  det.forEach(d=>{if(r[d.region]!=null)r[d.region]+=(d.closed||0);});
+  const mx=Math.max(...Object.values(r),1);
+  const cls={North:'tn',South:'ts',East:'te',West:'tw','Pan-India':'tp'};
+  return Object.entries(r).map(([reg,v])=>`<div class="srow"><span class="tag ${cls[reg]}">${reg}</span><div class="pbw"><div class="pbf" style="width:${(v/mx*100).toFixed(0)}%;background:var(--accent)"></div></div><span style="font-family:monospace;font-size:11px;color:var(--muted)">${v} closed</span></div>`).join('');
+}
+function weekFlags(w){
+  const items=[];
+  if((w.ta_dropouts||0)>2)items.push({c:'var(--amber)',t:`${w.ta_dropouts} offer dropouts`});
+  if((w.payroll_errors||0)>5)items.push({c:'var(--red)',t:`${w.payroll_errors} payroll errors`});
+  if((w.hrops_esc||0)>100)items.push({c:'var(--amber)',t:`${w.hrops_esc} escalations handled`});
+  (w.hrbp_risks||[]).filter(r=>r&&r.length>10).slice(0,2).forEach(r=>items.push({c:'var(--red)',t:r.substring(0,90)}));
+  (w.ta_constraints||[]).filter(c=>c&&c.length>10&&c!=='NA').slice(0,2).forEach(c=>items.push({c:'var(--muted2)',t:c.substring(0,90)}));
+  if(!items.length)return'<div class="empty">No critical flags this week</div>';
+  return items.map(i=>`<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:12px;color:var(--muted)"><span style="color:${i.c};flex-shrink:0">●</span><span>${esc(i.t)}</span></div>`).join('');
+}
+
+/* TA */
+function renderTA(w,pw){
+  if(!w)return noData();
+  const det=w.ta_detail||[];
+  return`<div class="g4">${kpi('Opened',w.ta_opened,pw?.ta_opened,'var(--accent)')}${kpi('Closed',w.ta_closed,pw?.ta_closed,'var(--green)')}${kpi('Offers',w.ta_offers,pw?.ta_offers,'var(--purple)')}${kpi('Dropouts',w.ta_dropouts,pw?.ta_dropouts,'var(--amber)',true)}</div>
+  <div class="card"><div class="ct">HRBP-wise Activity</div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>HRBP</th><th>Region</th><th>Opened</th><th>Closed</th><th>Offers</th><th>Dropouts</th></tr></thead><tbody>
+    ${det.map(d=>`<tr><td>${esc(d.name)}</td><td>${rtag(d.region)}</td><td>${d.opened||0}</td><td>${d.closed||0}</td><td>${d.offers||0}</td><td style="color:${(d.dropouts||0)>0?'var(--amber)':'var(--muted)'}">${d.dropouts||0}</td></tr>`).join('')}
+    <tr style="border-top:1px solid var(--border);font-weight:600"><td>Total</td><td></td><td>${w.ta_opened}</td><td>${w.ta_closed}</td><td>${w.ta_offers}</td><td style="color:${(w.ta_dropouts||0)>0?'var(--amber)':'var(--muted)'}">${w.ta_dropouts}</td></tr>
+  </tbody></table></div></div>
+  ${(w.ta_aging_raw||[]).filter(a=>a&&a!='NA'&&a.length>5).length?`<div class="card"><div class="ct">Aging Positions</div>${(w.ta_aging_raw||[]).filter(a=>a&&a!='NA'&&a.length>5).map(a=>`<div style="padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:12px;color:var(--muted);line-height:1.5">${esc(a)}</div>`).join('')}</div>`:''}
+  ${(w.ta_constraints||[]).filter(c=>c&&c!='NA'&&c.length>5).length?`<div class="card"><div class="ct">Constraints</div>${(w.ta_constraints||[]).filter(c=>c&&c!='NA'&&c.length>5).map(c=>`<div style="padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:12px;color:var(--muted)">${esc(c)}</div>`).join('')}</div>`:''}`;
+}
+
+/* HRBP */
+function renderHRBP(w){
+  if(!w)return noData();
+  const rf=ROLE.role==='hrbp'?ROLE.region:null;
+  let conns=(w.hrbp_connects||[]);
+  if(rf)conns=conns.filter(c=>getRegion(c.name)===rf);
+  return`<div class="g3">${kpi('Site Visits',w.hrbp_visits,null,'var(--accent)')}${kpi('Connects Logged',conns.length,null,'var(--green)')}${kpi('ER Cases',(w.hrbp_discipline||[]).filter(d=>d&&d.length>10).length,null,'var(--amber)')}</div>
+  <div class="g2">
+    <div class="card"><div class="ct">Connects This Week</div>${conns.length?conns.map(c=>ccCard(c)).join(''):'<div class="empty">None logged</div>'}</div>
+    <div class="card"><div class="ct">Key Activities</div>${(w.hrbp_activities||[]).filter(a=>a&&a.length>10).slice(0,5).map(a=>`<div style="padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:12px;color:var(--muted);line-height:1.5">${esc(a.substring(0,160))}</div>`).join('')||'<div class="empty">None logged</div>'}</div>
+  </div>
+  <div class="g2">
+    <div class="card"><div class="ct">Retention Interventions</div>${(w.hrbp_retention||[]).filter(r=>r&&r.length>10&&r!=='NA'&&r!=='Nil').map(r=>`<div style="padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:12px;color:var(--muted)">${esc(r.substring(0,160))}</div>`).join('')||'<div class="empty">None flagged</div>'}</div>
+    <div class="card"><div class="ct">Issues for Leadership</div>${(w.hrbp_issues||[]).filter(i=>i&&i.length>10&&i!=='NA'&&i!=='Nil'&&i!=='No as such').map(i=>`<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:12px;color:var(--muted)"><span style="color:var(--red)">●</span><span>${esc(i.substring(0,200))}</span></div>`).join('')||'<div class="empty">None escalated</div>'}</div>
+  </div>`;
+}
+function ccCard(c){
+  const region=getRegion(c.name||'');
+  const detail=c.detail||'';
+  const client=detail.split('\n')[0].split(/\s*[-–]\s*/)[0].trim().substring(0,50);
+  const acctM=detail.match(/\b(Platinum|Gold|Silver)\s+Account/i);
+  const acct=acctM?acctM[1]:'';
+  const bc=acct==='Platinum'?'var(--purple)':acct==='Gold'?'var(--amber)':'transparent';
+  const badge=acct?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:rgba(148,163,184,.1);color:${bc};margin-left:4px">${acct}</span>`:'';
+  const bs=acct?`border-left:3px solid ${bc};padding-left:10px;margin-left:-10px;`:'';
+  const enc=btoa(encodeURIComponent(detail));
+  return`<div class="cc" style="${bs}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span style="font-size:12px;font-weight:500">${esc(c.name||'')}</span>${rtag(region)}${badge}</div>
+    <div style="font-size:12px;color:var(--accent);margin-bottom:3px">${esc(client)}</div>
+    <div style="font-size:11px;color:var(--muted2);line-height:1.5">${esc(detail.replace(/\n/g,' ').substring(0,110))}${detail.length>110?'…':''}</div>
+    ${detail.length>110?`<div style="font-size:10px;color:var(--accent);cursor:pointer;margin-top:4px" onclick="expandCC(this,'${enc}')">▼ View full details</div>`:''}
+  </div>`;
+}
+function expandCC(el,enc){
+  const t=decodeURIComponent(atob(enc));
+  el.previousElementSibling.style.display='none';
+  const d=document.createElement('div');
+  d.style.cssText='font-size:11px;color:var(--muted2);line-height:1.6;white-space:pre-wrap;padding-top:4px';
+  d.textContent=t;el.parentElement.insertBefore(d,el);el.remove();
+}
+
+/* OPS */
+function renderOps(w){
+  if(!w)return noData();
+  return`<div class="g4">${kpi('Payroll HC',w.payroll_hc,null,'var(--text)')}${kpi('Payroll Errors',w.payroll_errors,null,'var(--amber)',true)}${kpi('Escalations',w.hrops_esc,null,'var(--accent)')}${kpi('Onboardings',w.hrops_onboard,null,'var(--green)')}</div>
+  <div class="g2">
+    <div class="card"><div class="ct">Payroll · ${esc(w.payroll_month||'—')}</div>${rlist(w.payroll_risks,'Risks','var(--red)')}${rlist(w.payroll_pending,'Pending','var(--amber)')}${(w.payroll_statutory||[]).length?`<div style="font-size:12px;color:var(--green);padding-top:8px">✓ Statutory: ${esc((w.payroll_statutory||[]).join(', '))}</div>`:''}</div>
+    <div class="card"><div class="ct">HR Ops</div><div style="font-size:13px;color:var(--muted);padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4)">FnF: <span style="color:var(--text)">${esc(w.hrops_fnf||'—')}</span></div>${rlist(w.hrops_compliance,'Compliance / Audit','var(--green)')}${rlist(w.hrops_gaps,'Gaps','var(--amber)')}</div>
+  </div>`;
+}
+
+/* L&D */
+function renderLD(w){
+  if(!w)return noData();
+  return`<div class="g3">${kpi('Sessions',w.ld_sessions,null,'var(--accent)')}${kpi('Coverage',w.ld_coverage||'—',null,'var(--purple)')}${kpi('Upcoming',(w.ld_upcoming||[]).length,null,'var(--green)')}</div>
+  <div class="g2">
+    <div class="card"><div class="ct">Conducted This Week</div>${(w.ld_details||[]).filter(d=>d&&d.length>3).map(d=>`<div style="padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:12px;color:var(--muted);line-height:1.5">${esc(d)}</div>`).join('')||'<div class="empty">None this week</div>'}</div>
+    <div class="card"><div class="ct">Upcoming (Next 2–4 Weeks)</div>${(w.ld_upcoming||[]).filter(u=>u&&u.length>3).map(u=>`<div style="padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:12px;color:var(--muted);line-height:1.5">${esc(u)}</div>`).join('')||'<div class="empty">None logged</div>'}</div>
+  </div>
+  ${(w.ld_gaps||[]).filter(g=>g&&g.length>5).length?`<div class="card"><div class="ct">Capability Gaps</div>${(w.ld_gaps||[]).filter(g=>g&&g.length>5).map(g=>`<div style="padding:8px 0;border-bottom:1px solid rgba(48,54,61,.4);font-size:12px;color:var(--amber)">${esc(g)}</div>`).join('')}</div>`:''}`;
+}
+
+/* WORKFORCE */
+function renderWorkforce(){
+  const W=WI,F=W.fnf;
+  function pb(pct,col){return`<div class="wb-track"><div class="wb-fill" style="width:${Math.min(pct,100)}%;background:${col}"></div></div>`;}
+  const q1x=['Jan','Feb','Mar'].reduce((a,m)=>a+(W.attrition[m]?.exits||0),0);
+  const q1a=['Jan','Feb','Mar'].reduce((a,m)=>a+(W.attrition[m]?.active_hc||0),0)/3;
+  const ann=q1a>0?(q1x/q1a*12*100).toFixed(1):'—';
+  const tj=Object.values(W.ta_monthly).reduce((a,b)=>a+b.joined,0);
+  const plat=W.accounts.filter(a=>a.tier==='Platinum'&&a.hc>0);
+  const gld=W.accounts.filter(a=>a.tier==='Gold'&&a.hc>0);
+  const tBands=['<3 months','3m-1yr','1-2 yrs','2-5 yrs','>5 yrs'];
+  const tCols={'<3 months':'#f87171','3m-1yr':'#fb923c','1-2 yrs':'#fbbf24','2-5 yrs':'#60a5fa','>5 yrs':'#a78bfa'};
+  const tTot=tBands.reduce((a,b)=>a+(W.attrition_by_tenure[b]?.jan_mar||0),0);
+  const tMax=Math.max(...tBands.map(b=>W.attrition_by_tenure[b]?.jan_mar||0),1);
+  const attrMs=['Jan','Feb','Mar','Apr','May'];
+  const maxEx=Math.max(...attrMs.map(m=>W.attrition[m]?.exits||0),1);
+  function acctTbl(accts,label,col){
+    const tot=accts.reduce((s,a)=>({hc:s.hc+a.hc,w:s.w+a.wage_cr,f:s.f+a.female,j:s.j+a.ta_joined,e:s.e+a.exits_2026}),{hc:0,w:0,f:0,j:0,e:0});
+    const ta=tot.hc>0?((tot.e/tot.hc)*12/5*100).toFixed(1):0;
+    return`<div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:${col};margin-bottom:8px">${label}</div>
+    <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Account</th><th>HC</th><th>Wage Bill</th><th>Female</th><th>TA Joined</th><th>Exits</th><th>Attr%</th></tr></thead><tbody>
+      ${accts.map(a=>{const fc=a.female_pct>10?'var(--green)':a.female_pct>5?'var(--amber)':'var(--red)';const ec=a.exits_2026>3?'var(--red)':a.exits_2026>0?'var(--amber)':'var(--muted)';const ar=a.attrition_rate_ann||0;const ac=ar>20?'var(--red)':ar>10?'var(--amber)':ar>0?'var(--text)':'var(--muted)';return`<tr><td>${esc(a.name)}</td><td>${a.hc}</td><td style="color:var(--accent)">₹${a.wage_cr}Cr</td><td style="color:${fc}">${a.female}(${a.female_pct}%)</td><td style="color:var(--green)">${a.ta_joined}</td><td style="color:${ec}">${a.exits_2026}</td><td style="color:${ac}">${ar>0?ar+'%':'—'}</td></tr>`;}).join('')}
+      <tr style="border-top:1px solid var(--border)"><td>Total</td><td>${tot.hc}</td><td style="color:var(--accent)">₹${tot.w.toFixed(2)}Cr</td><td>${tot.f}(${tot.hc>0?(tot.f/tot.hc*100).toFixed(1):0}%)</td><td style="color:var(--green)">${tot.j}</td><td>${tot.e}</td><td style="color:var(--muted)">${ta}%</td></tr>
+    </tbody></table></div><br>`;
+  }
+  return`<div class="stitle">Workforce Overview — Mar 2026</div>
+  <div class="g4">
+    <div class="kpi"><div class="kv">${W.active_hc_mar.toLocaleString()}</div><div class="kl">Active HC</div><div class="ks">March 2026</div></div>
+    <div class="kpi"><div class="kv" style="color:var(--accent)">₹${W.total_wage_bill_cr}Cr</div><div class="kl">Annual Wage Bill</div><div class="ks">Jan 2026 snapshot</div></div>
+    <div class="kpi"><div class="kv" style="color:var(--red)">${ann}%</div><div class="kl">Annualised Attrition</div><div class="ks">Q1 2026 · ${q1x} exits</div></div>
+    <div class="kpi"><div class="kv" style="color:var(--green)">${tj}</div><div class="kl">New Hires Jan–Mar</div><div class="ks">Female: ${W.female_count} (${W.female_pct}%)</div></div>
+  </div>
+  <div class="g2">
+    <div class="card"><div class="ct">Attrition by Month 2026</div>
+      <div style="display:flex;align-items:flex-end;gap:8px;height:80px;margin:12px 0 6px">
+        ${attrMs.map(m=>{const d=W.attrition[m]||{exits:0,rate:0};const bh=Math.max((d.exits/maxEx)*70,2);const fut=m==='Apr'||m==='May';return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><span style="font-family:monospace;font-size:10px;color:${fut?'var(--muted)':'var(--text)'}">${d.exits}</span><div style="width:100%;height:${bh}px;background:${fut?'rgba(148,163,184,.15)':m==='Mar'?'var(--amber)':'var(--accent)'};border-radius:2px 2px 0 0;align-self:flex-end"></div><span style="font-size:9px;color:var(--muted)">${m}</span></div>`;}).join('')}
+      </div>
+      <div style="font-size:10px;color:var(--muted2)">Apr–May = notice periods pre-entered</div>
+    </div>
+    <div class="card"><div class="ct">Exits by Tenure Band (Jan–Mar)</div>
+      ${tBands.map(b=>{const cnt=W.attrition_by_tenure[b]?.jan_mar||0;const sp=tTot>0?Math.round(cnt/tTot*100):0;return`<div class="wb-row"><span class="wb-lbl">${b}</span>${pb(Math.round(cnt/tMax*100),tCols[b])}<span class="wb-num">${cnt} <span style="color:var(--muted2);font-size:9px">(${sp}%)</span></span></div>`;}).join('')}
+      <div style="font-size:10px;color:var(--amber);margin-top:8px">⚠ 2–5yr band highest</div>
+    </div>
+  </div>
+  <div class="stitle">Platinum &amp; Gold Accounts</div>
+  ${acctTbl(plat,'Platinum','var(--purple)')}
+  ${acctTbl(gld,'Gold','var(--amber)')}`;
+}
+
+/* UPLOAD */
+function renderUpload(){
+  if(ROLE.role!=='admin')return'<div class="empty">Admin access required</div>';
+  const wk=Object.keys(WEEKS).sort((a,b)=>(WEEKS[b].week_num||0)-(WEEKS[a].week_num||0));
+  return`<div class="card" style="max-width:560px">
+    <div class="ct">Upload Weekly HR Report</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5">Upload the Excel file. It will be stored in Supabase Storage. Then share the file path to run the parser and push data to the dashboard.</p>
+    <div class="uz" onclick="document.getElementById('fIn').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="doDrop(event)">
+      <input type="file" id="fIn" accept=".xlsx,.xls" style="display:none" onchange="doFile(this.files[0])">
+      <div style="font-size:28px;margin-bottom:10px">📋</div>
+      <div style="font-size:14px;font-weight:500;margin-bottom:6px">Drop weekly Excel here</div>
+      <div style="font-size:12px;color:var(--muted)">Unified_Weekly_HR_Report_*.xlsx</div>
+      <div style="display:inline-block;margin-top:14px;background:var(--accent);color:#fff;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600">Choose File</div>
+    </div>
+    <div id="upSt" style="margin-top:14px"></div>
+  </div>
+  ${wk.length?`<div class="card" style="max-width:560px;margin-top:0"><div class="ct">Weeks in Database (${wk.length})</div>
+    <table class="tbl"><thead><tr><th>Week</th><th>Period</th><th>Respondents</th><th></th></tr></thead><tbody>
+      ${wk.map(k=>`<tr><td>W${WEEKS[k].week_num}</td><td>${esc(WEEKS[k].label)}</td><td>${WEEKS[k].total_respondents||0}</td><td><button onclick="delWeek('${k}')" style="font-size:11px;color:var(--red);background:none;border:1px solid rgba(239,68,68,.3);padding:3px 10px;border-radius:6px;cursor:pointer">Delete</button></td></tr>`).join('')}
+    </tbody></table></div>`:
+  `<div class="notice">No weeks yet. Run the setup SQL to push existing week data, or upload your next report above.</div>`}`;
+}
+function doDrop(e){e.preventDefault();document.querySelector('.uz').classList.remove('drag');if(e.dataTransfer.files[0])doFile(e.dataTransfer.files[0]);}
+async function doFile(file){
+  if(!file)return;
+  const st=document.getElementById('upSt');
+  st.innerHTML='<div class="loader"><div class="spin"></div>Uploading…</div>';
+  const path=`weekly/${Date.now()}_${file.name}`;
+  const {error}=await sb.storage.from('hr-reports').upload(path,file);
+  if(error){st.innerHTML=`<div style="color:var(--red);font-size:13px">Failed: ${error.message}</div>`;return;}
+  st.innerHTML=`<div style="color:var(--green);font-size:13px;padding:10px 0;line-height:1.6">✓ Uploaded: <code style="background:var(--bg3);padding:2px 6px;border-radius:4px;font-size:11px">${path}</code><br><span style="color:var(--muted);font-size:12px">Run the Python parser to push data to dashboard.</span></div>`;
+}
+async function delWeek(k){
+  if(!confirm('Delete week '+k+'?'))return;
+  const {error}=await sb.from('weekly_reports').delete().eq('week_key',k);
+  if(!error){delete WEEKS[k];if(CUR_WEEK===k)CUR_WEEK=Object.keys(WEEKS)[0]||null;showTab('upload');}
+}
+
+/* USERS */
+async function loadUsers(mc){
+  if(ROLE.role!=='admin'){mc.innerHTML='<div class="empty">Admin access required</div>';return;}
+  mc.innerHTML='<div class="loader"><div class="spin"></div>Loading…</div>';
+  const {data}=await sb.from('user_profiles').select('id,email,role,region,created_at').order('created_at');
+  const users=data||[];
+  mc.innerHTML=`<div class="card" style="max-width:660px"><div class="ct">Add New User</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Email</label><input type="email" id="iEm" placeholder="user@cmsit.com" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none"></div>
+      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Password</label><input type="password" id="iPw" placeholder="••••••••" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end">
+      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Role</label>
+        <select id="iRo" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-size:13px">
+          <option value="executive">Executive</option><option value="hrbp">HRBP</option><option value="admin">Admin</option>
+        </select></div>
+      <div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Region</label>
+        <select id="iRg" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-size:13px">
+          <option value="">All</option><option>North</option><option>South</option><option>East</option><option>West</option>
+        </select></div>
+      <button onclick="addUser()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;height:36px">Add</button>
+    </div>
+    <div id="uSt" style="margin-top:10px"></div></div>
+  <div class="card" style="max-width:660px;margin-top:0"><div class="ct">All Users (${users.length})</div>
+    ${users.map(u=>`<div class="urow"><div><div style="font-size:13px;font-weight:500">${esc(u.email||'—')}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${u.region||'All regions'} · ${u.created_at?.substring(0,10)||'—'}</div></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <select class="ssel" onchange="updRole('${u.id}',this.value)">${['admin','executive','hrbp','viewer'].map(r=>`<option ${u.role===r?'selected':''}>${r}</option>`).join('')}</select>
+        ${u.id!==ME.id?`<button onclick="rmUser('${u.id}')" style="font-size:11px;color:var(--red);background:none;border:1px solid rgba(239,68,68,.3);padding:3px 10px;border-radius:6px;cursor:pointer">Remove</button>`:'<span style="font-size:11px;color:var(--muted2)">You</span>'}
+      </div></div>`).join('')}
+  </div>`;
+}
+async function addUser(){
+  const em=document.getElementById('iEm').value.trim(),pw=document.getElementById('iPw').value;
+  const ro=document.getElementById('iRo').value,rg=document.getElementById('iRg').value;
+  const st=document.getElementById('uSt');
+  if(!em||!pw){st.innerHTML='<div style="color:var(--red);font-size:13px">Email and password required</div>';return;}
+  st.innerHTML='<div class="loader"><div class="spin"></div>Creating…</div>';
+  const {data,error}=await sb.auth.admin.createUser({email:em,password:pw,email_confirm:true});
+  if(error){st.innerHTML=`<div style="color:var(--red);font-size:13px">${error.message}</div>`;return;}
+  await sb.from('user_profiles').upsert({id:data.user.id,email:em,role:ro,region:rg||null});
+  st.innerHTML=`<div style="color:var(--green);font-size:13px">✓ ${em} added as ${ro}</div>`;
+  document.getElementById('iEm').value='';document.getElementById('iPw').value='';
+  await loadUsers(document.getElementById('mainArea'));
+}
+async function updRole(uid,role){await sb.from('user_profiles').update({role}).eq('id',uid);}
+async function rmUser(uid){
+  if(!confirm('Remove?'))return;
+  await sb.auth.admin.deleteUser(uid);
+  await sb.from('user_profiles').delete().eq('id',uid);
+  await loadUsers(document.getElementById('mainArea'));
+}
+
+/* INIT */
+(async()=>{
+  const {data:{session}}=await sb.auth.getSession();
+  if(session?.user)await bootApp(session.user);
+  document.getElementById('lEmail').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('lPwd').focus();});
+  document.getElementById('lPwd').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+})();
+</script>
+</body>
+</html>
