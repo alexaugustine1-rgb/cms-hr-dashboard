@@ -1178,9 +1178,9 @@ function renderHRBP(w, pw) {
         // BU/region
         const buMatch = site.match(/BU\s*[-–:]?\s*(\w+)/i);
         const bu = buMatch ? buMatch[1] : '';
-        // Issues
-        const issuesMatch = site.match(/Issues\s*[-–:]([^\n]+)/i);
-        const issues = issuesMatch ? issuesMatch[1].trim().substring(0,100) : '';
+        // Issues — only show in modal, not in card preview
+        const issuesMatch = site.match(/Issues\s+Addressed\s*[-–:]([^\n]+)/i) || site.match(/Issues\s*[-–:]([^\n]+)/i);
+        const issues = ''; // Suppress from card — shown in full modal only
         // Date
         const dateMatch = site.match(/Date of Visit\s*[-–:]\s*([^\n]+)/i);
         const visitDate = dateMatch ? dateMatch[1].trim().substring(0,20) : '';
