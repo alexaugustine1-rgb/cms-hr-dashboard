@@ -2578,6 +2578,7 @@ async function renderSubmitTab(mc) {
   const fnType = profile?.function_type || detectFunction(profile?.role) || 'hrbp';
   const region = profile?.region || '';
   const displayName = profile?.display_name || _sbUser.email?.split('@')[0] || 'User';
+  const roleLabel = {'admin':'CXO','executive':'CXO','hrbp':'Lead'}[profile?.role] || (profile?.role||'').toUpperCase();
 
   // Available weeks (current + last 2)
   const availWeeks = WEEK_ORDER.slice(-3).reverse();
@@ -3093,8 +3094,14 @@ async function sbBoot(user) {
     b.onclick=sbSignOut; hr.appendChild(b);
     // Add role badge
     const rb=document.createElement('span');
-    rb.style.cssText='margin-left:8px;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;background:rgba(167,139,250,.12);padding:3px 10px;border-radius:20px';
-    rb.textContent=_sbRole.role.toUpperCase();
+    const _RL2={'admin':'CXO','executive':'CXO','hrbp':'Lead'};
+    const _RC2={
+      'admin':'color:#60a5fa;background:rgba(96,165,250,.12)',
+      'executive':'color:#60a5fa;background:rgba(96,165,250,.12)',
+      'hrbp':'color:#34d399;background:rgba(52,211,153,.1)'
+    };
+    rb.style.cssText='margin-left:8px;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 10px;border-radius:20px;'+(_RC2[_sbRole.role]||'color:#a78bfa;background:rgba(167,139,250,.12)');
+    rb.textContent=_RL2[_sbRole.role]||_sbRole.role.toUpperCase();
     hr.appendChild(rb);
   }
 
