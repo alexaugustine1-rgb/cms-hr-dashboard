@@ -2,9 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HR CXO Dashboard — CMS IT Services</title>
 <style>
@@ -383,138 +380,28 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   .card-title { font-size: 11px; }
 }
 
-
-.upload-drop{border:2px dashed var(--border);border-radius:12px;padding:48px 32px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
-.upload-drop:hover,.upload-drop.drag{border-color:var(--accent);background:var(--accent-glow)}
-.upload-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
-.upload-drop-icon{font-size:40px;margin-bottom:12px}
-.upload-drop-title{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px;color:var(--text);margin-bottom:6px}
-.upload-drop-sub{font-size:13px;color:var(--muted);line-height:1.5}
-.upload-file-types{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:24px}
-.uft-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
-.uft-name{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
-.uft-desc{font-size:12px;color:var(--muted)}
-.parse-log{background:var(--surface3);border-radius:8px;padding:14px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);max-height:200px;overflow-y:auto;margin-top:12px;line-height:1.7}
-.parse-log .ok{color:var(--green)}
-.parse-log .err{color:var(--red)}
-.parse-log .info{color:var(--accent)}
-.urow{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(42,61,82,.4);font-size:13px}
-.urow:last-child{border-bottom:none}
-.ssel{background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:6px;font-size:11px}
-
-
-/* ── Photo Gallery ── */
-.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:16px}
-.photo-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .15s,border-color .15s}
-.photo-card:hover{transform:translateY(-2px);border-color:var(--accent)}
-.photo-card img{width:100%;height:160px;object-fit:cover;display:block;background:var(--surface3)}
-.photo-card-body{padding:10px 12px}
-.photo-card-caption{font-size:12px;color:var(--text);line-height:1.4;margin-bottom:6px}
-.photo-card-meta{display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--muted2)}
-.photo-card-hrbp{font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
-.photo-event-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;letter-spacing:.5px;text-transform:uppercase}
-.pe-site{background:rgba(96,165,250,.12);color:#60a5fa}
-.pe-rr{background:rgba(34,197,94,.12);color:#34d399}
-.pe-townhall{background:rgba(251,191,36,.12);color:#fbbf24}
-.pe-training{background:rgba(167,139,250,.12);color:#a78bfa}
-.pe-other{background:rgba(148,163,184,.12);color:#94a3b8}
-
-/* Photo lightbox */
-.photo-lb{display:none;position:fixed;inset:0;z-index:9000;background:rgba(7,11,18,.92);align-items:center;justify-content:center;padding:20px}
-.photo-lb.open{display:flex}
-.photo-lb-inner{max-width:860px;width:100%;position:relative}
-.photo-lb-img{width:100%;max-height:70vh;object-fit:contain;border-radius:8px}
-.photo-lb-caption{margin-top:12px;font-size:14px;color:var(--text);text-align:center}
-.photo-lb-meta{font-size:12px;color:var(--muted);text-align:center;margin-top:4px}
-.photo-lb-close{position:absolute;top:-16px;right:-16px;background:var(--surface2);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
-.photo-lb-close:hover{background:var(--surface3)}
-.photo-lb-nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(28,42,58,.8);border:1px solid var(--border);color:var(--text);width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.photo-lb-prev{left:-52px}
-.photo-lb-next{right:-52px}
-
-/* Upload zone for photos */
-.photo-upload-zone{border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
-.photo-upload-zone:hover,.photo-upload-zone.drag{border-color:var(--accent);background:var(--accent-glow)}
-.photo-upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-
-@media(max-width:768px){
-  .gallery-grid{grid-template-columns:repeat(2,1fr)}
-  .photo-lb-prev,.photo-lb-next{display:none}
-}
-@media(max-width:480px){
-  .gallery-grid{grid-template-columns:1fr}
-}
-
-
-/* ── Weekly Submission Form ── */
-.wform-wrap{padding:28px 36px;max-width:760px}
-.wform-header{margin-bottom:24px}
-.wform-week-select{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
-.wform-week-btn{padding:7px 16px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--border);cursor:pointer;color:var(--muted);background:none;transition:all .15s;font-family:'DM Mono',monospace;letter-spacing:.5px}
-.wform-week-btn:hover{border-color:var(--accent);color:var(--accent)}
-.wform-week-btn.active{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:700}
-.wform-section{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
-.wform-section-title{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:16px;display:flex;align-items:center;gap:8px}
-.wform-row{margin-bottom:14px}
-.wform-row label{display:block;font-size:11px;font-weight:500;color:var(--muted);margin-bottom:5px;font-family:'DM Mono',monospace;letter-spacing:.5px;text-transform:uppercase}
-.wform-row input[type=number],.wform-row input[type=text],.wform-row textarea,.wform-row select{width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:'DM Sans',sans-serif;transition:border .15s;resize:vertical}
-.wform-row input:focus,.wform-row textarea:focus,.wform-row select:focus{border-color:var(--accent)}
-.wform-row textarea{min-height:72px}
-.wform-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.wform-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.wform-num-input{text-align:center;font-family:'Bebas Neue',sans-serif;font-size:28px;padding:6px 8px!important}
-.wform-num-label{font-size:10px;color:var(--muted);text-align:center;margin-top:4px;font-family:'DM Mono',monospace;letter-spacing:.5px}
-.wform-submit-btn{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:12px 32px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.5px;transition:opacity .15s}
-.wform-submit-btn:hover{opacity:.88}
-.wform-submit-btn:disabled{opacity:.5;cursor:not-allowed}
-.wform-status-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;font-family:'DM Mono',monospace;letter-spacing:.5px}
-.wsb-submitted{background:rgba(34,197,94,.12);color:var(--green)}
-.wsb-draft{background:rgba(251,191,36,.12);color:var(--amber)}
-.wsb-none{background:rgba(148,163,184,.1);color:var(--muted)}
-.wform-visit-toggle{display:flex;gap:8px;margin-top:6px}
-.wform-visit-btn{flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-size:13px;font-weight:500;background:none;color:var(--muted);transition:all .15s}
-.wform-visit-btn.active-yes{background:rgba(34,197,94,.12);border-color:var(--green);color:var(--green)}
-.wform-visit-btn.active-no{background:rgba(248,113,113,.1);border-color:var(--red);color:var(--red)}
-.wform-photo-zone{border:2px dashed var(--border);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;position:relative;margin-top:8px}
-.wform-photo-zone:hover{border-color:var(--accent);background:var(--accent-glow)}
-.wform-photo-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-.wform-photo-preview{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.wform-photo-thumb{position:relative;width:80px;height:80px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
-.wform-photo-thumb img{width:100%;height:100%;object-fit:cover}
-.wform-photo-thumb .remove{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
-.wform-aggr-panel{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
-.wform-aggr-title{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
-.wform-aggr-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:12px}
-.wform-aggr-row:last-child{border-bottom:none}
-@media(max-width:600px){
-  .wform-grid2,.wform-grid4{grid-template-columns:1fr 1fr}
-  .wform-wrap{padding:16px}
-}
-
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="authOverlay" style="position:fixed;inset:0;z-index:9999;background:#0f1923;display:flex;align-items:center;justify-content:center;padding:20px">
-  <div style="background:#1c2a3a;border:1px solid #2a3d52;border-radius:12px;padding:40px;width:100%;max-width:380px;box-shadow:0 24px 80px rgba(0,0,0,.5)">
+  <div style="background:#1c2a3a;border:1px solid #2a3d52;border-radius:12px;padding:40px;width:100%;max-width:380px">
     <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#60a5fa;margin-bottom:8px">CMS IT Services</div>
     <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:#e8f4fd;letter-spacing:1px;line-height:1;margin-bottom:6px">HR Dashboard</div>
-    <div style="font-size:13px;color:#8b9db0;margin-bottom:28px;font-family:'DM Sans',sans-serif">Sign in to access your weekly HR intelligence</div>
+    <div style="font-size:13px;color:#8b9db0;margin-bottom:28px">Sign in to access your weekly HR intelligence</div>
     <div style="margin-bottom:14px">
-      <label style="display:block;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#8b9db0;margin-bottom:6px">Email</label>
-      <input type="email" id="sbEmail" placeholder="you@cmsit.com" autocomplete="email"
-        style="width:100%;background:#223244;border:1px solid #2a3d52;border-radius:8px;padding:11px 14px;color:#e8f4fd;font-size:14px;outline:none;font-family:'DM Sans',sans-serif;transition:border .15s">
+      <label style="display:block;font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;color:#8b9db0;margin-bottom:6px">Email</label>
+      <input type="email" id="sbEmail" placeholder="you@cmsitservices.com" autocomplete="email"
+        style="width:100%;background:#223244;border:1px solid #2a3d52;border-radius:8px;padding:11px 14px;color:#e8f4fd;font-size:14px;outline:none">
     </div>
     <div style="margin-bottom:20px">
-      <label style="display:block;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#8b9db0;margin-bottom:6px">Password</label>
+      <label style="display:block;font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;color:#8b9db0;margin-bottom:6px">Password</label>
       <input type="password" id="sbPwd" placeholder="••••••••" autocomplete="current-password"
-        style="width:100%;background:#223244;border:1px solid #2a3d52;border-radius:8px;padding:11px 14px;color:#e8f4fd;font-size:14px;outline:none;font-family:'DM Sans',sans-serif;transition:border .15s">
+        style="width:100%;background:#223244;border:1px solid #2a3d52;border-radius:8px;padding:11px 14px;color:#e8f4fd;font-size:14px;outline:none">
     </div>
     <button id="sbLoginBtn" onclick="sbLogin()"
-      style="width:100%;background:#60a5fa;color:#0f1923;border:none;border-radius:8px;padding:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.5px;transition:opacity .15s">
-      SIGN IN
-    </button>
+      style="width:100%;background:#60a5fa;color:#0f1923;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer">SIGN IN</button>
     <div id="sbErr"></div>
   </div>
 </div>
@@ -546,9 +433,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <button class="tab-btn" onclick="switchTab('risks',this)">&#x1F6A8; Risks &amp; Actions</button>
   <button class="tab-btn" onclick="switchTab('workforce',this)">&#x1F4BC; Workforce Intel</button>
   <button class="tab-btn" id="tab-btn-submit" style="display:none" onclick="switchTab('submit',this)">&#x270F; Weekly Report</button>
-  <button class="tab-btn" onclick="switchTab('gallery',this)">&#x1F4F7; Gallery</button>
   <button class="tab-btn" id="tab-btn-upload" style="display:none" onclick="switchTab('upload',this)">&#x2B06; Upload Data</button>
   <button class="tab-btn" id="tab-btn-users" style="display:none" onclick="switchTab('users',this)">&#x1F465; Users</button>
+  <button class="tab-btn" onclick="switchTab('gallery',this)">&#x1F4F7; Gallery</button>
 </div>
 
 <div class="main">
@@ -560,9 +447,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-risks" class="tab-content"></div>
   <div id="tab-workforce" class="tab-content"></div>
   <div id="tab-submit" class="tab-content"></div>
-  <div id="tab-gallery" class="tab-content"></div>
   <div id="tab-upload" class="tab-content"></div>
   <div id="tab-users" class="tab-content"></div>
+  <div id="tab-gallery" class="tab-content"></div>
 </div>
 
 <div class="footer">
@@ -575,6 +462,86 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   </div>
 </div>
 </div>
+<div class="photo-lb" id="photoLB" onclick="if(event.target===this)closeLB()">
+  <div class="photo-lb-inner" id="photoLBInner">
+    <button class="photo-lb-close" onclick="closeLB()">&times;</button>
+    <button class="photo-lb-nav photo-lb-prev" onclick="lbNav(-1)">&#8249;</button>
+    <button class="photo-lb-nav photo-lb-next" onclick="lbNav(1)">&#8250;</button>
+    <img class="photo-lb-img" id="photoLBImg" src="" alt="">
+    <div class="photo-lb-caption" id="photoLBCaption"></div>
+    <div class="photo-lb-meta" id="photoLBMeta"></div>
+  </div>
+</div>
+<style>
+/* Gallery */
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:16px}
+.photo-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .15s,border-color .15s}
+.photo-card:hover{transform:translateY(-2px);border-color:var(--accent)}
+.photo-card img{width:100%;height:160px;object-fit:cover;display:block;background:var(--surface3)}
+.photo-card-body{padding:10px 12px}
+.photo-card-caption{font-size:12px;color:var(--text);line-height:1.4;margin-bottom:6px}
+.photo-card-meta{display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--muted2)}
+.photo-card-hrbp{font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+.photo-event-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;letter-spacing:.5px;text-transform:uppercase}
+.pe-site{background:rgba(96,165,250,.12);color:#60a5fa}.pe-rr{background:rgba(34,197,94,.12);color:#34d399}
+.pe-townhall{background:rgba(251,191,36,.12);color:#fbbf24}.pe-training{background:rgba(167,139,250,.12);color:#a78bfa}
+.pe-other{background:rgba(148,163,184,.12);color:#94a3b8}
+.photo-lb{display:none;position:fixed;inset:0;z-index:9000;background:rgba(7,11,18,.92);align-items:center;justify-content:center;padding:20px}
+.photo-lb.open{display:flex}
+.photo-lb-inner{max-width:860px;width:100%;position:relative}
+.photo-lb-img{width:100%;max-height:70vh;object-fit:contain;border-radius:8px}
+.photo-lb-caption{margin-top:12px;font-size:14px;color:var(--text);text-align:center}
+.photo-lb-meta{font-size:12px;color:var(--muted);text-align:center;margin-top:4px}
+.photo-lb-close{position:absolute;top:-16px;right:-16px;background:var(--surface2);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.photo-lb-nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(28,42,58,.8);border:1px solid var(--border);color:var(--text);width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.photo-lb-prev{left:-52px}.photo-lb-next{right:-52px}
+.photo-upload-zone{border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.photo-upload-zone:hover,.photo-upload-zone.drag{border-color:var(--accent);background:var(--accent-glow)}
+.photo-upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+/* Form */
+.wform-wrap{padding:28px 36px;max-width:760px}
+.wform-section{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+.wform-section-title{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+.wform-row{margin-bottom:14px}
+.wform-row label{display:block;font-size:11px;font-weight:500;color:var(--muted);margin-bottom:5px;font-family:'DM Mono',monospace;letter-spacing:.5px;text-transform:uppercase}
+.wform-row input[type=number],.wform-row input[type=text],.wform-row textarea,.wform-row select{width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:'DM Sans',sans-serif;transition:border .15s;resize:vertical}
+.wform-row input:focus,.wform-row textarea:focus{border-color:var(--accent)}
+.wform-row textarea{min-height:72px}
+.wform-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.wform-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.wform-num-input{text-align:center;font-family:'Bebas Neue',sans-serif;font-size:28px;padding:6px 8px!important}
+.wform-num-label{font-size:10px;color:var(--muted);text-align:center;margin-top:4px;font-family:'DM Mono',monospace}
+.wform-week-select{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.wform-week-btn{padding:7px 16px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--border);cursor:pointer;color:var(--muted);background:none;font-family:'DM Mono',monospace}
+.wform-week-btn:hover{border-color:var(--accent);color:var(--accent)}
+.wform-week-btn.active{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:700}
+.wform-submit-btn{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:12px 32px;font-size:14px;font-weight:700;cursor:pointer}
+.wform-submit-btn:disabled{opacity:.5;cursor:not-allowed}
+.wform-status-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;font-family:'DM Mono',monospace}
+.wsb-submitted{background:rgba(34,197,94,.12);color:var(--green)}
+.wsb-none{background:rgba(148,163,184,.1);color:var(--muted)}
+.wform-visit-toggle{display:flex;gap:8px;margin-top:6px}
+.wform-visit-btn{flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-size:13px;font-weight:500;background:none;color:var(--muted)}
+.wform-visit-btn.active-yes{background:rgba(34,197,94,.12);border-color:var(--green);color:var(--green)}
+.wform-visit-btn.active-no{background:rgba(248,113,113,.1);border-color:var(--red);color:var(--red)}
+.wform-photo-zone{border:2px dashed var(--border);border-radius:8px;padding:24px;text-align:center;cursor:pointer;position:relative;margin-top:8px}
+.wform-photo-zone:hover{border-color:var(--accent);background:var(--accent-glow)}
+.wform-photo-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.wform-photo-preview{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.wform-photo-thumb{position:relative;width:80px;height:80px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.wform-photo-thumb img{width:100%;height:100%;object-fit:cover}
+.wform-photo-thumb .remove{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+/* Upload */
+.upload-drop{border:2px dashed var(--border);border-radius:12px;padding:48px 32px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.upload-drop:hover,.upload-drop.drag{border-color:var(--accent);background:var(--accent-glow)}
+.upload-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+/* Users */
+.urow{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(42,61,82,.4);font-size:13px}
+.urow:last-child{border-bottom:none}
+.ssel{background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:6px;font-size:11px}
+@media(max-width:768px){.gallery-grid{grid-template-columns:repeat(2,1fr)}.photo-lb-prev,.photo-lb-next{display:none}.wform-grid2,.wform-grid4{grid-template-columns:1fr 1fr}.wform-wrap{padding:16px}}
+@media(max-width:480px){.gallery-grid,.wform-grid4{grid-template-columns:1fr}}
+</style>
 <script>
 const _SB_URL='https://mzyrcrkwgbqgwajkjdnp.supabase.co';
 const _SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16eXJjcmt3Z2JxZ3dhamtqZG5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MjM0MzgsImV4cCI6MjA4OTI5OTQzOH0.lXmA5LoBQrWHMSMAaJtn3cwEpDDbMt2EvzyEy5mykbc';
@@ -583,7 +550,6 @@ let _sbUser=null,_sbRole=null;
 
 const WI={"active_hc_mar": 2819, "total_wage_bill_cr": 132.25, "female_count": 216, "female_pct": 7.7, "ctc_brackets": {"4-6L": 511, "10-15L": 78, ">15L": 72, "2.5-4L": 1412, "<2.5L": 423, "6-10L": 310}, "tenure_dist": {">10 yrs": 242, "5-10 yrs": 260, "3-5 yrs": 471, "1-3 yrs": 745, "6m-1yr": 419, "<6 months": 669}, "age_dist": {">45": 274, "35-45": 648, "25-30": 865, "30-35": 550, "<25": 469}, "regions": {"North": {"hc": 523, "wage_cr": 27.2, "female_pct": 4.5, "female": 23, "ta_sourced": 36, "ta_joined": 21}, "South": {"hc": 681, "wage_cr": 33.18, "female_pct": 8.5, "female": 57, "ta_sourced": 58, "ta_joined": 40}, "East": {"hc": 509, "wage_cr": 16.4, "female_pct": 3.3, "female": 17, "ta_sourced": 34, "ta_joined": 22}, "West": {"hc": 1095, "wage_cr": 53.81, "female_pct": 10.8, "female": 118, "ta_sourced": 127, "ta_joined": 90}}, "attrition": {"Jan": {"exits": 20, "active_hc": 2810, "rate": 0.7, "ctc_vacated_l": 117.1, "region": {"North": 1, "West": 3, "East": 1}, "acct": {"TCS": 1, "HDB Financial Services": 1}}, "Feb": {"exits": 8, "active_hc": 2878, "rate": 0.3, "ctc_vacated_l": 25.9, "region": {}, "acct": {}}, "Mar": {"exits": 57, "active_hc": 2950, "rate": 1.9, "ctc_vacated_l": 246.1, "region": {"West": 2, "South": 1}, "acct": {}}, "Apr": {"exits": 68, "active_hc": 0, "rate": 0, "ctc_vacated_l": 425.5, "region": {"West": 3, "South": 2}, "acct": {"HDB Financial Services": 2}}, "May": {"exits": 44, "active_hc": 0, "rate": 0, "ctc_vacated_l": 337.9, "region": {"West": 14, "South": 15, "East": 2, "North": 1}, "acct": {"SBI General Insurance": 2, "TCS": 1, "Avenue Supermarts": 3, "HDB Financial Services": 2, "Torrent Power": 1}}}, "ta_monthly": {"Jan": {"sourced": 83, "offered": 75, "joined": 54}, "Feb": {"sourced": 132, "offered": 89, "joined": 68}, "Mar": {"sourced": 40, "offered": 50, "joined": 51}}, "ta_region": {"North": {"sourced": 36, "joined": 21, "accepted": 24}, "South": {"sourced": 58, "joined": 40, "accepted": 46}, "East": {"sourced": 34, "joined": 22, "accepted": 26}, "West": {"sourced": 127, "joined": 90, "accepted": 62}}, "source_stats": {"Internal-Referral": {"total": 88, "offers_made": 67, "accepted": 66, "joined": 65, "acc_rate": 99, "yield_rate": 74}, "Naukri": {"total": 92, "offers_made": 55, "accepted": 55, "joined": 70, "acc_rate": 100, "yield_rate": 76}, "Other Source": {"total": 28, "offers_made": 22, "accepted": 22, "joined": 23, "acc_rate": 100, "yield_rate": 82}, "Job-Portals": {"total": 16, "offers_made": 9, "accepted": 9, "joined": 10, "acc_rate": 100, "yield_rate": 62}, "Consultant": {"total": 3, "offers_made": 3, "accepted": 3, "joined": 3, "acc_rate": 100, "yield_rate": 100}, "Internal-Submission": {"total": 22, "offers_made": 0, "accepted": 0, "joined": 0, "acc_rate": 0, "yield_rate": 0}, "_total": {"total": 256, "offers_made": 159, "accepted": 158, "joined": 173, "acc_rate": 99, "yield_rate": 68}}, "accounts": [{"name": "ABFRL", "tier": "Platinum", "hc": 155, "wage_cr": 5.88, "female": 8, "female_pct": 5.2, "ta_in_pipeline": 8, "ta_accepted": 4, "ta_joined": 3, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "IHCL / Taj Hotels", "tier": "Platinum", "hc": 120, "wage_cr": 7.73, "female": 1, "female_pct": 0.8, "ta_in_pipeline": 2, "ta_accepted": 2, "ta_joined": 2, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "HDB Financial Services", "tier": "Platinum", "hc": 105, "wage_cr": 3.64, "female": 7, "female_pct": 6.7, "ta_in_pipeline": 7, "ta_accepted": 2, "ta_joined": 1, "exits_2026": 5, "attrition_rate_ann": 11.4}, {"name": "SBI General Insurance", "tier": "Platinum", "hc": 91, "wage_cr": 4.76, "female": 6, "female_pct": 6.6, "ta_in_pipeline": 3, "ta_accepted": 1, "ta_joined": 0, "exits_2026": 2, "attrition_rate_ann": 5.3}, {"name": "Reliance Projects & PM", "tier": "Platinum", "hc": 79, "wage_cr": 3.33, "female": 7, "female_pct": 8.9, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Tata AIG", "tier": "Platinum", "hc": 52, "wage_cr": 2.07, "female": 2, "female_pct": 3.8, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Avenue Supermarts", "tier": "Platinum", "hc": 46, "wage_cr": 1.49, "female": 1, "female_pct": 2.2, "ta_in_pipeline": 1, "ta_accepted": 1, "ta_joined": 1, "exits_2026": 3, "attrition_rate_ann": 15.7}, {"name": "LIC West", "tier": "Platinum", "hc": 25, "wage_cr": 1.07, "female": 1, "female_pct": 4.0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Reliance Capital", "tier": "Gold", "hc": 38, "wage_cr": 1.7, "female": 3, "female_pct": 7.9, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Torrent Power", "tier": "Gold", "hc": 29, "wage_cr": 1.02, "female": 0, "female_pct": 0.0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 1, "attrition_rate_ann": 8.3}, {"name": "TCS", "tier": "Gold", "hc": 28, "wage_cr": 1.29, "female": 1, "female_pct": 3.6, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 2, "attrition_rate_ann": 17.1}, {"name": "Majesco", "tier": "Gold", "hc": 21, "wage_cr": 1.04, "female": 6, "female_pct": 28.6, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "RCOM", "tier": "Gold", "hc": 19, "wage_cr": 0.54, "female": 3, "female_pct": 15.8, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Exide Life Insurance", "tier": "Gold", "hc": 16, "wage_cr": 0.72, "female": 1, "female_pct": 6.2, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "CEAT", "tier": "Gold", "hc": 15, "wage_cr": 0.46, "female": 0, "female_pct": 0.0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "AMUL", "tier": "Gold", "hc": 0, "wage_cr": 0, "female": 0, "female_pct": 0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "CLSA India", "tier": "Gold", "hc": 0, "wage_cr": 0, "female": 0, "female_pct": 0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Kaiser / Garfield", "tier": "Gold", "hc": 0, "wage_cr": 0, "female": 0, "female_pct": 0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}, {"name": "Synapsewave", "tier": "Gold", "hc": 0, "wage_cr": 0, "female": 0, "female_pct": 0, "ta_in_pipeline": 0, "ta_accepted": 0, "ta_joined": 0, "exits_2026": 0, "attrition_rate_ann": 0}], "fnf": {"total_cases": 154, "total_liability": 3348872, "by_status": {"Payment not cleared -(Bank account Issue)": {"count": 69, "amount": 418085}, "Priority": {"count": 34, "amount": 1659969}, "Pending": {"count": 51, "amount": 1270818}}, "by_aging": {">1 year": {"count": 64, "amount": 386403}, "180-365 days": {"count": 5, "amount": 1160874}, "90-180 days": {"count": 4, "amount": 75340}, "45-90 days": {"count": 50, "amount": 1052088}, "<45 days": {"count": 31, "amount": 674167}}}, "attrition_by_tenure": {"<3 months": {"total_2026": 10, "jan_mar": 7}, "3m-1yr": {"total_2026": 41, "jan_mar": 21}, "1-2 yrs": {"total_2026": 62, "jan_mar": 18}, "2-5 yrs": {"total_2026": 67, "jan_mar": 32}, ">5 yrs": {"total_2026": 17, "jan_mar": 7}}};
 
-// Data populated from Supabase
 let WEEKS_DATA={};
 let WEEK_ORDER=[];
 const WEEK_LABELS={};
@@ -609,6 +575,7 @@ function wowArrow(curr, prev) {
   if(curr < prev) return '↓';
   return '→';
 }
+
 function wowBadge(curr, prev, label='') {
   const cls = wowClass(curr, prev);
   const arrow = wowArrow(curr, prev);
@@ -1833,83 +1800,431 @@ function render() {
 function switchTab(id, btn) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  const el = document.getElementById('tab-'+id);
-  if(el) el.classList.add('active');
+  document.getElementById(`tab-${id}`).classList.add('active');
   if(btn) btn.classList.add('active');
   currentTab = id;
-  // Render dynamic tabs
-  if(id==='upload'){
-    if(el){ el.innerHTML=renderUploadTab(); document.getElementById('weeksList').innerHTML=weeksListHTML(); }
-  } else if(id==='users'){
-    renderUsersTab(el);
-  } else if(id==='gallery'){
-    renderGalleryTab();
-  } else if(id==='submit'){
-    renderSubmitTab(el);
-  }
 }
 
+// ─── INIT ─────────────────────────────────────────────────────
+// ── INIT ──────────────────────────────────────────────────────────────────
+function init() {
+  const wKeys = WEEK_ORDER.filter(k => WEEKS_DATA[k]);
+  if(!wKeys.length){ const first=document.getElementById('tab-overview'); if(first){first.classList.add('active');first.innerHTML='<div style="padding:60px 36px;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">📭</div><div style="font-size:15px;font-weight:500;margin-bottom:8px">No data yet</div><div style="font-size:13px">Run the SQL insert script or upload a weekly report</div></div>';} return; }
+  const latestKey = wKeys[wKeys.length - 1];
+  currentWeek = latestKey;
+  const container = document.getElementById('weekBtns');
+  if (container) {
+    container.innerHTML = '';
+    wKeys.forEach(key => {
+      const w = WEEKS_DATA[key];
+      const btn = document.createElement('button');
+      btn.className = 'week-btn' + (key === latestKey ? ' active latest' : '');
+      btn.textContent = (WEEK_NAMES[key]||key) + '  ' + w.label;
+      btn.onclick = () => { currentWeek=key; document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); };
+      container.appendChild(btn);
+    });
+  }
+  render();
+}
 
+// ── SWITCH TAB ────────────────────────────────────────────────────────────
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  const el=document.getElementById('tab-'+id);
+  if(el) el.classList.add('active');
+  if(btn) btn.classList.add('active');
+  currentTab=id;
+  if(id==='upload') { if(el){el.innerHTML=renderUploadTab(); document.getElementById('weeksList').innerHTML=weeksListHTML();} }
+  else if(id==='users') renderUsersTab(el);
+  else if(id==='gallery') renderGalleryTab();
+  else if(id==='submit') renderSubmitTab(el);
+}
 
 // ── UPLOAD & PARSE ────────────────────────────────────────────────────────
 function renderUploadTab() {
   return `<div style="padding:28px 36px;max-width:800px">
-    <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:20px">Upload &amp; Auto-Process</div>
-
-    <div class="upload-file-types">
-      <div class="uft-card"><div class="uft-name">Weekly HR Report</div><div class="uft-desc">Unified_Weekly_HR_Report_*.xlsx — adds a new week to the dashboard</div></div>
-      <div class="uft-card"><div class="uft-name">Employee Master</div><div class="uft-desc">Super Employee Master *.xlsx — updates active HC &amp; region data</div></div>
-      <div class="uft-card"><div class="uft-name">CTC Master</div><div class="uft-desc">Super_employee_master_with_CTC*.xlsx — updates wage bill &amp; attrition</div></div>
-      <div class="uft-card"><div class="uft-name">TA Report</div><div class="uft-desc">cmsitn_candidate_transactional*.xlsx — updates TA pipeline intel</div></div>
+    <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:20px">Upload & Auto-Process</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly HR Report</div><div style="font-size:12px;color:var(--muted)">Unified_Weekly_HR_Report_*.xlsx</div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Employee Master / CTC / TA Report</div><div style="font-size:12px;color:var(--muted)">ZingHR export files</div></div>
     </div>
-
     <div class="upload-drop" id="uploadDrop"
       ondragover="event.preventDefault();this.classList.add('drag')"
       ondragleave="this.classList.remove('drag')"
       ondrop="handleUploadDrop(event)">
       <input type="file" accept=".xlsx,.xls" onchange="handleUploadFile(this.files[0])">
-      <div class="upload-drop-icon">📂</div>
-      <div class="upload-drop-title">Drop any file here</div>
-      <div class="upload-drop-sub">Auto-detected · Parsed in browser · Pushed to Supabase</div>
+      <div style="font-size:32px;margin-bottom:10px">📋</div>
+      <div style="font-size:15px;font-weight:500;color:var(--text);margin-bottom:6px">Drop any Excel file here</div>
+      <div style="font-size:12px;color:var(--muted)">Auto-detected · Parsed in browser · Pushed to Supabase</div>
     </div>
-    <div class="parse-log" id="parseLog" style="display:none"></div>
-
+    <div class="parse-log" id="parseLog" style="display:none;background:var(--surface3);border-radius:8px;padding:14px;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);max-height:200px;overflow-y:auto;margin-top:12px;line-height:1.7"></div>
     <div style="margin-top:28px;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:14px">Weeks in Database</div>
     <div id="weeksList"></div>
   </div>`;
 }
 
-function handleUploadDrop(e) {
-  e.preventDefault();
-  document.getElementById('uploadDrop').classList.remove('drag');
-  const f = e.dataTransfer.files[0];
-  if (f) handleUploadFile(f);
-}
+function handleUploadDrop(e) { e.preventDefault(); document.getElementById('uploadDrop').classList.remove('drag'); const f=e.dataTransfer.files[0]; if(f)handleUploadFile(f); }
 
 function log(msg, type) {
-  const el = document.getElementById('parseLog');
-  if (!el) return;
-  el.style.display = 'block';
-  el.innerHTML += `<div class="${type||''}">${msg}</div>`;
-  el.scrollTop = el.scrollHeight;
+  const el=document.getElementById('parseLog'); if(!el)return;
+  el.style.display='block';
+  const colors={ok:'#34d399',err:'#f87171',info:'#60a5fa','':`var(--muted)`};
+  el.innerHTML+=`<div style="color:${colors[type||'']||colors['']}">${msg}</div>`;
+  el.scrollTop=el.scrollHeight;
 }
 
 async function handleUploadFile(file) {
-  if (!file) return;
-  const el = document.getElementById('parseLog');
-  if (el) { el.style.display='block'; el.innerHTML=''; }
-  log(`📂 Reading: ${file.name}`, 'info');
+  if(!file)return;
+  const el=document.getElementById('parseLog'); if(el){el.style.display='block';el.innerHTML='';}
+  log('Reading: '+file.name,'info');
+  const name=file.name.toLowerCase();
+  let fileType=null;
+  if(name.includes('unified')||name.includes('weekly_hr')||name.includes('hr_report')) fileType='weekly';
+  else if(name.includes('with_ctc')||name.includes('ctc')) fileType='ctc';
+  else if(name.includes('candidate_transactional')||name.includes('cmsitn')) fileType='ta';
+  else if(name.includes('sper_employee')||name.includes('super_employee')) fileType='master';
+  if(!fileType){log('Filename not recognised — trying as Weekly HR Report','info');fileType='weekly';}
+  log('Detected: '+fileType.toUpperCase(),'ok');
+  const reader=new FileReader();
+  reader.onload=async(e)=>{
+    try{
+      const data=new Uint8Array(e.target.result);
+      const wb=XLSX.read(data,{type:'array',cellDates:true});
+      log('Workbook loaded: '+wb.SheetNames.length+' sheet(s)','ok');
+      if(fileType==='weekly') await processWeekly(wb);
+      else{log('Master/CTC/TA import coming soon. Weekly report is fully supported.','info');}
+    }catch(err){log('Parse error: '+err.message,'err');console.error(err);}
+  };
+  reader.readAsArrayBuffer(file);
+}
 
-  // Detect file type from name
-  const name = file.name.toLowerCase();
-  let fileType = null;
-  if (name.includes('unified') || name.includes('weekly_hr') || name.includes('weekly_hr_report') || name.includes('hr_report')) fileType = 'weekly';
-  else if (name.includes('with_ctc') || name.includes('ctc')) fileType = 'ctc';
-  else if (name.includes('candidate_transactional') || name.includes('cmsitn')) fileType = 'ta';
-  else if (name.includes('sper_employee') || name.includes('super_employee')) fileType = 'master';
+function ss(v){return String(v||'').trim();}
+function sf(v){const n=parseFloat(String(v||'').replace(/,/g,''));return isNaN(n)?0:n;}
 
-  if (!fileType) {
-    log('Filename not recognised — attempting to parse as Weekly HR Report.', 'info');
-    fileType = 'weekly';
+function getRows(ws) {
+  const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
+  const headers={};
+  for(let c=range.s.c;c<=range.e.c;c++){const cell=ws[XLSX.utils.encode_cell({r:range.s.r,c})];if(cell&&cell.v!=null)headers[String(cell.v).trim()]=c;}
+  const rows=[];
+  for(let r=range.s.r+1;r<=range.e.r;r++){
+    const row={};
+    for(const [h,c] of Object.entries(headers)){const cell=ws[XLSX.utils.encode_cell({r,c})];row[h]=cell?cell.v:null;}
+    rows.push(row);
   }
-  >
+  return rows;
+}
+
+function parseDate(v) {
+  if(!v)return null;
+  if(v instanceof Date)return v;
+  const s=String(v).trim();
+  const isoM=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(isoM)return new Date(parseInt(isoM[1]),parseInt(isoM[2])-1,parseInt(isoM[3]));
+  const mdyM=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(mdyM)return new Date(parseInt(mdyM[3]),parseInt(mdyM[1])-1,parseInt(mdyM[2]));
+  const MO={january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11};
+  const lM=s.match(/([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
+  if(lM){const mo=MO[lM[1].toLowerCase()];if(mo!==undefined)return new Date(parseInt(lM[3]),mo,parseInt(lM[2]));}
+  try{const d=new Date(s);if(!isNaN(d))return d;}catch(e){}
+  return null;
+}
+
+function toWkKey(d) {
+  const mo=d.getMonth(),day=d.getDate();
+  if(mo===0&&day>=19)return'W04';
+  if(mo===1&&day>=2&&day<=8)return'W05';
+  if(mo===1&&day>=9&&day<=15)return'W06';
+  if(mo===1&&day>=16&&day<=22)return'W07';
+  if(mo===1&&day>=23)return'W08';
+  if(mo===2&&day>=2&&day<=8)return'W09';
+  if(mo===2&&day>=9&&day<=15)return'W10';
+  if(mo===2&&day>=16&&day<=22)return'W11';
+  if(mo===2&&day>=23)return'W12';
+  if(mo===3&&day>=6&&day<=12)return'W14';
+  if(mo===3&&day>=13&&day<=19)return'W15';
+  const yr=d.getFullYear();
+  const wn=Math.ceil(((d-new Date(yr,0,1))/86400000+1)/7);
+  return 'W'+String(wn).padStart(2,'0');
+}
+
+const HRBP_REGION_MAP={'abhishek':'North','rekha':'North','salma':'North','priya paul':'South','suhail':'South','mousumi':'South','caral':'South','pijush':'East','surajit':'East','somasri':'West','ayush':'West','shambhavi':'West','kumari puja':'West','nilam':'West','nikita':'West','juee':'West','neha kaur':'Pan-India','ajith':'Pan-India','deepak shetty':'Pan-India'};
+function getRegionFromName(n){const nl=(n||'').toLowerCase();for(const[k,v]of Object.entries(HRBP_REGION_MAP))if(nl.includes(k))return v;return'Pan-India';}
+
+async function processWeekly(wb) {
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=getRows(ws);
+  log(rows.length+' rows found','info');
+  const weekGroups={};
+  for(const row of rows){
+    const fn=ss(row['Function']);
+    const name=ss(row['Employee Name']);
+    if(!fn&&!name)continue;
+    const fromDt=parseDate(row['Reporting Week \u2013 From Date']||row['Reporting Week - From Date']||row['Reporting Week – From Date']);
+    const toDt=parseDate(row['Reporting Week \u2013 To Date']||row['Reporting Week - To Date']||row['Reporting Week – To Date']);
+    if(!fromDt&&!toDt)continue;
+    const dt=fromDt||toDt;
+    const wkKey=toWkKey(dt);
+    if(!weekGroups[wkKey])weekGroups[wkKey]={rows:[],fromDt,toDt};
+    weekGroups[wkKey].rows.push({...row,_fn:fn,_name:name,_region:getRegionFromName(name)});
+  }
+  log('Detected '+Object.keys(weekGroups).length+' week(s): '+Object.keys(weekGroups).join(', '),'info');
+  for(const[wkKey,grp]of Object.entries(weekGroups)){
+    const wData=buildWeekData(wkKey,grp.rows,grp.fromDt,grp.toDt);
+    log('Saving '+wkKey+': '+grp.rows.length+' rows…','info');
+    const{error}=await _sb.from('weekly_reports').upsert(wData,{onConflict:'week_key'});
+    if(error){log('DB error for '+wkKey+': '+error.message,'err');}
+    else{
+      log('Saved '+wkKey+' (W'+wData.week_num+': '+wData.label+')','ok');
+      WEEKS_DATA[wData.week_key]=wData;
+      if(!WEEK_ORDER.includes(wData.week_key)){WEEK_ORDER.push(wData.week_key);WEEK_ORDER.sort((a,b)=>(WEEKS_DATA[a]?.week_num||0)-(WEEKS_DATA[b]?.week_num||0));}
+      WEEK_NAMES[wData.week_key]='Week '+wData.week_num;WEEK_LABELS[wData.week_key]=wData.label;
+    }
+  }
+  log('Done! Refreshing dashboard…','ok');
+  await loadWeeksIntoDOM();
+}
+
+function buildWeekData(wkKey,rows,fromDt,toDt){
+  const FMT=d=>d?d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'?';
+  const WN={'W04':4,'W05':5,'W06':6,'W07':7,'W08':8,'W09':9,'W10':10,'W11':11,'W12':12,'W13':13,'W14':14,'W15':15};
+  const week_num=WN[wkKey]||parseInt(wkKey.replace('W',''))||0;
+  const w={week_key:wkKey,week_num,label:FMT(fromDt)+' \u2013 '+FMT(toDt),from_label:FMT(fromDt),to_label:FMT(toDt),total_respondents:rows.length,
+    ta_opened:0,ta_closed:0,ta_offers:0,ta_dropouts:0,ta_detail:[],ta_constraints:[],ta_aging_raw:[],
+    hrbp_visits:0,hrbp_connects:[],hrbp_discipline:[],hrbp_retention:[],hrbp_issues:[],hrbp_risks:[],hrbp_activities:[],
+    payroll_hc:0,payroll_errors:0,payroll_month:'',payroll_risks:[],payroll_pending:[],payroll_statutory:[],
+    hrops_onboard:0,hrops_fnf:'',hrops_compliance:[],hrops_gaps:[],hrops_esc:0,hrops_esc_texts:[],
+    ld_sessions:0,ld_coverage:'',ld_details:[],ld_upcoming:[],ld_gaps:[],ld_risks:[],admin_issues:[],admin_savings:[]};
+  let siteVisits=0;
+  for(const row of rows){
+    const fn=row._fn;
+    if(fn.includes('Talent Acquisition')||fn.includes('(TA)')||fn==='TA'){
+      const o=parseInt(sf(row['Positions Opened This Week'])),c=parseInt(sf(row['Positions Closed This Week'])),of=parseInt(sf(row['Offers Released'])),d=parseInt(sf(row['Offer Dropouts']));
+      w.ta_opened+=o;w.ta_closed+=c;w.ta_offers+=of;w.ta_dropouts+=d;
+      const aging=ss(row['Ageing Open Positions with Top 10 Platinum & Gold Customers']);
+      const constr=ss(row['TA Constraints / Escalations']);
+      w.ta_detail.push({name:row._name,region:row._region,opened:o,closed:c,offers:of,dropouts:d,dropout_reason:ss(row['Offer Dropouts \u2013 Reason']||row['Offer Dropouts - Reason']),constraint:constr,aging,next_week:ss(row['Joining vs Plan'])});
+      if(aging&&aging!='NA')w.ta_aging_raw.push(aging);
+      if(constr&&constr!='NA'&&constr.length>3)w.ta_constraints.push(constr);
+    }
+    else if(fn.includes('HR Business')||fn.includes('HRBP')||fn.includes('Business Partner')){
+      const visited=ss(row['Did you conduct site visits or employee connects this week?']);
+      const detail=ss(row['Site Visit / HR Connect Details']);
+      if(visited.toLowerCase()==='yes'||detail.length>10){siteVisits+=(detail?(detail.match(/site name/gi)||[detail]).length:1);if(detail)w.hrbp_connects.push({name:row._name,detail});}
+      ['Employee Relations / Discipline Cases Handled','Key Attrition / Retention Interventions','Open Issues Needing Leadership Support','Highlight Risks if actions are Delayed','Key Activities and Achievements (HRBP)'].forEach((k,i)=>{const v=ss(row[k]);if(v){const arr=[w.hrbp_discipline,w.hrbp_retention,w.hrbp_issues,w.hrbp_risks,w.hrbp_activities][i];arr.push(v);}});
+    }
+    else if(fn.includes('Payroll')){
+      const hc=parseInt(sf(row['Total Employees Paid']));if(hc>w.payroll_hc)w.payroll_hc=hc;
+      w.payroll_errors+=parseInt(sf(row['Payroll Errors Identified']));
+      const mo=ss(row['Payroll Cycle / Month Covered']);if(mo)w.payroll_month=mo;
+      const r=ss(row['Risks for Upcoming Payroll Cycle']),p=ss(row['Pending Payroll Corrections (Brief Details)']),s=ss(row['Statutory Submissions (PF/ESI/LWF) Completed this Week']);
+      if(r)w.payroll_risks.push(r);if(p)w.payroll_pending.push(p);if(s)w.payroll_statutory.push(s);
+    }
+    else if(fn.includes('HR Operations')||fn.includes('HR Ops')||fn==='HROps'){
+      w.hrops_onboard+=parseInt(sf(row['Number of Onboardings Processed and pushed to Payroll']));
+      const fnf=ss(row['FNF Cases Processed']);if(fnf)w.hrops_fnf=fnf;
+      const comp=ss(row['Compliance / Audit Activities Completed']),gaps=ss(row['Exceptions / Process Gaps Observed']),esc=ss(row['Employee Escalations handled and pending']);
+      if(comp)w.hrops_compliance.push(comp);if(gaps)w.hrops_gaps.push(gaps);
+      if(esc){w.hrops_esc_texts.push(esc);const nums=(esc.match(/\b(\d{2,4})\b/g)||[]).map(Number).filter(n=>n>=50&&n<=9999);if(nums.length)w.hrops_esc=Math.max(w.hrops_esc,...nums);}
+    }
+    else if(fn.includes('L&D')||fn.includes('Learning')||fn==='LD'){
+      const sess=parseInt(sf(row['Trainings / Programs Conducted This Week']||row['L&D Programs Conducted / Coordinated']||0));
+      if(sess<20)w.ld_sessions+=sess;
+      const cov=ss(row['Coverage Achieved']);if(cov)w.ld_coverage=cov;
+      const det=ss(row['Training Details']),up=ss(row['Upcoming Trainings (Next 2\u20134 Weeks)']),gap=ss(row['Capability Gaps Identified from Business / Delivery']),risk=ss(row['L&D Risks / Dependencies']);
+      if(det)w.ld_details.push(det);if(up)w.ld_upcoming.push(up);if(gap)w.ld_gaps.push(gap);if(risk)w.ld_risks.push(risk);
+    }
+    else if(fn.includes('Admin')){
+      const iss=ss(row['Key Facility Issues & Redressal Details']);if(iss)w.admin_issues.push(iss);
+    }
+  }
+  w.hrbp_visits=siteVisits;
+  return w;
+}
+
+async function loadWeeksIntoDOM(){
+  const{data:weeks}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
+  if(weeks&&weeks.length){WEEKS_DATA={};weeks.forEach(w=>{WEEKS_DATA[w.week_key]=w;});WEEK_ORDER=weeks.map(w=>w.week_key);weeks.forEach(w=>{WEEK_LABELS[w.week_key]=w.label||'';WEEK_NAMES[w.week_key]='Week '+w.week_num+(w.week_key===WEEK_ORDER[WEEK_ORDER.length-1]?' (Latest)':'');});window.WEEK_ORDER_LIVE=WEEK_ORDER;currentWeek=WEEK_ORDER[WEEK_ORDER.length-1];}
+  const container=document.getElementById('weekBtns');
+  if(container){container.innerHTML='';WEEK_ORDER.filter(k=>WEEKS_DATA[k]).forEach(key=>{const w=WEEKS_DATA[key];const btn=document.createElement('button');btn.className='week-btn'+(key===currentWeek?' active latest':'');btn.textContent=(WEEK_NAMES[key]||key)+'  '+w.label;btn.onclick=()=>{currentWeek=key;document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');render();};container.appendChild(btn);});}
+  render();
+  const wl=document.getElementById('weeksList');if(wl)wl.innerHTML=weeksListHTML();
+}
+
+function weeksListHTML(){
+  const wk=WEEK_ORDER.slice().reverse();
+  if(!wk.length)return'<div style="font-size:13px;color:var(--muted);padding:16px 0">No weeks yet</div>';
+  return'<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);padding:0 10px 10px;border-bottom:1px solid var(--border);text-align:left">Week</th><th style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);padding:0 10px 10px;border-bottom:1px solid var(--border);text-align:left">Period</th><th style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);padding:0 10px 10px;border-bottom:1px solid var(--border);text-align:right">Respondents</th><th></th></tr></thead><tbody>'+wk.map(k=>'<tr><td style="padding:9px 10px;border-bottom:1px solid rgba(42,61,82,.4);color:var(--text);font-weight:500">W'+WEEKS_DATA[k].week_num+'</td><td style="padding:9px 10px;border-bottom:1px solid rgba(42,61,82,.4);color:var(--muted)">'+(WEEKS_DATA[k].label||'')+'</td><td style="padding:9px 10px;border-bottom:1px solid rgba(42,61,82,.4);color:var(--muted);text-align:right;font-family:monospace">'+(WEEKS_DATA[k].total_respondents||0)+'</td><td style="padding:9px 10px;border-bottom:1px solid rgba(42,61,82,.4)"><button onclick="deleteWeek(\''+k+'\')" style="font-size:11px;color:var(--red);background:none;border:1px solid rgba(248,113,113,.3);padding:3px 10px;border-radius:6px;cursor:pointer">Delete</button></td></tr>').join('')+'</tbody></table>';
+}
+
+async function deleteWeek(k){if(!confirm('Delete week '+k+'?'))return;const{error}=await _sb.from('weekly_reports').delete().eq('week_key',k);if(!error){delete WEEKS_DATA[k];const idx=WEEK_ORDER.indexOf(k);if(idx>-1)WEEK_ORDER.splice(idx,1);if(currentWeek===k)currentWeek=WEEK_ORDER[WEEK_ORDER.length-1]||null;await loadWeeksIntoDOM();}}
+
+// ── GALLERY ────────────────────────────────────────────────────────────────
+let _galleryPhotos=[],_lbIdx=0;
+const EVENT_TYPES=[{v:'site_visit',l:'Site Visit',cls:'pe-site'},{v:'rr',l:'R&R',cls:'pe-rr'},{v:'townhall',l:'Town Hall',cls:'pe-townhall'},{v:'training',l:'Training',cls:'pe-training'},{v:'other',l:'Other',cls:'pe-other'}];
+function evtBadge(t){const e=EVENT_TYPES.find(x=>x.v===t)||EVENT_TYPES[4];return'<span class="photo-event-badge '+e.cls+'">'+e.l+'</span>';}
+
+async function renderGalleryTab(){
+  const mc=document.getElementById('tab-gallery');if(!mc)return;
+  mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading gallery…</div>';
+  const{data,error}=await _sb.from('hrbp_photos').select('*').eq('week_key',currentWeek).order('created_at',{ascending:false});
+  _galleryPhotos=data||[];
+  const w=WEEKS_DATA[currentWeek],wLabel=w?w.label:currentWeek;
+  const canUpload=_sbRole&&(_sbRole.role==='admin'||_sbRole.role==='hrbp');
+  mc.innerHTML='<div style="padding:28px 36px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px"><div><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Photo Gallery</div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;letter-spacing:1px;color:var(--text);margin-top:2px">'+wLabel+'</div></div><div style="display:flex;gap:8px;align-items:center"><select id="galEventFilter" onchange="filterGallery()" style="background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:12px"><option value="">All Events</option>'+EVENT_TYPES.map(e=>'<option value="'+e.v+'">'+e.l+'</option>').join('')+'</select>'+(canUpload?'<button onclick="showPhotoUpload()" style="background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer">+ Add Photos</button>':'')+'</div></div><div id="photoUploadPanel" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px"><div style="font-size:10px;font-family:\'DM Mono\',monospace;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Upload Photos for '+wLabel+'</div><div class="photo-upload-zone" id="photoDropZone" ondragover="event.preventDefault();this.classList.add(\'drag\')" ondragleave="this.classList.remove(\'drag\')" ondrop="handlePhotoDrop(event)"><input type="file" accept="image/*" multiple onchange="handlePhotoFiles(this.files)"><div style="font-size:28px;margin-bottom:8px">🖼️</div><div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px">Drop photos here</div><div style="font-size:12px;color:var(--muted)">JPG, PNG, HEIC · Multiple files OK</div></div><div id="photoStagingArea" style="margin-top:16px"></div><div id="photoUploadProgress" style="margin-top:10px"></div></div>'+(_galleryPhotos.length===0?'<div style="text-align:center;padding:60px 20px;color:var(--muted)"><div style="font-size:40px;margin-bottom:12px">📷</div><div style="font-size:15px;font-weight:500;margin-bottom:6px">No photos this week</div><div style="font-size:13px">'+(canUpload?'Click "+ Add Photos" to upload':'HRBPs and admins can upload photos')+'</div></div>':'<div class="gallery-grid" id="galleryGrid">'+_galleryPhotos.map((p,i)=>photoCard(p,i)).join('')+'</div>')+'</div>';
+}
+
+function filterGallery(){const f=document.getElementById('galEventFilter')?.value||'';const g=document.getElementById('galleryGrid');if(!g)return;const fl=f?_galleryPhotos.filter(p=>p.event_type===f):_galleryPhotos;g.innerHTML=fl.length?fl.map((p,i)=>photoCard(p,i)).join(''):'<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);font-size:13px">No photos for this event type</div>';}
+function photoCard(p,i){return'<div class="photo-card" onclick="openLB('+i+')"><img src="'+p.photo_url+'" alt="'+(p.caption||'')+'" loading="lazy" onerror="this.style.background=\'var(--surface3)\'"><div class="photo-card-body"><div class="photo-card-caption">'+(p.caption||'No caption')+'</div><div class="photo-card-meta"><span class="photo-card-hrbp">'+(p.uploader_name||'—')+(p.uploader_region?' · '+p.uploader_region:'')+'</span>'+evtBadge(p.event_type)+'</div>'+(p.account_name?'<div style="font-size:10px;color:var(--accent);margin-top:4px;font-family:\'DM Mono\',monospace">'+p.account_name+'</div>':'')+'</div></div>';}
+function openLB(idx){_lbIdx=idx;const p=_galleryPhotos[idx];if(!p)return;document.getElementById('photoLBImg').src=p.photo_url;document.getElementById('photoLBCaption').textContent=p.caption||'';document.getElementById('photoLBMeta').textContent=(p.uploader_name||'')+(p.uploader_region?' · '+p.uploader_region:'')+(p.account_name?' · '+p.account_name:'')+' · '+(p.created_at||'').substring(0,10);document.getElementById('photoLB').classList.add('open');}
+function closeLB(){document.getElementById('photoLB').classList.remove('open');}
+function lbNav(dir){_lbIdx=(_lbIdx+dir+_galleryPhotos.length)%_galleryPhotos.length;openLB(_lbIdx);}
+document.addEventListener('keydown',e=>{if(!document.getElementById('photoLB').classList.contains('open'))return;if(e.key==='Escape')closeLB();if(e.key==='ArrowLeft')lbNav(-1);if(e.key==='ArrowRight')lbNav(1);});
+function showPhotoUpload(){const p=document.getElementById('photoUploadPanel');if(p)p.style.display=p.style.display==='none'?'block':'none';}
+function handlePhotoDrop(e){e.preventDefault();document.getElementById('photoDropZone').classList.remove('drag');handlePhotoFiles(e.dataTransfer.files);}
+let _stagedPhotos=[];
+function handlePhotoFiles(files){if(!files||!files.length)return;_stagedPhotos=Array.from(files);const area=document.getElementById('photoStagingArea');if(!area)return;area.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">'+files.length+' photo(s) — add details below</div><div id="stageCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:16px"></div><button onclick="submitPhotos()" style="background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer">Upload All Photos</button>';const cards=document.getElementById('stageCards');_stagedPhotos.forEach((file,idx)=>{const reader=new FileReader();reader.onload=ev=>{const card=document.createElement('div');card.style.cssText='background:var(--surface3);border:1px solid var(--border);border-radius:10px;overflow:hidden';card.innerHTML='<img src="'+ev.target.result+'" style="width:100%;height:120px;object-fit:cover;display:block"><div style="padding:10px"><input placeholder="Caption…" id="cap_'+idx+'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;margin-bottom:8px"><select id="evt_'+idx+'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;margin-bottom:8px">'+EVENT_TYPES.map(e=>'<option value="'+e.v+'">'+e.l+'</option>').join('')+'</select><input placeholder="Account / Site (optional)" id="acct_'+idx+'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;outline:none"></div>';cards.appendChild(card);};reader.readAsDataURL(file);});}
+async function submitPhotos(){const prog=document.getElementById('photoUploadProgress');if(prog)prog.innerHTML='';for(let idx=0;idx<_stagedPhotos.length;idx++){const file=_stagedPhotos[idx];const caption=document.getElementById('cap_'+idx)?.value||'';const evt=document.getElementById('evt_'+idx)?.value||'other';const acct=document.getElementById('acct_'+idx)?.value||'';if(prog)prog.innerHTML+='<div style="font-size:12px;color:var(--muted);padding:3px 0">Uploading '+file.name+'…</div>';const ext=file.name.split('.').pop();const path=currentWeek+'/'+Date.now()+'_'+idx+'.'+ext;const{error:upErr}=await _sb.storage.from('hrbp-photos').upload(path,file,{contentType:file.type});if(upErr){if(prog)prog.innerHTML+='<div style="font-size:12px;color:var(--red)">✗ '+file.name+': '+upErr.message+'</div>';continue;}const{data:urlData}=_sb.storage.from('hrbp-photos').getPublicUrl(path);await _sb.from('hrbp_photos').insert({week_key:currentWeek,week_num:WEEKS_DATA[currentWeek]?.week_num||0,uploaded_by:_sbUser?.id,uploader_name:_sbRole.region?(_sbUser?.email?.split('@')[0]||'HRBP'):'Admin',uploader_region:_sbRole.region||'All',photo_url:urlData.publicUrl,caption,event_type:evt,account_name:acct});if(prog)prog.innerHTML+='<div style="font-size:12px;color:var(--green)">✓ '+file.name+'</div>';}if(prog)prog.innerHTML+='<div style="font-size:12px;color:var(--accent);margin-top:8px;font-weight:600">Done!</div>';_stagedPhotos=[];setTimeout(()=>renderGalleryTab(),1000);}
+
+// ── FORM ──────────────────────────────────────────────────────────────────
+const FUNCTION_TYPES={ta:{label:'Talent Acquisition',icon:'🎯'},hrbp:{label:'HR Business Partner',icon:'🤝'},payroll:{label:'Payroll',icon:'💰'},hrops:{label:'HR Operations',icon:'⚙️'},ld:{label:'L&D',icon:'📚'},admin:{label:'Admin & Facilities',icon:'🏢'}};
+function detectFunction(role){if(role==='hrbp')return'hrbp';return null;}
+let _formWeekKey=null,_formPhotos=[],_existingSub=null,_visitYes=false;
+
+async function renderSubmitTab(mc){
+  if(!mc)mc=document.getElementById('tab-submit');
+  mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>';
+  const{data:profile}=await _sb.from('user_profiles').select('role,region,function_type,display_name').eq('id',_sbUser.id).single();
+  const fnType=profile?.function_type||detectFunction(profile?.role)||'hrbp';
+  const region=profile?.region||'';
+  const displayName=profile?.display_name||_sbUser.email?.split('@')[0]||'User';
+  const roleLabel={'admin':'CXO','executive':'CXO','hrbp':'Lead'}[profile?.role]||(profile?.role||'').toUpperCase();
+  if(profile?.role==='admin'||profile?.role==='executive'){await renderSubmissionTracker(mc,displayName,roleLabel);return;}
+  const availWeeks=WEEK_ORDER.slice(-3).reverse();
+  _formWeekKey=_formWeekKey||WEEK_ORDER[WEEK_ORDER.length-1];
+  const{data:existing}=await _sb.from('weekly_submissions').select('*').eq('week_key',_formWeekKey).eq('submitted_by',_sbUser.id).single();
+  _existingSub=existing||null;
+  const fn=FUNCTION_TYPES[fnType]||FUNCTION_TYPES.hrbp;
+  const statusHTML=_existingSub?'<span class="wform-status-badge wsb-submitted">✓ Submitted · '+(_existingSub.updated_at||'').substring(0,10)+'</span>':'<span class="wform-status-badge wsb-none">Not submitted yet</span>';
+  mc.innerHTML='<div class="wform-wrap"><div class="wform-header"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report</div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">'+fn.icon+' '+fn.label+'</div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">'+displayName+(region?' · '+region:'')+'</span>'+statusHTML+'</div></div><div style="margin-bottom:20px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div><div class="wform-week-select">'+availWeeks.map(k=>'<button class="wform-week-btn'+(k===_formWeekKey?' active':'')+'" onclick="selectFormWeek(\''+k+'\')">'+( WEEK_NAMES[k]||k)+' · '+(WEEKS_DATA[k]?.label||'')+'</button>').join('')+'</div></div>'+buildFunctionSections(fnType)+'<div class="wform-section"><div class="wform-section-title">📸 Photos</div><div class="wform-row"><label>Upload photos (site visits, R&R, town halls, training)</label><div class="wform-photo-zone" id="formPhotoZone" ondragover="event.preventDefault();this.classList.add(\'drag\')" ondragleave="this.classList.remove(\'drag\')" ondrop="formPhotoDrop(event)"><input type="file" accept="image/*" multiple onchange="formPhotoAdd(this.files)"><div style="font-size:20px;margin-bottom:6px">📷</div><div style="font-size:13px;color:var(--muted)">Drop photos or click to browse</div></div><div class="wform-photo-preview" id="formPhotoPreview"></div></div></div><div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button class="wform-submit-btn" id="formSubmitBtn" onclick="submitWeeklyForm(\''+fnType+'\',\''+region+'\')">'+(_existingSub?'Update Submission':'Submit Report')+'</button>'+(_existingSub?'<span style="font-size:12px;color:var(--muted)">You can update until the week closes</span>':'')+'</div><div id="formSubmitStatus" style="margin-top:12px"></div></div>';
+  setVisit(_visitYes);
+  if(_existingSub)populateForm(_existingSub);
+}
+
+function buildFunctionSections(t){
+  if(t==='ta')return'<div class="wform-section"><div class="wform-section-title">TA Numbers</div><div class="wform-grid4"><div><input type="number" min="0" id="f_ta_opened" class="wform-num-input" value="0"><div class="wform-num-label">Opened</div></div><div><input type="number" min="0" id="f_ta_closed" class="wform-num-input" value="0"><div class="wform-num-label">Closed</div></div><div><input type="number" min="0" id="f_ta_offers" class="wform-num-input" value="0"><div class="wform-num-label">Offers</div></div><div><input type="number" min="0" id="f_ta_dropouts" class="wform-num-input" value="0"><div class="wform-num-label">Dropouts</div></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Dropout Reason(s)</label><textarea id="f_ta_dropout_reason" placeholder="Candidate got better offer / salary mismatch…"></textarea></div><div class="wform-row"><label>Ageing Open Positions (Platinum & Gold)</label><textarea id="f_ta_aging" style="min-height:90px" placeholder="Req ID | Account | Role | Location | Days | Reason…"></textarea></div><div class="wform-row"><label>Constraints / Escalations</label><textarea id="f_ta_constraints" placeholder="Budget constraints, skill scarcity…"></textarea></div><div class="wform-row"><label>Joining Plan for Next Week</label><textarea id="f_ta_joining_plan" placeholder="Expected joiners, DOJs…"></textarea></div></div>';
+  if(t==='hrbp')return'<div class="wform-section"><div class="wform-section-title">Site Visits & Connects</div><div class="wform-row"><label>Did you conduct site visits this week?</label><div class="wform-visit-toggle"><button class="wform-visit-btn" id="visitYesBtn" onclick="setVisit(true)">Yes</button><button class="wform-visit-btn" id="visitNoBtn" onclick="setVisit(false)">No</button></div></div><div class="wform-row"><label>Site Visit / Connect Details</label><textarea id="f_hrbp_connect_details" style="min-height:110px" placeholder="Site name, Account, Date, PM/DL name, Issues discussed…"></textarea></div></div><div class="wform-section"><div class="wform-section-title">Employee Relations & Retention</div><div class="wform-row"><label>Discipline / ER Cases Handled</label><textarea id="f_hrbp_discipline" placeholder="Warning letters, misconduct cases…"></textarea></div><div class="wform-row"><label>Attrition / Retention Interventions</label><textarea id="f_hrbp_retention" placeholder="Resignations revoked, at-risk employees…"></textarea></div></div><div class="wform-section"><div class="wform-section-title">Issues & Activities</div><div class="wform-row"><label>Open Issues Needing Leadership Support</label><textarea id="f_hrbp_issues" placeholder="Pending approvals, policy clarifications…"></textarea></div><div class="wform-row"><label>Risks if Actions Delayed</label><textarea id="f_hrbp_risks" placeholder="Employee dissatisfaction, compliance risk…"></textarea></div><div class="wform-row"><label>Key Activities & Achievements</label><textarea id="f_hrbp_activities" style="min-height:90px" placeholder="Onboarding, inductions, connects, recognitions…"></textarea></div><div class="wform-row"><label>R&R / Engagement Activities</label><textarea id="f_hrbp_rr_details" placeholder="Birthday celebrations, awards, town halls…"></textarea></div></div>';
+  if(t==='payroll')return'<div class="wform-section"><div class="wform-section-title">Payroll Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Total Employees Paid</label><input type="number" id="f_payroll_hc" value="0"></div><div class="wform-row"><label>Payroll Errors Identified</label><input type="number" id="f_payroll_errors" value="0"></div></div><div class="wform-row"><label>Payroll Cycle / Month Covered</label><input type="text" id="f_payroll_month" placeholder="February 2026"></div></div><div class="wform-section"><div class="wform-section-title">Issues & Compliance</div><div class="wform-row"><label>Risks for Upcoming Payroll Cycle</label><textarea id="f_payroll_risks" placeholder="Leave config issues, attendance not rectified…"></textarea></div><div class="wform-row"><label>Pending Payroll Corrections</label><textarea id="f_payroll_pending" placeholder="Holiday not reflecting, leave mapping issues…"></textarea></div><div class="wform-row"><label>Statutory Submissions Status</label><textarea id="f_payroll_statutory" placeholder="Completed / In process / Pending…"></textarea></div></div>';
+  if(t==='hrops')return'<div class="wform-section"><div class="wform-section-title">HR Ops Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Onboardings Processed</label><input type="number" id="f_hrops_onboard" value="0"></div><div class="wform-row"><label>Escalations Handled</label><input type="number" id="f_hrops_esc_count" value="0"></div></div><div class="wform-row"><label>FnF Cases Processed This Week</label><input type="text" id="f_hrops_fnf" placeholder="e.g. 20 of 166 cases cleared"></div></div><div class="wform-section"><div class="wform-section-title">Compliance & Gaps</div><div class="wform-row"><label>Compliance / Audit Activities</label><textarea id="f_hrops_compliance" placeholder="Audits handled, labour notices closed…"></textarea></div><div class="wform-row"><label>Process Gaps / Exceptions</label><textarea id="f_hrops_gaps" placeholder="ZingHR data gaps, master data issues…"></textarea></div><div class="wform-row"><label>Escalation Details</label><textarea id="f_hrops_esc_details" placeholder="Nature of escalations handled…"></textarea></div></div>';
+  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Upcoming Trainings (Next 2–4 Weeks)</label><textarea id="f_ld_upcoming" style="min-height:90px" placeholder="Program name, schedule, target audience…"></textarea></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>';
+  if(t==='admin')return'<div class="wform-section"><div class="wform-section-title">Admin & Facilities</div><div class="wform-row"><label>Facility Issues & Resolution Details</label><textarea id="f_admin_issues" style="min-height:110px" placeholder="AC issues, power supply, internet, office setup…"></textarea></div><div class="wform-row"><label>Cost Optimisation / Savings Initiatives</label><textarea id="f_admin_savings" placeholder="Vendor negotiations, energy savings…"></textarea></div></div>';
+  return'<div class="wform-section"><div style="color:var(--muted);font-size:13px">Form loading…</div></div>';
+}
+
+function setVisit(val){_visitYes=val;const y=document.getElementById('visitYesBtn'),n=document.getElementById('visitNoBtn');if(y)y.className='wform-visit-btn'+(val?' active-yes':'');if(n)n.className='wform-visit-btn'+(!val?' active-no':'');}
+async function selectFormWeek(k){_formWeekKey=k;await renderSubmitTab(document.getElementById('tab-submit'));}
+function populateForm(sub){['ta_opened','ta_closed','ta_offers','ta_dropouts','ta_dropout_reason','ta_aging','ta_constraints','ta_joining_plan','hrbp_connect_details','hrbp_discipline','hrbp_retention','hrbp_issues','hrbp_risks','hrbp_activities','hrbp_rr_details','payroll_hc','payroll_errors','payroll_month','payroll_risks','payroll_pending','payroll_statutory','hrops_onboard','hrops_fnf','hrops_compliance','hrops_gaps','hrops_esc_count','hrops_esc_details','ld_sessions','ld_coverage','ld_details','ld_upcoming','ld_gaps','ld_risks','admin_issues','admin_savings'].forEach(f=>{const el=document.getElementById('f_'+f);if(el&&sub[f]!=null)el.value=sub[f];});if(sub.hrbp_site_visited)setVisit(true);}
+function getFormValues(fnType){const g=id=>{const el=document.getElementById('f_'+id);return el?el.value:'';};const gi=id=>parseInt(g(id))||0;return{function_type:fnType,hrbp_site_visited:_visitYes,ta_opened:gi('ta_opened'),ta_closed:gi('ta_closed'),ta_offers:gi('ta_offers'),ta_dropouts:gi('ta_dropouts'),ta_dropout_reason:g('ta_dropout_reason'),ta_aging:g('ta_aging'),ta_constraints:g('ta_constraints'),ta_joining_plan:g('ta_joining_plan'),hrbp_connect_details:g('hrbp_connect_details'),hrbp_discipline:g('hrbp_discipline'),hrbp_retention:g('hrbp_retention'),hrbp_issues:g('hrbp_issues'),hrbp_risks:g('hrbp_risks'),hrbp_activities:g('hrbp_activities'),hrbp_rr_details:g('hrbp_rr_details'),payroll_hc:gi('payroll_hc'),payroll_errors:gi('payroll_errors'),payroll_month:g('payroll_month'),payroll_risks:g('payroll_risks'),payroll_pending:g('payroll_pending'),payroll_statutory:g('payroll_statutory'),hrops_onboard:gi('hrops_onboard'),hrops_fnf:g('hrops_fnf'),hrops_compliance:g('hrops_compliance'),hrops_gaps:g('hrops_gaps'),hrops_esc_count:gi('hrops_esc_count'),hrops_esc_details:g('hrops_esc_details'),ld_sessions:gi('ld_sessions'),ld_coverage:g('ld_coverage'),ld_details:g('ld_details'),ld_upcoming:g('ld_upcoming'),ld_gaps:g('ld_gaps'),ld_risks:g('ld_risks'),admin_issues:g('admin_issues'),admin_savings:g('admin_savings')};}
+
+async function submitWeeklyForm(fnType,region){
+  const btn=document.getElementById('formSubmitBtn'),st=document.getElementById('formSubmitStatus');
+  btn.disabled=true;btn.textContent='Submitting…';st.innerHTML='';
+  const wData=WEEKS_DATA[_formWeekKey];const values=getFormValues(fnType);
+  const{data:profile}=await _sb.from('user_profiles').select('display_name').eq('id',_sbUser.id).single();
+  const record={...values,week_key:_formWeekKey,week_num:wData?.week_num||0,week_label:wData?.label||'',submitted_by:_sbUser.id,submitter_name:profile?.display_name||_sbUser.email?.split('@')[0]||'User',submitter_email:_sbUser.email,region:region||_sbRole.region||'',status:'submitted',updated_at:new Date().toISOString()};
+  const{error}=await _sb.from('weekly_submissions').upsert(record,{onConflict:'week_key,submitted_by'});
+  if(error){st.innerHTML='<div style="color:var(--red);font-size:13px">✗ '+error.message+'</div>';btn.disabled=false;btn.textContent='Submit Report';return;}
+  if(_formPhotos.length>0){st.innerHTML='<div style="font-size:12px;color:var(--muted)">Uploading photos…</div>';for(let i=0;i<_formPhotos.length;i++){const{file,caption,event_type}=_formPhotos[i];const ext=file.name.split('.').pop();const path=_formWeekKey+'/'+Date.now()+'_'+i+'.'+ext;const{error:upErr}=await _sb.storage.from('hrbp-photos').upload(path,file,{contentType:file.type});if(!upErr){const{data:urlData}=_sb.storage.from('hrbp-photos').getPublicUrl(path);await _sb.from('hrbp_photos').insert({week_key:_formWeekKey,week_num:wData?.week_num||0,uploaded_by:_sbUser.id,uploader_name:record.submitter_name,uploader_region:region||_sbRole.region||'',photo_url:urlData.publicUrl,caption,event_type:event_type||'site_visit'});}}_formPhotos=[];}
+  await rebuildWeekFromSubmissions(_formWeekKey);
+  st.innerHTML='<div style="color:var(--green);font-size:13px;padding:10px 0">✓ Submitted for '+(wData?.label||_formWeekKey)+'</div>';
+  btn.disabled=false;btn.textContent='Update Submission';_existingSub=record;
+}
+
+async function rebuildWeekFromSubmissions(weekKey){
+  const{data:subs}=await _sb.from('weekly_submissions').select('*').eq('week_key',weekKey);
+  if(!subs||!subs.length)return;
+  const wT=WEEKS_DATA[weekKey]||{};
+  const agg={week_key:weekKey,week_num:wT.week_num||0,label:wT.label||weekKey,from_label:wT.from_label||'',to_label:wT.to_label||'',total_respondents:subs.length,ta_opened:0,ta_closed:0,ta_offers:0,ta_dropouts:0,ta_detail:[],ta_constraints:[],ta_aging_raw:[],hrbp_visits:0,hrbp_connects:[],hrbp_discipline:[],hrbp_retention:[],hrbp_issues:[],hrbp_risks:[],hrbp_activities:[],payroll_hc:0,payroll_errors:0,payroll_month:'',payroll_risks:[],payroll_pending:[],payroll_statutory:[],hrops_onboard:0,hrops_fnf:'',hrops_compliance:[],hrops_gaps:[],hrops_esc:0,hrops_esc_texts:[],ld_sessions:0,ld_coverage:'',ld_details:[],ld_upcoming:[],ld_gaps:[],ld_risks:[],admin_issues:[],admin_savings:[]};
+  subs.forEach(s=>{const fn=s.function_type;if(fn==='ta'){agg.ta_opened+=s.ta_opened||0;agg.ta_closed+=s.ta_closed||0;agg.ta_offers+=s.ta_offers||0;agg.ta_dropouts+=s.ta_dropouts||0;agg.ta_detail.push({name:s.submitter_name||'',region:s.region||'',opened:s.ta_opened||0,closed:s.ta_closed||0,offers:s.ta_offers||0,dropouts:s.ta_dropouts||0,dropout_reason:s.ta_dropout_reason||'',constraint:s.ta_constraints||'',aging:s.ta_aging||'',next_week:s.ta_joining_plan||''});if(s.ta_aging&&s.ta_aging!='NA')agg.ta_aging_raw.push(s.ta_aging);if(s.ta_constraints&&s.ta_constraints!='NA')agg.ta_constraints.push(s.ta_constraints);}if(fn==='hrbp'){if(s.hrbp_site_visited){const d=s.hrbp_connect_details||'';const ct=d?(d.match(/site name/gi)||[d]).length:1;agg.hrbp_visits+=ct;if(d)agg.hrbp_connects.push({name:s.submitter_name||'',detail:d});}if(s.hrbp_discipline)agg.hrbp_discipline.push(s.hrbp_discipline);if(s.hrbp_retention)agg.hrbp_retention.push(s.hrbp_retention);if(s.hrbp_issues)agg.hrbp_issues.push(s.hrbp_issues);if(s.hrbp_risks)agg.hrbp_risks.push(s.hrbp_risks);if(s.hrbp_activities)agg.hrbp_activities.push(s.hrbp_activities);}if(fn==='payroll'){if((s.payroll_hc||0)>agg.payroll_hc)agg.payroll_hc=s.payroll_hc||0;agg.payroll_errors+=(s.payroll_errors||0);if(s.payroll_month)agg.payroll_month=s.payroll_month;if(s.payroll_risks)agg.payroll_risks.push(s.payroll_risks);if(s.payroll_pending)agg.payroll_pending.push(s.payroll_pending);if(s.payroll_statutory)agg.payroll_statutory.push(s.payroll_statutory);}if(fn==='hrops'){agg.hrops_onboard+=(s.hrops_onboard||0);if(s.hrops_fnf)agg.hrops_fnf=s.hrops_fnf;if(s.hrops_compliance)agg.hrops_compliance.push(s.hrops_compliance);if(s.hrops_gaps)agg.hrops_gaps.push(s.hrops_gaps);agg.hrops_esc=Math.max(agg.hrops_esc,s.hrops_esc_count||0);if(s.hrops_esc_details)agg.hrops_esc_texts.push(s.hrops_esc_details);}if(fn==='ld'){agg.ld_sessions+=(s.ld_sessions||0);if(s.ld_coverage)agg.ld_coverage=s.ld_coverage;if(s.ld_details)agg.ld_details.push(s.ld_details);if(s.ld_upcoming)agg.ld_upcoming.push(s.ld_upcoming);if(s.ld_gaps)agg.ld_gaps.push(s.ld_gaps);if(s.ld_risks)agg.ld_risks.push(s.ld_risks);}if(fn==='admin'){if(s.admin_issues)agg.admin_issues.push(s.admin_issues);if(s.admin_savings)agg.admin_savings.push(s.admin_savings);}});
+  const{error}=await _sb.from('weekly_reports').upsert(agg,{onConflict:'week_key'});
+  if(!error){WEEKS_DATA[weekKey]=agg;console.log('[Form] Rebuilt',weekKey);}
+}
+
+function formPhotoDrop(e){e.preventDefault();document.getElementById('formPhotoZone').classList.remove('drag');formPhotoAdd(e.dataTransfer.files);}
+function formPhotoAdd(files){Array.from(files).forEach(file=>{_formPhotos.push({file,caption:'',event_type:'site_visit'});const reader=new FileReader();reader.onload=ev=>{const preview=document.getElementById('formPhotoPreview');if(!preview)return;const thumb=document.createElement('div');thumb.className='wform-photo-thumb';thumb.innerHTML='<img src="'+ev.target.result+'" alt=""><button class="remove" onclick="removeFormPhoto('+(_formPhotos.length-1)+')">&times;</button>';preview.appendChild(thumb);};reader.readAsDataURL(file);});}
+function removeFormPhoto(idx){_formPhotos.splice(idx,1);const p=document.getElementById('formPhotoPreview');if(p)p.querySelectorAll('.wform-photo-thumb')[idx]?.remove();}
+
+// ── SUBMISSION TRACKER ────────────────────────────────────────────────────
+async function renderSubmissionTracker(mc,displayName,roleLabel){
+  const wk=_formWeekKey||WEEK_ORDER[WEEK_ORDER.length-1];
+  const wData=WEEKS_DATA[wk];
+  const availWeeks=WEEK_ORDER.slice(-3).reverse();
+  const{data:subs}=await _sb.from('weekly_submissions').select('submitter_name,submitter_email,function_type,region,status,updated_at').eq('week_key',wk).order('function_type');
+  const submitted=subs||[];
+  const{data:allUsers}=await _sb.from('user_profiles').select('display_name,email,function_type,region,role').eq('role','hrbp');
+  const leads=allUsers||[];
+  const submittedEmails=new Set(submitted.map(s=>s.submitter_email));
+  const notSubmitted=leads.filter(u=>!submittedEmails.has(u.email));
+  const FN_LABELS={ta:'TA',hrbp:'HRBP',payroll:'Payroll',hrops:'HR Ops',ld:'L&D',admin:'Admin'};
+  const FN_COLORS={ta:'var(--accent)',hrbp:'var(--purple)',payroll:'var(--green)',hrops:'var(--amber)',ld:'#f472b6',admin:'var(--muted)'};
+  mc.innerHTML='<div class="wform-wrap"><div class="wform-header"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report Tracker</div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">'+displayName+'</div><div style="font-size:13px;color:var(--muted)">'+roleLabel+' &nbsp;·&nbsp; Viewing all submissions</div></div><div style="margin-bottom:20px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div><div class="wform-week-select">'+availWeeks.map(k=>'<button class="wform-week-btn'+(k===wk?' active':'')+'" onclick="selectFormWeek(\''+k+'\')">'+( WEEK_NAMES[k]||k)+' · '+(WEEKS_DATA[k]?.label||'')+'</button>').join('')+'</div></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px"><div class="wform-section" style="text-align:center;padding:16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:40px;color:var(--green);line-height:1">'+submitted.length+'</div><div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Submitted</div></div><div class="wform-section" style="text-align:center;padding:16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:40px;color:var(--amber);line-height:1">'+notSubmitted.length+'</div><div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Pending</div></div><div class="wform-section" style="text-align:center;padding:16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:40px;color:var(--accent);line-height:1">'+leads.length+'</div><div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Total Leads</div></div></div><div class="wform-section"><div class="wform-section-title">✓ Submitted ('+submitted.length+')</div>'+(submitted.length?submitted.map(s=>'<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:13px"><div><span style="color:var(--text);font-weight:500">'+(s.submitter_name||s.submitter_email)+'</span>'+(s.region?'<span style="font-size:10px;color:var(--muted);margin-left:8px">'+s.region+'</span>':'')+'</div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;color:'+(FN_COLORS[s.function_type]||'var(--muted)')+';background:rgba(0,0,0,.2)">'+(FN_LABELS[s.function_type]||s.function_type)+'</span><span style="font-size:11px;color:var(--green)">✓ '+(s.updated_at||'').substring(0,10)+'</span></div></div>').join(''):'<div style="font-size:13px;color:var(--muted);padding:12px 0">No submissions yet</div>')+'</div>'+(notSubmitted.length?'<div class="wform-section"><div class="wform-section-title" style="color:var(--amber)">⏳ Pending ('+notSubmitted.length+')</div>'+notSubmitted.map(u=>'<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:13px"><div><span style="color:var(--muted)">'+(u.display_name||u.email)+'</span>'+(u.region?'<span style="font-size:10px;color:var(--muted2);margin-left:8px">'+u.region+'</span>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;color:'+(FN_COLORS[u.function_type]||'var(--muted)')+';background:rgba(0,0,0,.2)">'+(FN_LABELS[u.function_type]||u.function_type)+'</span></div>').join('')+'</div>':'')+'</div>';
+}
+
+// ── USERS ─────────────────────────────────────────────────────────────────
+async function renderUsersTab(mc){
+  if(!_sbRole||_sbRole.role!=='admin'){if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Admin access required</div>';return;}
+  if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>';
+  const{data:users}=await _sb.from('user_profiles').select('id,email,display_name,role,function_type,region,created_at').order('created_at');
+  const list=users||[];
+  if(mc)mc.innerHTML='<div style="padding:28px 36px;max-width:720px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:20px">All Users ('+list.length+')</div>'+list.map(u=>'<div class="urow"><div><div style="font-size:13px;font-weight:500;color:var(--text)">'+(u.display_name||u.email||'—')+'</div><div style="font-size:11px;color:var(--muted);margin-top:3px">'+(u.email||'')+'  ·  '+(u.function_type||u.role||'—')+'  ·  '+(u.region||'All regions')+'</div></div><div style="display:flex;align-items:center;gap:10px"><select class="ssel" onchange="updateUserRole(\''+u.id+'\',this.value)">'+['admin','executive','hrbp','viewer'].map(r=>'<option '+(u.role===r?'selected':'')+'>'+r+'</option>').join('')+'</select>'+(u.id!==_sbUser?.id?'<button onclick="removeUser(\''+u.id+'\')" style="font-size:11px;color:var(--red);background:none;border:1px solid rgba(248,113,113,.3);padding:3px 10px;border-radius:6px;cursor:pointer">Remove</button>':'<span style="font-size:11px;color:var(--muted2)">You</span>')+'</div></div>').join('')+'</div>';
+}
+async function updateUserRole(uid,role){await _sb.from('user_profiles').update({role}).eq('id',uid);}
+async function removeUser(uid){if(!confirm('Remove user?'))return;await _sb.auth.admin.deleteUser(uid);await _sb.from('user_profiles').delete().eq('id',uid);await renderUsersTab(document.getElementById('tab-users'));}
+
+// ── SUPABASE AUTH ─────────────────────────────────────────────────────────
+async function sbLogin(){
+  const email=document.getElementById('sbEmail').value.trim();
+  const pwd=document.getElementById('sbPwd').value;
+  const btn=document.getElementById('sbLoginBtn'),err=document.getElementById('sbErr');
+  err.innerHTML='';btn.disabled=true;btn.textContent='SIGNING IN…';
+  const{data,error}=await _sb.auth.signInWithPassword({email,password:pwd});
+  btn.disabled=false;btn.textContent='SIGN IN';
+  if(error){err.innerHTML='<div style="margin-top:12px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#fca5a5;font-size:12px;padding:10px 14px;border-radius:8px">'+error.message+'</div>';return;}
+  await sbBoot(data.user);
+}
+
+async function sbBoot(user){
+  _sbUser=user;
+  const{data:profile}=await _sb.from('user_profiles').select('role,region').eq('id',user.id).single();
+  _sbRole=profile||{role:'viewer',region:null};
+  const{data:weeks,error}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
+  if(!error&&weeks&&weeks.length>0){WEEKS_DATA={};weeks.forEach(w=>{WEEKS_DATA[w.week_key]=w;});WEEK_ORDER=weeks.map(w=>w.week_key);weeks.forEach(w=>{WEEK_LABELS[w.week_key]=w.label||'';WEEK_NAMES[w.week_key]='Week '+w.week_num+(w.week_key===WEEK_ORDER[WEEK_ORDER.length-1]?' (Latest)':'');});window.WEEK_ORDER_LIVE=WEEK_ORDER;currentWeek=WEEK_ORDER[WEEK_ORDER.length-1];console.log('[HR] weeks loaded:',WEEK_ORDER.length);}
+  else{console.warn('[HR] No weekly data yet');}
+  document.getElementById('authOverlay').style.display='none';
+  document.getElementById('dashApp').style.display='block';
+  const st2=document.getElementById('tab-btn-submit');if(st2)st2.style.display='';
+  if(_sbRole.role==='admin'){const upl=document.getElementById('tab-btn-upload'),usr=document.getElementById('tab-btn-users');if(upl)upl.style.display='';if(usr)usr.style.display='';}
+  const hr=document.querySelector('.header-right');
+  if(hr&&!document.getElementById('sbSignOutBtn')){
+    const b=document.createElement('button');b.id='sbSignOutBtn';b.textContent='Sign out';b.className='btn-outline';b.style.cssText='margin-left:12px;font-size:12px;cursor:pointer';b.onclick=sbSignOut;hr.appendChild(b);
+    const rb=document.createElement('span');
+    const RL={'admin':'CXO','executive':'CXO','hrbp':'Lead'};
+    const RC={'admin':'color:#60a5fa;background:rgba(96,165,250,.12)','executive':'color:#60a5fa;background:rgba(96,165,250,.12)','hrbp':'color:#34d399;background:rgba(52,211,153,.1)'};
+    rb.style.cssText='margin-left:8px;font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 10px;border-radius:20px;'+(RC[_sbRole.role]||'color:#a78bfa;background:rgba(167,139,250,.12)');
+    rb.textContent=RL[_sbRole.role]||_sbRole.role.toUpperCase();
+    hr.appendChild(rb);
+  }
+  init();
+}
+
+async function sbSignOut(){await _sb.auth.signOut();document.getElementById('dashApp').style.display='none';document.getElementById('authOverlay').style.display='flex';_sbUser=null;_sbRole=null;WEEKS_DATA={};WEEK_ORDER=[];const so=document.getElementById('sbSignOutBtn');if(so)so.remove();}
+
+(async()=>{
+  const{data:{session}}=await _sb.auth.getSession();
+  if(session?.user)await sbBoot(session.user);
+  ['sbEmail','sbPwd'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener('keydown',e=>{if(e.key==='Enter'){id==='sbEmail'?document.getElementById('sbPwd').focus():sbLogin();}});el.addEventListener('focus',()=>{el.style.borderColor='#60a5fa';});el.addEventListener('blur',()=>{el.style.borderColor='#2a3d52';});});
+})();
+
+</script>
+</body>
+</html>
