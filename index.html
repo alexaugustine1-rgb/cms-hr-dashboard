@@ -1197,7 +1197,7 @@ function renderHRBP(w, pw) {
             <div class="connect-person">${esc(name)}</div>
             ${rtag(hrbpRegion)}${bu ? `<span style="font-size:9px;color:var(--muted);margin-left:4px">BU: ${esc(bu)}</span>` : ''}
           </div>
-          <div class="connect-client">${esc(client)}${acctBadge}${isPriority?modalHint:''}</div>
+          <div class="connect-client">${esc(client)}${acctBadge}${modalHint}</div>
           ${visitDate ? `<div class="connect-note" style="color:var(--muted2);font-size:10px">${esc(visitDate)}</div>` : ''}
           ${issues ? `<div class="connect-note">${esc(issues)}</div>` : ''}
         </div>`;
