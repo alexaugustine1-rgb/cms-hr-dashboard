@@ -1972,8 +1972,10 @@ async function processWeekly(wb) {
   for(const[wkKey,grp]of Object.entries(weekGroups)){
     const wData=buildWeekData(wkKey,grp.rows,grp.fromDt,grp.toDt);
     log('Saving '+wkKey+': '+grp.rows.length+' rows…','info');
-    const{error}=await _sb.from('weekly_reports').upsert(wData,{onConflict:'week_key'});
-    if(error){log('DB error for '+wkKey+': '+error.message,'err');}
+    // Strip any fields not in weekly_reports schema before upserting
+    const{admin_savings:_as,...wDataClean}=wData;
+    const{error}=await _sb.from('weekly_reports').upsert(wDataClean,{onConflict:'week_key'});
+    if(error){log('DB error for '+wkKey+': '+error.message,'err');console.error('[Upload] Supabase error:',error);}
     else{
       log('Saved '+wkKey+' (W'+wData.week_num+': '+wData.label+')','ok');
       WEEKS_DATA[wData.week_key]=wData;
@@ -2146,8 +2148,10 @@ async function rebuildWeekFromSubmissions(weekKey){
   const wT=WEEKS_DATA[weekKey]||{};
   const agg={week_key:weekKey,week_num:wT.week_num||0,label:wT.label||weekKey,from_label:wT.from_label||'',to_label:wT.to_label||'',total_respondents:subs.length,ta_opened:0,ta_closed:0,ta_offers:0,ta_dropouts:0,ta_detail:[],ta_constraints:[],ta_aging_raw:[],hrbp_visits:0,hrbp_connects:[],hrbp_discipline:[],hrbp_retention:[],hrbp_issues:[],hrbp_risks:[],hrbp_activities:[],payroll_hc:0,payroll_errors:0,payroll_month:'',payroll_risks:[],payroll_pending:[],payroll_statutory:[],hrops_onboard:0,hrops_fnf:'',hrops_compliance:[],hrops_gaps:[],hrops_esc:0,hrops_esc_texts:[],ld_sessions:0,ld_coverage:'',ld_details:[],ld_upcoming:[],ld_gaps:[],ld_risks:[],admin_issues:[],admin_savings:[]};
   subs.forEach(s=>{const fn=s.function_type;if(fn==='ta'){agg.ta_opened+=s.ta_opened||0;agg.ta_closed+=s.ta_closed||0;agg.ta_offers+=s.ta_offers||0;agg.ta_dropouts+=s.ta_dropouts||0;agg.ta_detail.push({name:s.submitter_name||'',region:s.region||'',opened:s.ta_opened||0,closed:s.ta_closed||0,offers:s.ta_offers||0,dropouts:s.ta_dropouts||0,dropout_reason:s.ta_dropout_reason||'',constraint:s.ta_constraints||'',aging:s.ta_aging||'',next_week:s.ta_joining_plan||''});if(s.ta_aging&&s.ta_aging!='NA')agg.ta_aging_raw.push(s.ta_aging);if(s.ta_constraints&&s.ta_constraints!='NA')agg.ta_constraints.push(s.ta_constraints);}if(fn==='hrbp'){if(s.hrbp_site_visited){const d=s.hrbp_connect_details||'';const ct=d?(d.match(/site name/gi)||[d]).length:1;agg.hrbp_visits+=ct;if(d)agg.hrbp_connects.push({name:s.submitter_name||'',detail:d});}if(s.hrbp_discipline)agg.hrbp_discipline.push(s.hrbp_discipline);if(s.hrbp_retention)agg.hrbp_retention.push(s.hrbp_retention);if(s.hrbp_issues)agg.hrbp_issues.push(s.hrbp_issues);if(s.hrbp_risks)agg.hrbp_risks.push(s.hrbp_risks);if(s.hrbp_activities)agg.hrbp_activities.push(s.hrbp_activities);}if(fn==='payroll'){if((s.payroll_hc||0)>agg.payroll_hc)agg.payroll_hc=s.payroll_hc||0;agg.payroll_errors+=(s.payroll_errors||0);if(s.payroll_month)agg.payroll_month=s.payroll_month;if(s.payroll_risks)agg.payroll_risks.push(s.payroll_risks);if(s.payroll_pending)agg.payroll_pending.push(s.payroll_pending);if(s.payroll_statutory)agg.payroll_statutory.push(s.payroll_statutory);}if(fn==='hrops'){agg.hrops_onboard+=(s.hrops_onboard||0);if(s.hrops_fnf)agg.hrops_fnf=s.hrops_fnf;if(s.hrops_compliance)agg.hrops_compliance.push(s.hrops_compliance);if(s.hrops_gaps)agg.hrops_gaps.push(s.hrops_gaps);agg.hrops_esc=Math.max(agg.hrops_esc,s.hrops_esc_count||0);if(s.hrops_esc_details)agg.hrops_esc_texts.push(s.hrops_esc_details);}if(fn==='ld'){agg.ld_sessions+=(s.ld_sessions||0);if(s.ld_coverage)agg.ld_coverage=s.ld_coverage;if(s.ld_details)agg.ld_details.push(s.ld_details);if(s.ld_upcoming)agg.ld_upcoming.push(s.ld_upcoming);if(s.ld_gaps)agg.ld_gaps.push(s.ld_gaps);if(s.ld_risks)agg.ld_risks.push(s.ld_risks);}if(fn==='admin'){if(s.admin_issues)agg.admin_issues.push(s.admin_issues);if(s.admin_savings)agg.admin_savings.push(s.admin_savings);}});
-  const{error}=await _sb.from('weekly_reports').upsert(agg,{onConflict:'week_key'});
-  if(!error){WEEKS_DATA[weekKey]=agg;console.log('[Form] Rebuilt',weekKey);}
+  const{admin_savings:_as2,...aggClean}=agg;
+  const{error}=await _sb.from('weekly_reports').upsert(aggClean,{onConflict:'week_key'});
+  if(!error){WEEKS_DATA[weekKey]=aggClean;console.log('[Form] Rebuilt',weekKey);}
+  else{console.error('[Form] Rebuild error:',error);}
 }
 
 function formPhotoDrop(e){e.preventDefault();document.getElementById('formPhotoZone').classList.remove('drag');formPhotoAdd(e.dataTransfer.files);}
