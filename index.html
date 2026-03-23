@@ -2570,15 +2570,21 @@ let _visitYes = false;
 
 async function renderSubmitTab(mc) {
   if (!mc) mc = document.getElementById('tab-submit');
-  mc.innerHTML = '<div class="loader"><div style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite"></div>&nbsp;Loading form…</div>';
+  mc.innerHTML = '<div class="loader"><div style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite"></div>&nbsp;Loading…</div>';
 
-  // Get user profile to check function_type
+  // Get user profile
   const {data: profile} = await _sb.from('user_profiles')
     .select('role,region,function_type,display_name').eq('id', _sbUser.id).single();
   const fnType = profile?.function_type || detectFunction(profile?.role) || 'hrbp';
   const region = profile?.region || '';
   const displayName = profile?.display_name || _sbUser.email?.split('@')[0] || 'User';
   const roleLabel = {'admin':'CXO','executive':'CXO','hrbp':'Lead'}[profile?.role] || (profile?.role||'').toUpperCase();
+
+  // CXO and admin see a submission tracker, not a form
+  if (profile?.role === 'admin' || profile?.role === 'executive') {
+    await renderSubmissionTracker(mc, displayName, roleLabel);
+    return;
+  }
 
   // Available weeks (current + last 2)
   const availWeeks = WEEK_ORDER.slice(-3).reverse();
@@ -3005,6 +3011,100 @@ function removeFormPhoto(idx) {
   if (preview) {
     preview.querySelectorAll('.wform-photo-thumb')[idx]?.remove();
   }
+}
+
+
+// ── SUBMISSION TRACKER (for CXO / Admin) ─────────────────────────────────
+async function renderSubmissionTracker(mc, displayName, roleLabel) {
+  const wk = _formWeekKey || WEEK_ORDER[WEEK_ORDER.length-1];
+  const wData = WEEKS_DATA[wk];
+  const availWeeks = WEEK_ORDER.slice(-3).reverse();
+
+  // Load all submissions for this week
+  const {data: subs} = await _sb.from('weekly_submissions')
+    .select('submitter_name, submitter_email, function_type, region, status, updated_at')
+    .eq('week_key', wk)
+    .order('function_type');
+
+  const submitted = subs || [];
+
+  // Expected submitters from user_profiles
+  const {data: allUsers} = await _sb.from('user_profiles')
+    .select('display_name, email, function_type, region, role')
+    .eq('role','hrbp');
+  const leads = allUsers || [];
+
+  // Match submitted vs not submitted
+  const submittedEmails = new Set(submitted.map(s => s.submitter_email));
+  const notSubmitted = leads.filter(u => !submittedEmails.has(u.email));
+
+  const FN_LABELS = {ta:'TA', hrbp:'HRBP', payroll:'Payroll', hrops:'HR Ops', ld:'L&D', admin:'Admin'};
+  const FN_COLORS = {ta:'var(--accent)', hrbp:'var(--purple)', payroll:'var(--green)', hrops:'var(--amber)', ld:'#f472b6', admin:'var(--muted)'};
+
+  // Group submitted by function
+  const byFn = {};
+  submitted.forEach(s => {
+    const fn = s.function_type || 'other';
+    if (!byFn[fn]) byFn[fn] = [];
+    byFn[fn].push(s);
+  });
+
+  mc.innerHTML = `<div class="wform-wrap">
+    <div class="wform-header">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report Tracker</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">${displayName}</div>
+      <div style="font-size:13px;color:var(--muted)">${roleLabel} &nbsp;·&nbsp; Viewing all submissions</div>
+    </div>
+
+    <div style="margin-bottom:20px">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div>
+      <div class="wform-week-select">
+        ${availWeeks.map(k=>`<button class="wform-week-btn${k===wk?' active':''}" onclick="selectFormWeek('${k}')">${WEEK_NAMES[k]||k} · ${WEEKS_DATA[k]?.label||''}</button>`).join('')}
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px">
+      <div class="wform-section" style="text-align:center;padding:16px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:var(--green);line-height:1">${submitted.length}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Submitted</div>
+      </div>
+      <div class="wform-section" style="text-align:center;padding:16px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:var(--amber);line-height:1">${notSubmitted.length}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Pending</div>
+      </div>
+      <div class="wform-section" style="text-align:center;padding:16px">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:var(--accent);line-height:1">${leads.length}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Total Leads</div>
+      </div>
+    </div>
+
+    <div class="wform-section">
+      <div class="wform-section-title">✓ Submitted (${submitted.length})</div>
+      ${submitted.length ? submitted.map(s => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:13px">
+          <div>
+            <span style="color:var(--text);font-weight:500">${s.submitter_name||s.submitter_email}</span>
+            ${s.region?`<span style="font-size:10px;color:var(--muted);margin-left:8px">${s.region}</span>`:''}
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:'DM Mono',monospace;letter-spacing:.5px;text-transform:uppercase;color:${FN_COLORS[s.function_type]||'var(--muted)'};background:rgba(0,0,0,.2)">${FN_LABELS[s.function_type]||s.function_type}</span>
+            <span style="font-size:11px;color:var(--green)">✓ ${(s.updated_at||'').substring(0,10)}</span>
+          </div>
+        </div>`).join('') : '<div style="font-size:13px;color:var(--muted);padding:12px 0">No submissions yet for this week</div>'}
+    </div>
+
+    ${notSubmitted.length ? `<div class="wform-section">
+      <div class="wform-section-title" style="color:var(--amber)">⏳ Pending (${notSubmitted.length})</div>
+      ${notSubmitted.map(u => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:13px">
+          <div>
+            <span style="color:var(--muted)">${u.display_name||u.email}</span>
+            ${u.region?`<span style="font-size:10px;color:var(--muted2);margin-left:8px">${u.region}</span>`:''}
+          </div>
+          <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:'DM Mono',monospace;letter-spacing:.5px;text-transform:uppercase;color:${FN_COLORS[u.function_type]||'var(--muted)'};background:rgba(0,0,0,.2)">${FN_LABELS[u.function_type]||u.function_type}</span>
+        </div>`).join('')}
+    </div>` : ''}
+  </div>`;
 }
 
 // ── INIT (v3 compatible) ─────────────────────────────────────────────────
