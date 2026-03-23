@@ -2233,5 +2233,13 @@ async function sbSignOut(){await _sb.auth.signOut();document.getElementById('das
 })();
 
 </script>
+
+<div class="cm-overlay" id="cmOverlay" onclick="if(event.target===this){this.classList.remove('open')}">
+  <div class="cm-drawer" id="cmDrawer">
+    <button class="cm-close" onclick="document.getElementById('cmOverlay').classList.remove('open')">&times;</button>
+    <div class="cm-body" id="cmContent"></div>
+  </div>
+</div>
+
 </body>
 </html>
