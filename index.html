@@ -435,6 +435,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <button class="tab-btn" id="tab-btn-submit" style="display:none" onclick="switchTab('submit',this)">&#x270F; Weekly Report</button>
   <button class="tab-btn" id="tab-btn-upload" style="display:none" onclick="switchTab('upload',this)">&#x2B06; Upload Data</button>
   <button class="tab-btn" id="tab-btn-users" style="display:none" onclick="switchTab('users',this)">&#x1F465; Users</button>
+  <button class="tab-btn" onclick="switchTab('admin',this)">&#x1F3E2; Admin</button>
   <button class="tab-btn" onclick="switchTab('gallery',this)">&#x1F4F7; Gallery</button>
 </div>
 
@@ -449,6 +450,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-submit" class="tab-content"></div>
   <div id="tab-upload" class="tab-content"></div>
   <div id="tab-users" class="tab-content"></div>
+  <div id="tab-admin" class="tab-content"></div>
   <div id="tab-gallery" class="tab-content"></div>
 </div>
 
@@ -1784,6 +1786,7 @@ function render() {
     'ld': renderLD,
     'risks': renderRisks,
     'workforce': function(w,pw){ return renderWorkforce(); },
+    'admin': function(w,pw){ return renderAdmin(w, currentWeek); },
   };
 
   Object.entries(renders).forEach(([tab, fn]) => {
@@ -1841,6 +1844,7 @@ function switchTab(id, btn) {
   if(id==='upload') { if(el){el.innerHTML=renderUploadTab(); document.getElementById('weeksList').innerHTML=weeksListHTML();} }
   else if(id==='users') renderUsersTab(el);
   else if(id==='gallery') renderGalleryTab();
+  else if(id==='admin'){const mc=document.getElementById('tab-admin');if(mc)mc.innerHTML=renderAdmin(WEEKS_DATA[currentWeek],currentWeek);}
   else if(id==='submit') renderSubmitTab(el);
 }
 
@@ -2040,7 +2044,28 @@ function buildWeekData(wkKey,rows,fromDt,toDt){
       if(det)w.ld_details.push(det);if(up)w.ld_upcoming.push(up);if(gap)w.ld_gaps.push(gap);if(risk)w.ld_risks.push(risk);
     }
     else if(fn.includes('Admin')){
-      const iss=ss(row['Key Facility Issues & Redressal Details']);if(iss)w.admin_issues.push(iss);
+      const fac_esc_rcvd = ss(row['Facility-Related Employee Escalations Received']);
+      const fac_esc_fixed = ss(row['Facility Escalations Redressed This Week']);
+      const iss = ss(row['Key Facility Issues & Redressal Details']);
+      const travel = ss(row['Travel Desk Requests Handled']);
+      const travel_iss = ss(row['Travel-Related Issues or Escalations']);
+      const utility_status = ss(row['Utility Payments Status']);
+      const utility_det = ss(row['Utility Payment Details']);
+      const asset = ss(row['Asset Issuance / Recovery Completed']);
+      const asset_det = ss(row['Asset Issuance / Recovery Details']);
+      const vendor = ss(row['Vendor Management Activities']);
+      const savings = ss(row['Admin Cost Optimization / Savings Initiatives']);
+      const safety = ss(row['Health, Safety or Compliance Incidents']);
+      if(iss) w.admin_issues.push(iss);
+      // Store extended admin data in admin_savings array as structured objects
+      w.admin_savings.push(JSON.stringify({
+        name: row._name,
+        fac_esc_rcvd, fac_esc_fixed,
+        travel, travel_iss,
+        utility_status, utility_det,
+        asset, asset_det,
+        vendor, savings, safety
+      }));
     }
   }
   w.hrbp_visits=siteVisits;
@@ -2192,6 +2217,71 @@ async function renderUsersTab(mc){
 }
 async function updateUserRole(uid,role){await _sb.from('user_profiles').update({role}).eq('id',uid);}
 async function removeUser(uid){if(!confirm('Remove user?'))return;await _sb.auth.admin.deleteUser(uid);await _sb.from('user_profiles').delete().eq('id',uid);await renderUsersTab(document.getElementById('tab-users'));}
+
+
+// ── ADMIN & FACILITIES TAB ─────────────────────────────────────────────────
+function renderAdmin(w, weekKey) {
+  if (!w) return '<div style="padding:60px 36px;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">🏢</div><div style="font-size:15px;font-weight:500">No admin data yet</div></div>';
+
+  // Parse admin_savings array — each entry is a JSON string
+  const adminEntries = (w.admin_savings || []).map(s => {
+    try { return typeof s === 'string' ? JSON.parse(s) : s; }
+    catch(e) { return null; }
+  }).filter(Boolean);
+
+  // Also use admin_issues (legacy plain text)
+  const legacyIssues = (w.admin_issues || []).filter(i => i && i.length > 5);
+
+  function row(label, val, color) {
+    if (!val || ['na','nil','none','no','0',''].includes(String(val).trim().toLowerCase())) return '';
+    return `<div style="display:flex;gap:16px;padding:9px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:13px">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);min-width:160px;padding-top:2px">${label}</div>
+      <div style="color:${color||'var(--text)'};line-height:1.5;flex:1">${esc(val)}</div>
+    </div>`;
+  }
+
+  const entriesHTML = adminEntries.length ? adminEntries.map(e => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);margin-bottom:14px">
+        🏢 ${esc(e.name || 'Admin')} · ${esc(w.label || weekKey)}
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:8px">Facility</div>
+        ${row('Escalations Received', e.fac_esc_rcvd, 'var(--amber)')}
+        ${row('Escalations Resolved', e.fac_esc_fixed, 'var(--green)')}
+        ${row('Issues & Redressal', e.iss || (legacyIssues[0]||''), 'var(--text)')}
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:8px">Travel</div>
+        ${row('Requests Handled', e.travel, 'var(--text)')}
+        ${row('Issues / Escalations', e.travel_iss, 'var(--amber)')}
+      </div>
+      <div style="margin-bottom:16px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:8px">Utilities & Assets</div>
+        ${row('Utility Payments', e.utility_status, 'var(--green)')}
+        ${row('Utility Details', e.utility_det, 'var(--muted)')}
+        ${row('Asset Issuance / Recovery', e.asset, 'var(--text)')}
+        ${row('Asset Details', e.asset_det, 'var(--muted)')}
+      </div>
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:8px">Vendor & Compliance</div>
+        ${row('Vendor Management', e.vendor, 'var(--text)')}
+        ${row('Cost Savings / Optimisation', e.savings, 'var(--green)')}
+        ${row('Safety / Compliance Incidents', e.safety, e.safety && !['none','nil','na'].includes((e.safety||'').toLowerCase().trim()) ? 'var(--red)' : 'var(--muted)')}
+      </div>
+    </div>`) .join('') :
+    legacyIssues.length ? legacyIssues.map(i => `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">🏢 Admin · ${esc(w.label||weekKey)}</div>
+        <div style="font-size:13px;color:var(--text);line-height:1.6">${esc(i)}</div>
+      </div>`).join('') :
+    '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px">No admin data for this week</div>';
+
+  return `<div style="padding:28px 36px;max-width:900px">
+    <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:20px">Admin & Facilities</div>
+    ${entriesHTML}
+  </div>`;
+}
 
 // ── SUPABASE AUTH ─────────────────────────────────────────────────────────
 async function sbLogin(){
