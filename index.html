@@ -1167,7 +1167,7 @@ function renderHRBP(w, pw) {
     if (/site name\s*[-–:]/i.test(detail)) {
       // Split on "Site name" boundaries
       const sites = detail.split(/(?=\bSite\s+[Nn]ame\s*[-–:])/);
-      return sites.filter(s => s.trim()).map(site => {
+      return sites.filter(s => s.trim()).map((site, siteIdx) => {
         const lines = site.split(/\n/).map(l => l.trim()).filter(Boolean);
         // Client: line starting with "Site name"
         const clientLine = lines.find(l => /site name/i.test(l)) || lines[0];
@@ -1178,28 +1178,31 @@ function renderHRBP(w, pw) {
         // BU/region
         const buMatch = site.match(/BU\s*[-–:]?\s*(\w+)/i);
         const bu = buMatch ? buMatch[1] : '';
-        // Issues — only show in modal, not in card preview
-        const issuesMatch = site.match(/Issues\s+Addressed\s*[-–:]([^\n]+)/i) || site.match(/Issues\s*[-–:]([^\n]+)/i);
-        const issues = ''; // Suppress from card — shown in full modal only
         // Date
-        const dateMatch = site.match(/Date of Visit\s*[-–:]\s*([^\n]+)/i);
+        const dateMatch = site.match(/Date of [Vv]isit\s*[-–:]\s*([^\n]+)/i);
         const visitDate = dateMatch ? dateMatch[1].trim().substring(0,20) : '';
+        // Issues — only in modal
+        const issues = '';
 
         const acctColor = acct==='Platinum'?'var(--purple)':acct==='Gold'?'var(--amber)':acct==='Silver'?'#94a3b8':'var(--muted)';
         const acctBadge = acct ? `<span style="font-size:9px;font-weight:600;color:${acctColor};background:rgba(148,163,184,.1);padding:1px 6px;border-radius:10px;margin-left:4px">${acct}</span>` : '';
-
         const isPriority = acct === 'Platinum' || acct === 'Gold';
         const borderColor = acct==='Platinum'?'var(--purple)':acct==='Gold'?'var(--amber)':'transparent';
         const cardStyle = isPriority ? `border-left:3px solid ${borderColor};padding-left:10px;margin-left:-10px` : '';
+
+        // Give each site its own store entry
+        const siteId = ciId + '_s' + siteIdx;
+        _connectStore[siteId] = {name: name, region: hrbpRegion, detail: site};
+        const siteClick = `onclick="openConnectModal('${siteId}')"`;
         const modalHint = `<span style="font-size:9px;color:var(--accent);float:right;margin-top:2px">Full details ›</span>`;
-        return `<div class="connect-item" style="${cardStyle}" ${clickAttr}>
+
+        return `<div class="connect-item" style="${cardStyle}" ${siteClick}>
           <div class="connect-top">
             <div class="connect-person">${esc(name)}</div>
             ${rtag(hrbpRegion)}${bu ? `<span style="font-size:9px;color:var(--muted);margin-left:4px">BU: ${esc(bu)}</span>` : ''}
           </div>
           <div class="connect-client">${esc(client)}${acctBadge}${modalHint}</div>
           ${visitDate ? `<div class="connect-note" style="color:var(--muted2);font-size:10px">${esc(visitDate)}</div>` : ''}
-          ${issues ? `<div class="connect-note">${esc(issues)}</div>` : ''}
         </div>`;
       }).join('');
     }
