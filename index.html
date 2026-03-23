@@ -402,6 +402,95 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .urow:last-child{border-bottom:none}
 .ssel{background:var(--surface3);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:6px;font-size:11px}
 
+
+/* ── Photo Gallery ── */
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:16px}
+.photo-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .15s,border-color .15s}
+.photo-card:hover{transform:translateY(-2px);border-color:var(--accent)}
+.photo-card img{width:100%;height:160px;object-fit:cover;display:block;background:var(--surface3)}
+.photo-card-body{padding:10px 12px}
+.photo-card-caption{font-size:12px;color:var(--text);line-height:1.4;margin-bottom:6px}
+.photo-card-meta{display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--muted2)}
+.photo-card-hrbp{font-family:'DM Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+.photo-event-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;letter-spacing:.5px;text-transform:uppercase}
+.pe-site{background:rgba(96,165,250,.12);color:#60a5fa}
+.pe-rr{background:rgba(34,197,94,.12);color:#34d399}
+.pe-townhall{background:rgba(251,191,36,.12);color:#fbbf24}
+.pe-training{background:rgba(167,139,250,.12);color:#a78bfa}
+.pe-other{background:rgba(148,163,184,.12);color:#94a3b8}
+
+/* Photo lightbox */
+.photo-lb{display:none;position:fixed;inset:0;z-index:9000;background:rgba(7,11,18,.92);align-items:center;justify-content:center;padding:20px}
+.photo-lb.open{display:flex}
+.photo-lb-inner{max-width:860px;width:100%;position:relative}
+.photo-lb-img{width:100%;max-height:70vh;object-fit:contain;border-radius:8px}
+.photo-lb-caption{margin-top:12px;font-size:14px;color:var(--text);text-align:center}
+.photo-lb-meta{font-size:12px;color:var(--muted);text-align:center;margin-top:4px}
+.photo-lb-close{position:absolute;top:-16px;right:-16px;background:var(--surface2);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+.photo-lb-close:hover{background:var(--surface3)}
+.photo-lb-nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(28,42,58,.8);border:1px solid var(--border);color:var(--text);width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.photo-lb-prev{left:-52px}
+.photo-lb-next{right:-52px}
+
+/* Upload zone for photos */
+.photo-upload-zone{border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.photo-upload-zone:hover,.photo-upload-zone.drag{border-color:var(--accent);background:var(--accent-glow)}
+.photo-upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+
+@media(max-width:768px){
+  .gallery-grid{grid-template-columns:repeat(2,1fr)}
+  .photo-lb-prev,.photo-lb-next{display:none}
+}
+@media(max-width:480px){
+  .gallery-grid{grid-template-columns:1fr}
+}
+
+
+/* ── Weekly Submission Form ── */
+.wform-wrap{padding:28px 36px;max-width:760px}
+.wform-header{margin-bottom:24px}
+.wform-week-select{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.wform-week-btn{padding:7px 16px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--border);cursor:pointer;color:var(--muted);background:none;transition:all .15s;font-family:'DM Mono',monospace;letter-spacing:.5px}
+.wform-week-btn:hover{border-color:var(--accent);color:var(--accent)}
+.wform-week-btn.active{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:700}
+.wform-section{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+.wform-section-title{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.wform-row{margin-bottom:14px}
+.wform-row label{display:block;font-size:11px;font-weight:500;color:var(--muted);margin-bottom:5px;font-family:'DM Mono',monospace;letter-spacing:.5px;text-transform:uppercase}
+.wform-row input[type=number],.wform-row input[type=text],.wform-row textarea,.wform-row select{width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:'DM Sans',sans-serif;transition:border .15s;resize:vertical}
+.wform-row input:focus,.wform-row textarea:focus,.wform-row select:focus{border-color:var(--accent)}
+.wform-row textarea{min-height:72px}
+.wform-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.wform-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.wform-num-input{text-align:center;font-family:'Bebas Neue',sans-serif;font-size:28px;padding:6px 8px!important}
+.wform-num-label{font-size:10px;color:var(--muted);text-align:center;margin-top:4px;font-family:'DM Mono',monospace;letter-spacing:.5px}
+.wform-submit-btn{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:12px 32px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.5px;transition:opacity .15s}
+.wform-submit-btn:hover{opacity:.88}
+.wform-submit-btn:disabled{opacity:.5;cursor:not-allowed}
+.wform-status-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 12px;border-radius:20px;font-family:'DM Mono',monospace;letter-spacing:.5px}
+.wsb-submitted{background:rgba(34,197,94,.12);color:var(--green)}
+.wsb-draft{background:rgba(251,191,36,.12);color:var(--amber)}
+.wsb-none{background:rgba(148,163,184,.1);color:var(--muted)}
+.wform-visit-toggle{display:flex;gap:8px;margin-top:6px}
+.wform-visit-btn{flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);cursor:pointer;font-size:13px;font-weight:500;background:none;color:var(--muted);transition:all .15s}
+.wform-visit-btn.active-yes{background:rgba(34,197,94,.12);border-color:var(--green);color:var(--green)}
+.wform-visit-btn.active-no{background:rgba(248,113,113,.1);border-color:var(--red);color:var(--red)}
+.wform-photo-zone{border:2px dashed var(--border);border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;position:relative;margin-top:8px}
+.wform-photo-zone:hover{border-color:var(--accent);background:var(--accent-glow)}
+.wform-photo-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.wform-photo-preview{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.wform-photo-thumb{position:relative;width:80px;height:80px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.wform-photo-thumb img{width:100%;height:100%;object-fit:cover}
+.wform-photo-thumb .remove{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+.wform-aggr-panel{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+.wform-aggr-title{font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+.wform-aggr-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:12px}
+.wform-aggr-row:last-child{border-bottom:none}
+@media(max-width:600px){
+  .wform-grid2,.wform-grid4{grid-template-columns:1fr 1fr}
+  .wform-wrap{padding:16px}
+}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -456,6 +545,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <button class="tab-btn" onclick="switchTab('ld',this)">📚 L&D</button>
   <button class="tab-btn" onclick="switchTab('risks',this)">&#x1F6A8; Risks &amp; Actions</button>
   <button class="tab-btn" onclick="switchTab('workforce',this)">&#x1F4BC; Workforce Intel</button>
+  <button class="tab-btn" id="tab-btn-submit" style="display:none" onclick="switchTab('submit',this)">&#x270F; Weekly Report</button>
+  <button class="tab-btn" onclick="switchTab('gallery',this)">&#x1F4F7; Gallery</button>
   <button class="tab-btn" id="tab-btn-upload" style="display:none" onclick="switchTab('upload',this)">&#x2B06; Upload Data</button>
   <button class="tab-btn" id="tab-btn-users" style="display:none" onclick="switchTab('users',this)">&#x1F465; Users</button>
 </div>
@@ -468,6 +559,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-ld" class="tab-content"></div>
   <div id="tab-risks" class="tab-content"></div>
   <div id="tab-workforce" class="tab-content"></div>
+  <div id="tab-submit" class="tab-content"></div>
+  <div id="tab-gallery" class="tab-content"></div>
   <div id="tab-upload" class="tab-content"></div>
   <div id="tab-users" class="tab-content"></div>
 </div>
@@ -1749,6 +1842,10 @@ function switchTab(id, btn) {
     if(el){ el.innerHTML=renderUploadTab(); document.getElementById('weeksList').innerHTML=weeksListHTML(); }
   } else if(id==='users'){
     renderUsersTab(el);
+  } else if(id==='gallery'){
+    renderGalleryTab();
+  } else if(id==='submit'){
+    renderSubmitTab(el);
   }
 }
 
@@ -2168,7 +2265,7 @@ async function renderUsersTab(mc) {
     <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;margin-bottom:20px">
       <div><label style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:5px">Role</label>
         <select id="uRo" style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px">
-          <option value="executive">Executive</option><option value="hrbp">HRBP</option><option value="admin">Admin</option>
+          <option value="executive">Executive</option><option value="hrbp">HRBP</option><option value="admin">Admin</option><option value="payroll">Payroll</option><option value="hrops">HR Ops</option><option value="ld">L&amp;D</option><option value="admin_facility">Admin</option>
         </select></div>
       <div><label style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:5px">Region (HRBP)</label>
         <select id="uRg" style="width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px">
@@ -2203,7 +2300,8 @@ async function addNewUser() {
   if(st)st.innerHTML='<div style="font-size:12px;color:var(--muted)">Creating…</div>';
   const {data,error}=await _sb.auth.admin.createUser({email:em,password:pw,email_confirm:true});
   if(error){if(st)st.innerHTML=`<div style="color:var(--red);font-size:12px">${error.message}</div>`;return;}
-  await _sb.from('user_profiles').upsert({id:data.user.id,email:em,role:ro,region:rg||null});
+  const fnMap={'payroll':'payroll','hrops':'hrops','ld':'ld','admin_facility':'admin','hrbp':'hrbp','executive':'executive','admin':'admin'};
+  await _sb.from('user_profiles').upsert({id:data.user.id,email:em,role:['admin','executive','hrbp'].includes(ro)?ro:'hrbp',function_type:fnMap[ro]||ro,region:rg||null});
   if(st)st.innerHTML=`<div style="color:var(--green);font-size:12px">✓ ${em} added as ${ro}</div>`;
   document.getElementById('uEm').value='';document.getElementById('uPw').value='';
   await renderUsersTab(document.getElementById('tab-users'));
@@ -2214,6 +2312,698 @@ async function removeUser(uid){
   await _sb.auth.admin.deleteUser(uid);
   await _sb.from('user_profiles').delete().eq('id',uid);
   await renderUsersTab(document.getElementById('tab-users'));
+}
+
+
+// ── PHOTO GALLERY ─────────────────────────────────────────────────────────
+let _galleryPhotos = [];
+let _lbIdx = 0;
+
+const EVENT_TYPES = [
+  {v:'site_visit',  l:'Site Visit',  cls:'pe-site'},
+  {v:'rr',          l:'R&R',         cls:'pe-rr'},
+  {v:'townhall',    l:'Town Hall',   cls:'pe-townhall'},
+  {v:'training',    l:'Training',    cls:'pe-training'},
+  {v:'other',       l:'Other',       cls:'pe-other'},
+];
+function evtBadge(type) {
+  const e = EVENT_TYPES.find(x=>x.v===type) || EVENT_TYPES[4];
+  return `<span class="photo-event-badge ${e.cls}">${e.l}</span>`;
+}
+
+async function loadGallery(weekKey) {
+  const {data, error} = await _sb.from('hrbp_photos')
+    .select('*').eq('week_key', weekKey).order('created_at', {ascending:false});
+  if (error) { console.error('[Gallery]', error); return []; }
+  return data || [];
+}
+
+async function renderGalleryTab() {
+  const mc = document.getElementById('tab-gallery');
+  if (!mc) return;
+  mc.innerHTML = '<div class="loader"><div style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite"></div>&nbsp;Loading gallery…</div>';
+
+  // Load photos for current week
+  const photos = await loadGallery(currentWeek);
+  _galleryPhotos = photos;
+  const w = WEEKS_DATA[currentWeek];
+  const wLabel = w ? w.label : currentWeek;
+  const canUpload = _sbRole && (_sbRole.role === 'admin' || _sbRole.role === 'hrbp');
+
+  mc.innerHTML = `<div style="padding:28px 36px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Photo Gallery</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:26px;letter-spacing:1px;color:var(--text);margin-top:2px">${wLabel}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="galEventFilter" onchange="filterGallery()" style="background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:12px;font-family:'DM Mono',monospace">
+          <option value="">All Events</option>
+          ${EVENT_TYPES.map(e=>`<option value="${e.v}">${e.l}</option>`).join('')}
+        </select>
+        ${canUpload ? `<button onclick="showPhotoUpload()" style="background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">+ Add Photos</button>` : ''}
+      </div>
+    </div>
+
+    <div id="photoUploadPanel" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Upload Photos for ${wLabel}</div>
+      <div class="photo-upload-zone" id="photoDropZone"
+        ondragover="event.preventDefault();this.classList.add('drag')"
+        ondragleave="this.classList.remove('drag')"
+        ondrop="handlePhotoDrop(event)">
+        <input type="file" accept="image/*" multiple onchange="handlePhotoFiles(this.files)">
+        <div style="font-size:28px;margin-bottom:8px">🖼️</div>
+        <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px">Drop photos here</div>
+        <div style="font-size:12px;color:var(--muted)">JPG, PNG, HEIC · Multiple files OK</div>
+      </div>
+      <div id="photoStagingArea" style="margin-top:16px"></div>
+      <div id="photoUploadProgress" style="margin-top:10px"></div>
+    </div>
+
+    ${photos.length === 0
+      ? `<div style="text-align:center;padding:60px 20px;color:var(--muted)">
+          <div style="font-size:40px;margin-bottom:12px">📷</div>
+          <div style="font-size:15px;font-weight:500;margin-bottom:6px">No photos this week</div>
+          <div style="font-size:13px">${canUpload ? 'Click "+ Add Photos" to upload' : 'HRBPs and admins can upload photos'}</div>
+        </div>`
+      : `<div class="gallery-grid" id="galleryGrid">${photos.map((p,i)=>photoCard(p,i)).join('')}</div>`
+    }
+  </div>`;
+}
+
+function filterGallery() {
+  const filter = document.getElementById('galEventFilter')?.value || '';
+  const grid = document.getElementById('galleryGrid');
+  if (!grid) return;
+  const filtered = filter ? _galleryPhotos.filter(p=>p.event_type===filter) : _galleryPhotos;
+  if (filtered.length === 0) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);font-size:13px">No photos for this event type</div>';
+  } else {
+    grid.innerHTML = filtered.map((p,i)=>photoCard(p,i)).join('');
+  }
+}
+
+function photoCard(p, i) {
+  return `<div class="photo-card" onclick="openLB(${i})">
+    <img src="${p.photo_url}" alt="${p.caption||''}" loading="lazy"
+      onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 80%22><rect fill=%22%23223244%22 width=%22100%22 height=%22100%22/></svg>'">
+    <div class="photo-card-body">
+      <div class="photo-card-caption">${p.caption||'No caption'}</div>
+      <div class="photo-card-meta">
+        <span class="photo-card-hrbp">${p.uploader_name||'—'} ${p.uploader_region?'·&nbsp;'+p.uploader_region:''}</span>
+        ${evtBadge(p.event_type)}
+      </div>
+      ${p.account_name?`<div style="font-size:10px;color:var(--accent);margin-top:4px;font-family:'DM Mono',monospace">${p.account_name}</div>`:''}
+    </div>
+  </div>`;
+}
+
+function openLB(idx) {
+  _lbIdx = idx;
+  const p = _galleryPhotos[idx];
+  if (!p) return;
+  document.getElementById('photoLBImg').src = p.photo_url;
+  document.getElementById('photoLBCaption').textContent = p.caption || '';
+  document.getElementById('photoLBMeta').textContent =
+    (p.uploader_name||'') + (p.uploader_region?' · '+p.uploader_region:'') +
+    (p.account_name?' · '+p.account_name:'') + ' · ' +
+    (p.created_at||'').substring(0,10);
+  document.getElementById('photoLB').classList.add('open');
+}
+function closeLB() { document.getElementById('photoLB').classList.remove('open'); }
+function lbNav(dir) {
+  _lbIdx = (_lbIdx + dir + _galleryPhotos.length) % _galleryPhotos.length;
+  openLB(_lbIdx);
+}
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('photoLB').classList.contains('open')) return;
+  if (e.key==='Escape') closeLB();
+  if (e.key==='ArrowLeft') lbNav(-1);
+  if (e.key==='ArrowRight') lbNav(1);
+});
+
+function showPhotoUpload() {
+  const p = document.getElementById('photoUploadPanel');
+  if (p) p.style.display = p.style.display==='none' ? 'block' : 'none';
+}
+
+function handlePhotoDrop(e) {
+  e.preventDefault();
+  document.getElementById('photoDropZone').classList.remove('drag');
+  handlePhotoFiles(e.dataTransfer.files);
+}
+
+let _stagedPhotos = [];
+function handlePhotoFiles(files) {
+  if (!files || !files.length) return;
+  _stagedPhotos = Array.from(files);
+  const area = document.getElementById('photoStagingArea');
+  if (!area) return;
+
+  area.innerHTML = `
+    <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">${files.length} photo(s) selected — add details below</div>
+    <div id="stageCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:16px"></div>
+    <button onclick="submitPhotos()" style="background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:10px 24px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">Upload All Photos</button>
+  `;
+
+  const cards = document.getElementById('stageCards');
+  _stagedPhotos.forEach((file, idx) => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const card = document.createElement('div');
+      card.style.cssText = 'background:var(--surface3);border:1px solid var(--border);border-radius:10px;overflow:hidden';
+      card.innerHTML = `
+        <img src="${ev.target.result}" style="width:100%;height:120px;object-fit:cover;display:block">
+        <div style="padding:10px">
+          <input placeholder="Caption (event, account, what happened…)" id="cap_${idx}"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;margin-bottom:8px;font-family:'DM Sans',sans-serif">
+          <select id="evt_${idx}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;margin-bottom:8px">
+            ${EVENT_TYPES.map(e=>`<option value="${e.v}">${e.l}</option>`).join('')}
+          </select>
+          <input placeholder="Account / Site name (optional)" id="acct_${idx}"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;font-family:'DM Sans',sans-serif">
+        </div>`;
+      cards.appendChild(card);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function submitPhotos() {
+  const prog = document.getElementById('photoUploadProgress');
+  if (prog) prog.innerHTML = '';
+
+  for (let idx = 0; idx < _stagedPhotos.length; idx++) {
+    const file = _stagedPhotos[idx];
+    const caption = document.getElementById('cap_'+idx)?.value || '';
+    const evt = document.getElementById('evt_'+idx)?.value || 'other';
+    const acct = document.getElementById('acct_'+idx)?.value || '';
+
+    if (prog) prog.innerHTML += `<div style="font-size:12px;color:var(--muted);padding:3px 0">Uploading ${file.name}…</div>`;
+
+    // Upload to Supabase Storage
+    const ext = file.name.split('.').pop();
+    const path = `${currentWeek}/${Date.now()}_${idx}.${ext}`;
+    const {error: upErr} = await _sb.storage.from('hrbp-photos').upload(path, file, {contentType: file.type});
+    if (upErr) {
+      if (prog) prog.innerHTML += `<div style="font-size:12px;color:var(--red)">✗ ${file.name}: ${upErr.message}</div>`;
+      continue;
+    }
+
+    // Get public URL
+    const {data: urlData} = _sb.storage.from('hrbp-photos').getPublicUrl(path);
+    const photoUrl = urlData.publicUrl;
+
+    // Get uploader info
+    const uploaderName = _sbRole.region
+      ? (_sbUser?.email?.split('@')[0]||'HRBP')
+      : 'Admin';
+
+    // Save metadata to DB
+    const {error: dbErr} = await _sb.from('hrbp_photos').insert({
+      week_key: currentWeek,
+      week_num: WEEKS_DATA[currentWeek]?.week_num || 0,
+      uploaded_by: _sbUser?.id,
+      uploader_name: uploaderName,
+      uploader_region: _sbRole.region || 'All',
+      photo_url: photoUrl,
+      caption,
+      event_type: evt,
+      account_name: acct,
+    });
+
+    if (dbErr) {
+      if (prog) prog.innerHTML += `<div style="font-size:12px;color:var(--red)">✗ DB error: ${dbErr.message}</div>`;
+    } else {
+      if (prog) prog.innerHTML += `<div style="font-size:12px;color:var(--green)">✓ ${file.name} uploaded</div>`;
+    }
+  }
+
+  if (prog) prog.innerHTML += '<div style="font-size:12px;color:var(--accent);margin-top:8px;font-weight:600">Done! Refreshing gallery…</div>';
+  _stagedPhotos = [];
+  setTimeout(() => renderGalleryTab(), 1000);
+}
+
+
+// ── WEEKLY SUBMISSION FORM ────────────────────────────────────────────────
+const FUNCTION_TYPES = {
+  ta:      {label:'Talent Acquisition', icon:'🎯'},
+  hrbp:    {label:'HR Business Partner', icon:'🤝'},
+  payroll: {label:'Payroll', icon:'💰'},
+  hrops:   {label:'HR Operations', icon:'⚙️'},
+  ld:      {label:'L&D', icon:'📚'},
+  admin:   {label:'Admin', icon:'🏢'},
+};
+
+// Detect function from role
+function detectFunction(role, region) {
+  if (role === 'hrbp') return 'hrbp';
+  if (role === 'admin' || role === 'executive') return null; // admin picks
+  return 'hrbp'; // default
+}
+
+let _formWeekKey = null;
+let _formData = {};    // current form field values
+let _formPhotos = [];  // staged photos
+let _existingSub = null; // existing submission if any
+let _visitYes = false;
+
+async function renderSubmitTab(mc) {
+  if (!mc) mc = document.getElementById('tab-submit');
+  mc.innerHTML = '<div class="loader"><div style="width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite"></div>&nbsp;Loading form…</div>';
+
+  // Get user profile to check function_type
+  const {data: profile} = await _sb.from('user_profiles')
+    .select('role,region,function_type,display_name').eq('id', _sbUser.id).single();
+  const fnType = profile?.function_type || detectFunction(profile?.role) || 'hrbp';
+  const region = profile?.region || '';
+  const displayName = profile?.display_name || _sbUser.email?.split('@')[0] || 'User';
+
+  // Available weeks (current + last 2)
+  const availWeeks = WEEK_ORDER.slice(-3).reverse();
+  _formWeekKey = _formWeekKey || WEEK_ORDER[WEEK_ORDER.length-1];
+
+  // Check existing submission for selected week
+  await loadExistingSubmission(fnType, _formWeekKey);
+
+  mc.innerHTML = buildFormHTML(fnType, region, displayName, availWeeks, profile?.role);
+  attachFormListeners();
+  if (_existingSub) populateForm(_existingSub);
+}
+
+async function loadExistingSubmission(fnType, weekKey) {
+  const {data} = await _sb.from('weekly_submissions')
+    .select('*').eq('week_key', weekKey).eq('submitted_by', _sbUser.id).single();
+  _existingSub = data || null;
+}
+
+function buildFormHTML(fnType, region, displayName, availWeeks, role) {
+  const fn = FUNCTION_TYPES[fnType] || FUNCTION_TYPES.hrbp;
+  const statusHTML = _existingSub
+    ? `<span class="wform-status-badge wsb-submitted">✓ Submitted · ${(_existingSub.updated_at||'').substring(0,10)}</span>`
+    : `<span class="wform-status-badge wsb-none">Not submitted yet</span>`;
+
+  return `<div class="wform-wrap">
+    <div class="wform-header">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">${fn.icon} ${fn.label}</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--muted)">${displayName}${region?' · '+region:''}</span>
+        ${statusHTML}
+      </div>
+    </div>
+
+    <div style="margin-bottom:20px">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div>
+      <div class="wform-week-select">
+        ${availWeeks.map(k=>`<button class="wform-week-btn${k===_formWeekKey?' active':''}" onclick="selectFormWeek('${k}')">${WEEK_NAMES[k]||k} · ${WEEKS_DATA[k]?.label||''}</button>`).join('')}
+      </div>
+    </div>
+
+    ${buildFunctionSections(fnType)}
+
+    <div class="wform-section">
+      <div class="wform-section-title">📸 Photos</div>
+      <div class="wform-row">
+        <label>Upload photos (site visits, R&R, town halls, training)</label>
+        <div class="wform-photo-zone" id="formPhotoZone"
+          ondragover="event.preventDefault();this.classList.add('drag')"
+          ondragleave="this.classList.remove('drag')"
+          ondrop="formPhotoDrop(event)">
+          <input type="file" accept="image/*" multiple onchange="formPhotoAdd(this.files)">
+          <div style="font-size:20px;margin-bottom:6px">📷</div>
+          <div style="font-size:13px;color:var(--muted)">Drop photos or click to browse</div>
+        </div>
+        <div class="wform-photo-preview" id="formPhotoPreview"></div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+      <button class="wform-submit-btn" id="formSubmitBtn" onclick="submitWeeklyForm('${fnType}','${region}')">
+        ${_existingSub ? 'Update Submission' : 'Submit Report'}
+      </button>
+      ${_existingSub ? '<span style="font-size:12px;color:var(--muted)">You can update until the week closes</span>' : ''}
+    </div>
+    <div id="formSubmitStatus" style="margin-top:12px"></div>
+  </div>`;
+}
+
+function buildFunctionSections(fnType) {
+  if (fnType === 'ta') return `
+    <div class="wform-section">
+      <div class="wform-section-title">TA Numbers</div>
+      <div class="wform-grid4">
+        <div><input type="number" min="0" id="f_ta_opened" class="wform-num-input" value="0" placeholder="0"><div class="wform-num-label">Positions Opened</div></div>
+        <div><input type="number" min="0" id="f_ta_closed" class="wform-num-input" value="0" placeholder="0"><div class="wform-num-label">Positions Closed</div></div>
+        <div><input type="number" min="0" id="f_ta_offers" class="wform-num-input" value="0" placeholder="0"><div class="wform-num-label">Offers Released</div></div>
+        <div><input type="number" min="0" id="f_ta_dropouts" class="wform-num-input" value="0" placeholder="0"><div class="wform-num-label">Offer Dropouts</div></div>
+      </div>
+    </div>
+    <div class="wform-section">
+      <div class="wform-section-title">Details</div>
+      <div class="wform-row"><label>Dropout Reason(s)</label><textarea id="f_ta_dropout_reason" placeholder="Candidate got better offer / salary mismatch…"></textarea></div>
+      <div class="wform-row"><label>Ageing Open Positions (Platinum & Gold accounts)</label><textarea id="f_ta_aging" placeholder="Req ID | Account | Role | Location | Days | Reason | Action needed…" style="min-height:90px"></textarea></div>
+      <div class="wform-row"><label>Constraints / Escalations</label><textarea id="f_ta_constraints" placeholder="Budget constraints, skill scarcity, portal issues…"></textarea></div>
+      <div class="wform-row"><label>Joining Plan for Next Week</label><textarea id="f_ta_joining_plan" placeholder="Expected joiners, DOJs, pending confirmations…"></textarea></div>
+    </div>`;
+
+  if (fnType === 'hrbp') return `
+    <div class="wform-section">
+      <div class="wform-section-title">Site Visits & Connects</div>
+      <div class="wform-row">
+        <label>Did you conduct site visits or employee connects this week?</label>
+        <div class="wform-visit-toggle">
+          <button class="wform-visit-btn" id="visitYesBtn" onclick="setVisit(true)">Yes</button>
+          <button class="wform-visit-btn" id="visitNoBtn" onclick="setVisit(false)">No</button>
+        </div>
+      </div>
+      <div class="wform-row"><label>Site Visit / Connect Details</label>
+        <textarea id="f_hrbp_connect_details" style="min-height:110px" placeholder="Site name, Account, Date, PM/DL name, Issues discussed, Business opportunities…"></textarea>
+      </div>
+    </div>
+    <div class="wform-section">
+      <div class="wform-section-title">Employee Relations & Retention</div>
+      <div class="wform-row"><label>Discipline / ER Cases Handled</label><textarea id="f_hrbp_discipline" placeholder="Warning letters issued, misconduct cases, actions taken…"></textarea></div>
+      <div class="wform-row"><label>Attrition / Retention Interventions</label><textarea id="f_hrbp_retention" placeholder="Resignations revoked, at-risk employees engaged, actions taken…"></textarea></div>
+    </div>
+    <div class="wform-section">
+      <div class="wform-section-title">Issues & Activities</div>
+      <div class="wform-row"><label>Open Issues Needing Leadership Support</label><textarea id="f_hrbp_issues" placeholder="Pending approvals, policy clarifications, cross-team dependencies…"></textarea></div>
+      <div class="wform-row"><label>Risks if Actions Delayed</label><textarea id="f_hrbp_risks" placeholder="Employee dissatisfaction, compliance risk, attrition risk…"></textarea></div>
+      <div class="wform-row"><label>Key Activities & Achievements This Week</label><textarea id="f_hrbp_activities" style="min-height:90px" placeholder="Onboarding, inductions, connects, initiatives, recognitions…"></textarea></div>
+      <div class="wform-row"><label>R&R / Engagement Activities</label><textarea id="f_hrbp_rr_details" placeholder="Birthday celebrations, awards, women's day, Holi, etc.…"></textarea></div>
+    </div>`;
+
+  if (fnType === 'payroll') return `
+    <div class="wform-section">
+      <div class="wform-section-title">Payroll Numbers</div>
+      <div class="wform-grid2">
+        <div class="wform-row"><label>Total Employees Paid</label><input type="number" id="f_payroll_hc" value="0"></div>
+        <div class="wform-row"><label>Payroll Errors Identified</label><input type="number" id="f_payroll_errors" value="0"></div>
+      </div>
+      <div class="wform-row"><label>Payroll Cycle / Month Covered</label><input type="text" id="f_payroll_month" placeholder="February 2026"></div>
+    </div>
+    <div class="wform-section">
+      <div class="wform-section-title">Issues & Compliance</div>
+      <div class="wform-row"><label>Risks for Upcoming Payroll Cycle</label><textarea id="f_payroll_risks" placeholder="Leave config issues, attendance not rectified…"></textarea></div>
+      <div class="wform-row"><label>Pending Payroll Corrections</label><textarea id="f_payroll_pending" placeholder="Holiday not reflecting, leave mapping issues…"></textarea></div>
+      <div class="wform-row"><label>Statutory Submissions (PF/ESI/LWF) Status</label><textarea id="f_payroll_statutory" placeholder="Completed / In process / Pending…"></textarea></div>
+    </div>`;
+
+  if (fnType === 'hrops') return `
+    <div class="wform-section">
+      <div class="wform-section-title">HR Ops Numbers</div>
+      <div class="wform-grid2">
+        <div class="wform-row"><label>Onboardings Processed</label><input type="number" id="f_hrops_onboard" value="0"></div>
+        <div class="wform-row"><label>Employee Escalations Handled</label><input type="number" id="f_hrops_esc_count" value="0"></div>
+      </div>
+      <div class="wform-row"><label>FnF Cases Processed This Week</label><input type="text" id="f_hrops_fnf" placeholder="e.g. 20 of 166 cases cleared; balance pending Finance"></div>
+    </div>
+    <div class="wform-section">
+      <div class="wform-section-title">Compliance & Gaps</div>
+      <div class="wform-row"><label>Compliance / Audit Activities Completed</label><textarea id="f_hrops_compliance" placeholder="Audits handled, labour notices closed, ISO submissions…"></textarea></div>
+      <div class="wform-row"><label>Process Gaps / Exceptions</label><textarea id="f_hrops_gaps" placeholder="ZingHR data gaps, master data issues, process deviations…"></textarea></div>
+      <div class="wform-row"><label>Escalation Details</label><textarea id="f_hrops_esc_details" placeholder="Nature of escalations handled, pending items…"></textarea></div>
+    </div>`;
+
+  if (fnType === 'ld') return `
+    <div class="wform-section">
+      <div class="wform-section-title">L&D Numbers</div>
+      <div class="wform-grid2">
+        <div class="wform-row"><label>Programs Conducted / Coordinated</label><input type="number" id="f_ld_sessions" value="0"></div>
+        <div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div>
+      </div>
+    </div>
+    <div class="wform-section">
+      <div class="wform-section-title">Details</div>
+      <div class="wform-row"><label>Training Details (what was conducted)</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance, highlights…"></textarea></div>
+      <div class="wform-row"><label>Upcoming Trainings (Next 2–4 Weeks)</label><textarea id="f_ld_upcoming" style="min-height:90px" placeholder="Program name, schedule, target audience…"></textarea></div>
+      <div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery, certification requests…"></textarea></div>
+      <div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues, nomination response…"></textarea></div>
+    </div>`;
+
+  if (fnType === 'admin') return `
+    <div class="wform-section">
+      <div class="wform-section-title">Admin & Facilities</div>
+      <div class="wform-row"><label>Facility Issues & Resolution Details</label><textarea id="f_admin_issues" style="min-height:110px" placeholder="AC issues, power supply, internet, office setup, vendor work…"></textarea></div>
+      <div class="wform-row"><label>Cost Optimisation / Savings Initiatives</label><textarea id="f_admin_savings" placeholder="Vendor negotiations, energy savings, asset recovery…"></textarea></div>
+    </div>`;
+
+  return '<div class="wform-section"><div style="color:var(--muted);font-size:13px">Form for your function will appear here.</div></div>';
+}
+
+function attachFormListeners() {
+  // Visit toggle initial state
+  setVisit(_visitYes);
+}
+
+function setVisit(val) {
+  _visitYes = val;
+  const yBtn = document.getElementById('visitYesBtn');
+  const nBtn = document.getElementById('visitNoBtn');
+  if (yBtn) { yBtn.className = 'wform-visit-btn' + (val ? ' active-yes' : ''); }
+  if (nBtn) { nBtn.className = 'wform-visit-btn' + (!val ? ' active-no' : ''); }
+}
+
+async function selectFormWeek(key) {
+  _formWeekKey = key;
+  // Re-render the submit tab with the new week
+  await renderSubmitTab(document.getElementById('tab-submit'));
+}
+
+function populateForm(sub) {
+  const fields = [
+    'ta_opened','ta_closed','ta_offers','ta_dropouts','ta_dropout_reason',
+    'ta_aging','ta_constraints','ta_joining_plan',
+    'hrbp_connect_details','hrbp_discipline','hrbp_retention',
+    'hrbp_issues','hrbp_risks','hrbp_activities','hrbp_rr_details',
+    'payroll_hc','payroll_errors','payroll_month','payroll_risks','payroll_pending','payroll_statutory',
+    'hrops_onboard','hrops_fnf','hrops_compliance','hrops_gaps','hrops_esc_count','hrops_esc_details',
+    'ld_sessions','ld_coverage','ld_details','ld_upcoming','ld_gaps','ld_risks',
+    'admin_issues','admin_savings',
+  ];
+  fields.forEach(f => {
+    const el = document.getElementById('f_'+f);
+    if (el && sub[f] != null) el.value = sub[f];
+  });
+  if (sub.hrbp_site_visited) setVisit(true);
+}
+
+function getFormValues(fnType) {
+  const g = id => { const el=document.getElementById('f_'+id); return el?el.value:''; };
+  const gi = id => { const v=parseInt(g(id))||0; return v; };
+  return {
+    function_type: fnType,
+    hrbp_site_visited: _visitYes,
+    ta_opened: gi('ta_opened'), ta_closed: gi('ta_closed'),
+    ta_offers: gi('ta_offers'), ta_dropouts: gi('ta_dropouts'),
+    ta_dropout_reason: g('ta_dropout_reason'), ta_aging: g('ta_aging'),
+    ta_constraints: g('ta_constraints'), ta_joining_plan: g('ta_joining_plan'),
+    hrbp_connect_details: g('hrbp_connect_details'), hrbp_discipline: g('hrbp_discipline'),
+    hrbp_retention: g('hrbp_retention'), hrbp_issues: g('hrbp_issues'),
+    hrbp_risks: g('hrbp_risks'), hrbp_activities: g('hrbp_activities'),
+    hrbp_rr_details: g('hrbp_rr_details'),
+    payroll_hc: gi('payroll_hc'), payroll_errors: gi('payroll_errors'),
+    payroll_month: g('payroll_month'), payroll_risks: g('payroll_risks'),
+    payroll_pending: g('payroll_pending'), payroll_statutory: g('payroll_statutory'),
+    hrops_onboard: gi('hrops_onboard'), hrops_fnf: g('hrops_fnf'),
+    hrops_compliance: g('hrops_compliance'), hrops_gaps: g('hrops_gaps'),
+    hrops_esc_count: gi('hrops_esc_count'), hrops_esc_details: g('hrops_esc_details'),
+    ld_sessions: gi('ld_sessions'), ld_coverage: g('ld_coverage'),
+    ld_details: g('ld_details'), ld_upcoming: g('ld_upcoming'),
+    ld_gaps: g('ld_gaps'), ld_risks: g('ld_risks'),
+    admin_issues: g('admin_issues'), admin_savings: g('admin_savings'),
+  };
+}
+
+async function submitWeeklyForm(fnType, region) {
+  const btn = document.getElementById('formSubmitBtn');
+  const st  = document.getElementById('formSubmitStatus');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  st.innerHTML = '';
+
+  const wData = WEEKS_DATA[_formWeekKey];
+  const values = getFormValues(fnType);
+  const {data: profile} = await _sb.from('user_profiles').select('display_name').eq('id',_sbUser.id).single();
+
+  const record = {
+    ...values,
+    week_key: _formWeekKey,
+    week_num: wData?.week_num || 0,
+    week_label: wData?.label || '',
+    submitted_by: _sbUser.id,
+    submitter_name: profile?.display_name || _sbUser.email?.split('@')[0] || 'User',
+    submitter_email: _sbUser.email,
+    region: region || _sbRole.region || '',
+    status: 'submitted',
+    updated_at: new Date().toISOString(),
+  };
+
+  // Upsert submission
+  const {error} = await _sb.from('weekly_submissions').upsert(record, {onConflict:'week_key,submitted_by'});
+  if (error) {
+    st.innerHTML = `<div style="color:var(--red);font-size:13px">✗ ${error.message}</div>`;
+    btn.disabled = false; btn.textContent = 'Submit Report';
+    return;
+  }
+
+  // Upload any staged photos
+  if (_formPhotos.length > 0) {
+    st.innerHTML = '<div style="font-size:12px;color:var(--muted)">Uploading photos…</div>';
+    for (let i=0; i<_formPhotos.length; i++) {
+      const {file, caption, event_type} = _formPhotos[i];
+      const ext = file.name.split('.').pop();
+      const path = `${_formWeekKey}/${Date.now()}_${i}.${ext}`;
+      const {error:upErr} = await _sb.storage.from('hrbp-photos').upload(path, file, {contentType:file.type});
+      if (!upErr) {
+        const {data:urlData} = _sb.storage.from('hrbp-photos').getPublicUrl(path);
+        await _sb.from('hrbp_photos').insert({
+          week_key: _formWeekKey, week_num: wData?.week_num||0,
+          uploaded_by: _sbUser.id,
+          uploader_name: record.submitter_name,
+          uploader_region: region||_sbRole.region||'',
+          photo_url: urlData.publicUrl, caption, event_type: event_type||'site_visit',
+        });
+      }
+    }
+    _formPhotos = [];
+  }
+
+  // Rebuild weekly_reports from submissions
+  await rebuildWeekFromSubmissions(_formWeekKey);
+
+  st.innerHTML = `<div style="color:var(--green);font-size:13px;padding:10px 0">✓ Report submitted successfully for ${wData?.label||_formWeekKey}</div>`;
+  btn.disabled = false; btn.textContent = 'Update Submission';
+  _existingSub = record;
+
+  // Refresh badge
+  const badge = document.querySelector('.wform-status-badge');
+  if (badge) { badge.className='wform-status-badge wsb-submitted'; badge.textContent='✓ Submitted · '+new Date().toISOString().substring(0,10); }
+}
+
+// Rebuild weekly_reports row by aggregating all submissions for a week
+async function rebuildWeekFromSubmissions(weekKey) {
+  const {data:subs} = await _sb.from('weekly_submissions')
+    .select('*').eq('week_key', weekKey);
+  if (!subs || !subs.length) return;
+
+  const wTemplate = WEEKS_DATA[weekKey] || {};
+  let agg = {
+    week_key: weekKey,
+    week_num: wTemplate.week_num||0,
+    label: wTemplate.label||weekKey,
+    from_label: wTemplate.from_label||'',
+    to_label: wTemplate.to_label||'',
+    total_respondents: subs.length,
+    ta_opened:0, ta_closed:0, ta_offers:0, ta_dropouts:0,
+    ta_detail:[], ta_constraints:[], ta_aging_raw:[],
+    hrbp_visits:0, hrbp_connects:[], hrbp_discipline:[], hrbp_retention:[],
+    hrbp_issues:[], hrbp_risks:[], hrbp_activities:[],
+    payroll_hc:0, payroll_errors:0, payroll_month:'',
+    payroll_risks:[], payroll_pending:[], payroll_statutory:[],
+    hrops_onboard:0, hrops_fnf:'', hrops_compliance:[], hrops_gaps:[],
+    hrops_esc:0, hrops_esc_texts:[],
+    ld_sessions:0, ld_coverage:'', ld_details:[], ld_upcoming:[], ld_gaps:[], ld_risks:[],
+    admin_issues:[], admin_savings:[],
+  };
+
+  subs.forEach(s => {
+    const fn = s.function_type;
+    if (fn==='ta') {
+      agg.ta_opened+=s.ta_opened||0; agg.ta_closed+=s.ta_closed||0;
+      agg.ta_offers+=s.ta_offers||0; agg.ta_dropouts+=s.ta_dropouts||0;
+      agg.ta_detail.push({
+        name:s.submitter_name||'', region:s.region||'',
+        opened:s.ta_opened||0, closed:s.ta_closed||0,
+        offers:s.ta_offers||0, dropouts:s.ta_dropouts||0,
+        dropout_reason:s.ta_dropout_reason||'',
+        constraint:s.ta_constraints||'',
+        aging:s.ta_aging||'', next_week:s.ta_joining_plan||'',
+      });
+      if(s.ta_aging&&s.ta_aging!='NA') agg.ta_aging_raw.push(s.ta_aging);
+      if(s.ta_constraints&&s.ta_constraints!='NA') agg.ta_constraints.push(s.ta_constraints);
+    }
+    if (fn==='hrbp') {
+      if (s.hrbp_site_visited) {
+        const detail = s.hrbp_connect_details||'';
+        const sites = detail?(detail.match(/site name/gi)||[detail]).length:1;
+        agg.hrbp_visits+=sites;
+        if(detail) agg.hrbp_connects.push({name:s.submitter_name||'',detail});
+      }
+      if(s.hrbp_discipline) agg.hrbp_discipline.push(s.hrbp_discipline);
+      if(s.hrbp_retention) agg.hrbp_retention.push(s.hrbp_retention);
+      if(s.hrbp_issues) agg.hrbp_issues.push(s.hrbp_issues);
+      if(s.hrbp_risks) agg.hrbp_risks.push(s.hrbp_risks);
+      if(s.hrbp_activities) agg.hrbp_activities.push(s.hrbp_activities);
+    }
+    if (fn==='payroll') {
+      if((s.payroll_hc||0)>agg.payroll_hc) agg.payroll_hc=s.payroll_hc||0;
+      agg.payroll_errors+=(s.payroll_errors||0);
+      if(s.payroll_month) agg.payroll_month=s.payroll_month;
+      if(s.payroll_risks) agg.payroll_risks.push(s.payroll_risks);
+      if(s.payroll_pending) agg.payroll_pending.push(s.payroll_pending);
+      if(s.payroll_statutory) agg.payroll_statutory.push(s.payroll_statutory);
+    }
+    if (fn==='hrops') {
+      agg.hrops_onboard+=(s.hrops_onboard||0);
+      if(s.hrops_fnf) agg.hrops_fnf=s.hrops_fnf;
+      if(s.hrops_compliance) agg.hrops_compliance.push(s.hrops_compliance);
+      if(s.hrops_gaps) agg.hrops_gaps.push(s.hrops_gaps);
+      agg.hrops_esc=Math.max(agg.hrops_esc,s.hrops_esc_count||0);
+      if(s.hrops_esc_details) agg.hrops_esc_texts.push(s.hrops_esc_details);
+    }
+    if (fn==='ld') {
+      agg.ld_sessions+=(s.ld_sessions||0);
+      if(s.ld_coverage) agg.ld_coverage=s.ld_coverage;
+      if(s.ld_details) agg.ld_details.push(s.ld_details);
+      if(s.ld_upcoming) agg.ld_upcoming.push(s.ld_upcoming);
+      if(s.ld_gaps) agg.ld_gaps.push(s.ld_gaps);
+      if(s.ld_risks) agg.ld_risks.push(s.ld_risks);
+    }
+    if (fn==='admin') {
+      if(s.admin_issues) agg.admin_issues.push(s.admin_issues);
+      if(s.admin_savings) agg.admin_savings.push(s.admin_savings);
+    }
+  });
+
+  // Upsert into weekly_reports
+  const {error} = await _sb.from('weekly_reports').upsert(agg, {onConflict:'week_key'});
+  if (!error) {
+    WEEKS_DATA[weekKey] = agg;
+    console.log('[Form] Rebuilt weekly_reports for', weekKey);
+  }
+}
+
+// Photo staging in form
+function formPhotoDrop(e) {
+  e.preventDefault();
+  document.getElementById('formPhotoZone').classList.remove('drag');
+  formPhotoAdd(e.dataTransfer.files);
+}
+function formPhotoAdd(files) {
+  Array.from(files).forEach(file => {
+    _formPhotos.push({file, caption:'', event_type:'site_visit'});
+    const reader = new FileReader();
+    const idx = _formPhotos.length - 1;
+    reader.onload = ev => {
+      const preview = document.getElementById('formPhotoPreview');
+      if (!preview) return;
+      const thumb = document.createElement('div');
+      thumb.className = 'wform-photo-thumb';
+      thumb.innerHTML = `<img src="${ev.target.result}" alt="">
+        <button class="remove" onclick="removeFormPhoto(${idx})">&times;</button>`;
+      preview.appendChild(thumb);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function removeFormPhoto(idx) {
+  _formPhotos.splice(idx, 1);
+  // Re-render thumbnails
+  const preview = document.getElementById('formPhotoPreview');
+  if (preview) {
+    preview.querySelectorAll('.wform-photo-thumb')[idx]?.remove();
+  }
 }
 
 // ── INIT (v3 compatible) ─────────────────────────────────────────────────
@@ -2282,6 +3072,10 @@ async function sbBoot(user) {
   document.getElementById('authOverlay').style.display='none';
   document.getElementById('dashApp').style.display='block';
 
+  // Show submit tab for all roles
+  const st2=document.getElementById('tab-btn-submit');
+  if(st2) st2.style.display='';
+
   // Show admin-only tabs
   if(_sbRole.role==='admin'){
     const upl = document.getElementById('tab-btn-upload');
@@ -2333,5 +3127,17 @@ async function sbSignOut(){
 })();
 
 </script>
+
+<div class="photo-lb" id="photoLB" onclick="if(event.target===this)closeLB()">
+  <div class="photo-lb-inner" id="photoLBInner">
+    <button class="photo-lb-close" onclick="closeLB()">&times;</button>
+    <button class="photo-lb-nav photo-lb-prev" onclick="lbNav(-1)">&#8249;</button>
+    <button class="photo-lb-nav photo-lb-next" onclick="lbNav(1)">&#8250;</button>
+    <img class="photo-lb-img" id="photoLBImg" src="" alt="">
+    <div class="photo-lb-caption" id="photoLBCaption"></div>
+    <div class="photo-lb-meta" id="photoLBMeta"></div>
+  </div>
+</div>
+
 </body>
 </html>
