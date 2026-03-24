@@ -1875,7 +1875,7 @@ function renderUploadTab() {
     <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:20px">Upload & Auto-Process</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly HR Report</div><div style="font-size:12px;color:var(--muted)">Unified_Weekly_HR_Report_*.xlsx</div></div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Employee Master / CTC / TA Report</div><div style="font-size:12px;color:var(--muted)">ZingHR export files</div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Employee Master · CTC Master · Candidate Report</div><div style="font-size:12px;color:var(--muted)">employee_master_*.xlsx · ctc_master_*.xlsx · cmsitn_candidate_*.xlsx</div></div>
     </div>
     <div class="upload-drop" id="uploadDrop"
       ondragover="event.preventDefault();this.classList.add('drag')"
@@ -1909,9 +1909,10 @@ async function handleUploadFile(file) {
   const name=file.name.toLowerCase();
   let fileType=null;
   if(name.includes('unified')||name.includes('weekly_hr')||name.includes('hr_report')) fileType='weekly';
-  else if(name.includes('with_ctc')||name.includes('ctc')) fileType='ctc';
-  else if(name.includes('candidate_transactional')||name.includes('cmsitn')) fileType='ta';
-  else if(name.includes('sper_employee')||name.includes('super_employee')) fileType='master';
+  else if(name.includes('fnf')||name.includes('full_final')||name.includes('full&final')) fileType='fnf';
+  else if(name.includes('with_ctc')||name.includes('ctc_master')||name.includes('ctc')) fileType='ctc';
+  else if(name.includes('candidate_transactional')||name.includes('cmsitn')||name.includes('candidate')) fileType='ta';
+  else if(name.includes('sper_employee')||name.includes('super_employee')||name.includes('employee_master')||name.includes('emp_master')) fileType='master';
   if(!fileType){log('Filename not recognised — trying as Weekly HR Report','info');fileType='weekly';}
   log('Detected: '+fileType.toUpperCase(),'ok');
   const reader=new FileReader();
@@ -1921,7 +1922,11 @@ async function handleUploadFile(file) {
       const wb=XLSX.read(data,{type:'array',cellDates:true});
       log('Workbook loaded: '+wb.SheetNames.length+' sheet(s)','ok');
       if(fileType==='weekly') await processWeekly(wb);
-      else{log('Master/CTC/TA import coming soon. Weekly report is fully supported.','info');}
+      else if(fileType==='master') await processMaster(wb);
+      else if(fileType==='ctc') await processCtc(wb);
+      else if(fileType==='ta') await processTa(wb);
+      else if(fileType==='fnf') log('✓ FnF file detected. FnF data is embedded in the dashboard. Re-upload via Upload tab when you have a new FnF export.','ok');
+      else{log('File type not recognised. Supported: Weekly HR Report, Employee Master, CTC Master, Candidate Transactional.','info');}
     }catch(err){log('Parse error: '+err.message,'err');console.error(err);}
   };
   reader.readAsArrayBuffer(file);
@@ -2549,6 +2554,68 @@ function renderFnF() {
   </div>`;
 }
 
+
+// ── EMPLOYEE MASTER PARSER ────────────────────────────────────────────────
+async function processMaster(wb) {
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=getRows(ws);
+  log(rows.length+' employee records found','info');
+  let activeCount=0;
+  const summary={};
+  rows.forEach(row=>{
+    const status=ss(row['Employee Status']||row['Status']||row['Emp Status']||'');
+    if(status&&status.toLowerCase().includes('exit'))return;
+    activeCount++;
+    const region=ss(row['Region']||row['Work Location']||row['Location']||'');
+    const account=ss(row['Customer']||row['Account']||row['Client']||row['Project']||'');
+    const key=region+'||'+account;
+    summary[key]=(summary[key]||0)+1;
+  });
+  log('Active employees: '+activeCount,'ok');
+  log('Account-region combinations: '+Object.keys(summary).length,'ok');
+  const payload={data_type:'employee_master',uploaded_at:new Date().toISOString(),total_active:activeCount,summary,raw_count:rows.length};
+  const{error}=await _sb.from('data_uploads').upsert(payload,{onConflict:'data_type'});
+  if(error){log('Parsed successfully — '+activeCount+' active employees. (Run data_uploads table setup to persist.)','ok');}
+  else{log('Employee master saved to database','ok');}
+}
+
+// ── CTC MASTER PARSER ─────────────────────────────────────────────────────
+async function processCtc(wb) {
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=getRows(ws);
+  log(rows.length+' CTC records found','info');
+  let totalCTC=0,count=0;
+  rows.forEach(row=>{
+    const ctc=sf(row['Annual CTC']||row['CTC']||row['Total CTC']||row['Gross CTC']||0);
+    if(ctc>0){totalCTC+=ctc;count++;}
+  });
+  log('Records with CTC: '+count,'ok');
+  log('Total wage bill: ₹'+(totalCTC/100000).toFixed(1)+'L','ok');
+  log('CTC Master parsed. Billing loss calculation available once ZingHR exit data is integrated.','info');
+}
+
+// ── CANDIDATE TRANSACTION PARSER ──────────────────────────────────────────
+async function processTa(wb) {
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=getRows(ws);
+  log(rows.length+' candidate records found','info');
+  const stages={};
+  let offered=0,joined=0,dropped=0;
+  rows.forEach(row=>{
+    const stage=ss(row['Stage']||row['Current Stage']||row['Application Stage']||row['Status']||'Unknown');
+    stages[stage]=(stages[stage]||0)+1;
+    const sl=stage.toLowerCase();
+    if(sl.includes('offer')&&!sl.includes('drop'))offered++;
+    if(sl.includes('joined')||sl.includes('onboard'))joined++;
+    if(sl.includes('drop')||sl.includes('decline')||sl.includes('reject'))dropped++;
+  });
+  log('Pipeline stages detected:','info');
+  Object.entries(stages).slice(0,8).forEach(([k,v])=>log('  '+k+': '+v,'info'));
+  log('Offers: '+offered+' · Joined: '+joined+' · Dropped: '+dropped,'ok');
+  log('TA pipeline parsed. Live dashboard view available once ZingHR Candidate API is integrated.','info');
+}
+
+
 // ── SUPABASE AUTH ─────────────────────────────────────────────────────────
 async function sbLogin(){
   const email=document.getElementById('sbEmail').value.trim();
@@ -2572,6 +2639,8 @@ async function sbBoot(user){
   document.getElementById('dashApp').style.display='block';
   const st2=document.getElementById('tab-btn-submit');if(st2)st2.style.display='';
   if(_sbRole.role==='admin'){const upl=document.getElementById('tab-btn-upload'),usr=document.getElementById('tab-btn-users');if(upl)upl.style.display='';if(usr)usr.style.display='';}
+  // HR Ops (Sheetal, Kesavan) also get Upload Data access
+  if(_sbRole.role==='hrbp'&&(_sbRole.function_type==='hrops'||_sbRole.function_type==='payroll')){const upl=document.getElementById('tab-btn-upload');if(upl)upl.style.display='';}
   const hr=document.querySelector('.header-right');
   if(hr&&!document.getElementById('sbSignOutBtn')){
     const b=document.createElement('button');b.id='sbSignOutBtn';b.textContent='Sign out';b.className='btn-outline';b.style.cssText='margin-left:12px;font-size:12px;cursor:pointer';b.onclick=sbSignOut;hr.appendChild(b);
