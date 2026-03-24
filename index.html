@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -379,6 +380,21 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   .wi-fnf-grid { grid-template-columns: repeat(2, 1fr) !important; }
   .card-title { font-size: 11px; }
 }
+
+
+.pwd-modal{display:none;position:fixed;inset:0;z-index:9998;background:rgba(7,11,18,.8);align-items:center;justify-content:center;padding:20px}
+.pwd-modal.open{display:flex}
+.pwd-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:32px;width:100%;max-width:360px}
+.pwd-title{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px;color:var(--text);margin-bottom:4px}
+.pwd-sub{font-size:12px;color:var(--muted);margin-bottom:20px}
+.pwd-field{margin-bottom:14px}
+.pwd-field label{display:block;font-family:'DM Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.pwd-field input{width:100%;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;transition:border .15s}
+.pwd-field input:focus{border-color:var(--accent)}
+.pwd-btns{display:flex;gap:10px;margin-top:20px}
+.pwd-btn-save{flex:1;background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer}
+.pwd-btn-cancel{flex:1;background:none;color:var(--muted);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:13px;cursor:pointer}
+.pwd-msg{font-size:12px;margin-top:10px;min-height:18px}
 
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2125,6 +2141,38 @@ const FUNCTION_TYPES={ta:{label:'Talent Acquisition',icon:'🎯'},hrbp:{label:'H
 function detectFunction(role){if(role==='hrbp')return'hrbp';return null;}
 let _formWeekKey=null,_formPhotos=[],_existingSub=null,_visitYes=false;
 
+
+// ── WEEK KEY HELPERS (global) ─────────────────────────────────────────────
+function getCurrentWeekKey() {
+  const now=new Date(),mo=now.getMonth(),day=now.getDate();
+  if(mo===1&&day>=2&&day<=8)  return'W05';
+  if(mo===1&&day>=9&&day<=15) return'W06';
+  if(mo===1&&day>=16&&day<=22)return'W07';
+  if(mo===1&&day>=23)         return'W08';
+  if(mo===2&&day>=2&&day<=8)  return'W09';
+  if(mo===2&&day>=9&&day<=15) return'W10';
+  if(mo===2&&day>=16&&day<=22)return'W11';
+  if(mo===2&&day>=23)         return'W12';
+  if(mo===3&&day>=6&&day<=12) return'W13';
+  if(mo===3&&day>=13&&day<=19)return'W14';
+  if(mo===3&&day>=20&&day<=26)return'W15';
+  if(mo===3&&day>=27)         return'W16';
+  if(mo===4&&day>=3&&day<=9)  return'W17';
+  if(mo===4&&day>=10&&day<=16)return'W18';
+  if(mo===4&&day>=17&&day<=23)return'W19';
+  if(mo===4&&day>=24)         return'W20';
+  const yr=now.getFullYear();
+  const wn=Math.ceil(((now-new Date(yr,0,1))/86400000+1)/7);
+  return'W'+String(wn).padStart(2,'0');
+}
+function getCurrentWeekLabel() {
+  const now=new Date(),day=now.getDay();
+  const mon=new Date(now);mon.setDate(now.getDate()-(day===0?6:day-1));
+  const fri=new Date(mon);fri.setDate(mon.getDate()+4);
+  const fmt=d=>d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+  return fmt(mon)+' – '+fmt(fri);
+}
+
 async function renderSubmitTab(mc){
   if(!mc)mc=document.getElementById('tab-submit');
   mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>';
@@ -2135,40 +2183,8 @@ async function renderSubmitTab(mc){
   const roleLabel={'admin':'CXO','executive':'CXO','hrbp':'Lead'}[profile?.role]||(profile?.role||'').toUpperCase();
   if(profile?.role==='admin'||profile?.role==='executive'){await renderSubmissionTracker(mc,displayName,roleLabel);return;}
   // Always include current real-world week even if not in DB yet
-  function getCurrentWeekKey() {
-    const now = new Date();
-    const mo = now.getMonth(); // 0-indexed
-    const day = now.getDate();
-    if(mo===1 && day>=2  && day<=8)  return 'W05';
-    if(mo===1 && day>=9  && day<=15) return 'W06';
-    if(mo===1 && day>=16 && day<=22) return 'W07';
-    if(mo===1 && day>=23)            return 'W08';
-    if(mo===2 && day>=2  && day<=8)  return 'W09';
-    if(mo===2 && day>=9  && day<=15) return 'W10';
-    if(mo===2 && day>=16 && day<=22) return 'W11';
-    if(mo===2 && day>=23)            return 'W12';
-    if(mo===3 && day>=6  && day<=12) return 'W13';
-    if(mo===3 && day>=13 && day<=19) return 'W14';
-    if(mo===3 && day>=20 && day<=26) return 'W15';
-    if(mo===3 && day>=27)            return 'W16';
-    if(mo===4 && day>=3  && day<=9)  return 'W17';
-    if(mo===4 && day>=10 && day<=16) return 'W18';
-    if(mo===4 && day>=17 && day<=23) return 'W19';
-    if(mo===4 && day>=24)            return 'W20';
-    // fallback: compute from week number
-    const yr = now.getFullYear();
-    const wn = Math.ceil(((now - new Date(yr,0,1)) / 86400000 + 1) / 7);
-    return 'W' + String(wn).padStart(2,'0');
-  }
-  function getCurrentWeekLabel() {
-    const now = new Date();
-    // Find Monday of current week
-    const day = now.getDay();
-    const mon = new Date(now); mon.setDate(now.getDate() - (day===0?6:day-1));
-    const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
-    const fmt = d => d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
-    return fmt(mon) + ' – ' + fmt(fri);
-  }
+
+
   const liveWkKey = getCurrentWeekKey();
   const liveLabel = getCurrentWeekLabel();
   // Ensure current week is in WEEK_ORDER and WEEKS_DATA (as a placeholder if needed)
@@ -2331,6 +2347,41 @@ function renderAdmin(w, weekKey) {
   </div>`;
 }
 
+
+// ── CHANGE PASSWORD ────────────────────────────────────────────────────────
+function openPwdModal() {
+  document.getElementById('pwdNew').value = '';
+  document.getElementById('pwdConfirm').value = '';
+  document.getElementById('pwdMsg').innerHTML = '';
+  document.getElementById('pwdModal').classList.add('open');
+  setTimeout(() => document.getElementById('pwdNew').focus(), 100);
+}
+function closePwdModal() {
+  document.getElementById('pwdModal').classList.remove('open');
+}
+async function doChangePassword() {
+  const newPwd     = document.getElementById('pwdNew').value;
+  const confirmPwd = document.getElementById('pwdConfirm').value;
+  const msg        = document.getElementById('pwdMsg');
+
+  if (newPwd.length < 8) {
+    msg.innerHTML = '<span style="color:var(--red)">Password must be at least 8 characters</span>';
+    return;
+  }
+  if (newPwd !== confirmPwd) {
+    msg.innerHTML = '<span style="color:var(--red)">Passwords do not match</span>';
+    return;
+  }
+  msg.innerHTML = '<span style="color:var(--muted)">Updating…</span>';
+  const { error } = await _sb.auth.updateUser({ password: newPwd });
+  if (error) {
+    msg.innerHTML = '<span style="color:var(--red)">' + error.message + '</span>';
+  } else {
+    msg.innerHTML = '<span style="color:var(--green)">✓ Password updated successfully</span>';
+    setTimeout(() => closePwdModal(), 1500);
+  }
+}
+
 // ── SUPABASE AUTH ─────────────────────────────────────────────────────────
 async function sbLogin(){
   const email=document.getElementById('sbEmail').value.trim();
@@ -2357,6 +2408,7 @@ async function sbBoot(user){
   const hr=document.querySelector('.header-right');
   if(hr&&!document.getElementById('sbSignOutBtn')){
     const b=document.createElement('button');b.id='sbSignOutBtn';b.textContent='Sign out';b.className='btn-outline';b.style.cssText='margin-left:12px;font-size:12px;cursor:pointer';b.onclick=sbSignOut;hr.appendChild(b);
+    const cpBtn=document.createElement('button');cpBtn.textContent='Change password';cpBtn.className='btn-outline';cpBtn.style.cssText='margin-left:8px;font-size:11px;cursor:pointer;color:var(--muted)';cpBtn.onclick=openPwdModal;hr.appendChild(cpBtn);
     const rb=document.createElement('span');
     const RL={'admin':'CXO','executive':'CXO','hrbp':'Lead'};
     const RC={'admin':'color:#60a5fa;background:rgba(96,165,250,.12)','executive':'color:#60a5fa;background:rgba(96,165,250,.12)','hrbp':'color:#34d399;background:rgba(52,211,153,.1)'};
@@ -2381,6 +2433,27 @@ async function sbSignOut(){await _sb.auth.signOut();document.getElementById('das
   <div class="cm-drawer" id="cmDrawer">
     <button class="cm-close" onclick="document.getElementById('cmOverlay').classList.remove('open')">&times;</button>
     <div class="cm-body" id="cmContent"></div>
+  </div>
+</div>
+
+
+<div class="pwd-modal" id="pwdModal">
+  <div class="pwd-card">
+    <div class="pwd-title">Change Password</div>
+    <div class="pwd-sub">Enter your new password below</div>
+    <div class="pwd-field">
+      <label>New Password</label>
+      <input type="password" id="pwdNew" placeholder="Min 8 characters" autocomplete="new-password">
+    </div>
+    <div class="pwd-field">
+      <label>Confirm Password</label>
+      <input type="password" id="pwdConfirm" placeholder="Re-enter new password" autocomplete="new-password">
+    </div>
+    <div class="pwd-msg" id="pwdMsg"></div>
+    <div class="pwd-btns">
+      <button class="pwd-btn-save" onclick="doChangePassword()">Update Password</button>
+      <button class="pwd-btn-cancel" onclick="closePwdModal()">Cancel</button>
+    </div>
   </div>
 </div>
 
