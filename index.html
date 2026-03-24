@@ -2400,15 +2400,16 @@ function renderFnF() {
   const STATUS_COLOR = {'Priority':'var(--red)','Pending ':'var(--amber)','Payment not cleared -(Bank account Issue)':'#f59e0b','Paid ':'var(--green)'};
 
   const regions = ['All','North','South','East','West'];
-  const statuses = ['Pending','Priority','Bank Issue','Paid','All'];
+  const statuses = ['Pending','Priority','Paid','All'];
 
   // Filter data
   let data = [...FNF_DATA];
   if(_fnfRegion !== 'All') data = data.filter(r => r.region === _fnfRegion);
-  if(_fnfStatus === 'Pending') data = data.filter(r => !r.paid);
+  if(_fnfStatus === 'Pending') data = data.filter(r => !r.paid && !r.status.includes('Bank'));
   else if(_fnfStatus === 'Priority') data = data.filter(r => r.status === 'Priority' && !r.paid);
-  else if(_fnfStatus === 'Bank Issue') data = data.filter(r => r.status.includes('Bank'));
   else if(_fnfStatus === 'Paid') data = data.filter(r => r.paid);
+  // Exclude bank issues from all views (tracked separately)
+  data = data.filter(r => !r.status.includes('Bank'));
   // Sort
   if(_fnfSort === 'days_desc') data.sort((a,b) => b.days - a.days);
   else if(_fnfSort === 'band') data.sort((a,b) => (BAND_ORDER[b.band]||0)-(BAND_ORDER[a.band]||0));
@@ -2447,7 +2448,7 @@ function renderFnF() {
     </div>
 
     <!-- KPI Strip -->
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
       <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:10px;padding:14px;text-align:center">
         <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--red);line-height:1">${critical.length}</div>
         <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px">Critical 90+ Days</div>
@@ -2456,10 +2457,7 @@ function renderFnF() {
         <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--amber);line-height:1">${priority.length}</div>
         <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px">Priority Cases</div>
       </div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid #f59e0b;border-radius:10px;padding:14px;text-align:center">
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:#f59e0b;line-height:1">${bankIssue.length}</div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px">Bank Issues</div>
-      </div>
+
       <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--accent);border-radius:10px;padding:14px;text-align:center">
         <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--accent);line-height:1">${pending.length}</div>
         <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px">Total Pending</div>
@@ -2481,7 +2479,7 @@ function renderFnF() {
           <div style="display:flex;gap:12px">
             <div style="text-align:center"><div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--text);line-height:1">${r.total}</div><div style="font-size:9px;color:var(--muted)">Pending</div></div>
             <div style="text-align:center"><div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--red);line-height:1">${r.critical}</div><div style="font-size:9px;color:var(--muted)">Critical</div></div>
-            <div style="text-align:center"><div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:#f59e0b;line-height:1">${r.bank}</div><div style="font-size:9px;color:var(--muted)">Bank</div></div>
+
           </div>
         </div>`).join('')}
     </div>
@@ -2547,7 +2545,7 @@ function renderFnF() {
         }).join('')
       }
     </div>
-    <div style="margin-top:10px;font-size:11px;color:var(--muted)">Showing ${data.length} records · Click region cards to filter · Designation and location available once ZingHR API is integrated</div>
+    <div style="margin-top:10px;font-size:11px;color:var(--muted)">Showing ${data.length} records · Click region cards to filter · Bank account issue cases (${FNF_DATA.filter(r=>r.status.includes('Bank')).length} cases) tracked separately by HR Ops · Designation and location available once ZingHR API is integrated</div>
   </div>`;
 }
 
