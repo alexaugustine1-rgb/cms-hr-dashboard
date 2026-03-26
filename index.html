@@ -1660,7 +1660,6 @@ function renderWorkforce() {
   o+=renderAcctTable(plat,'Platinum','tier-plat');
   o+=renderAcctTable(gld,'Gold','tier-gold');
   if(gldZ.length>0){o+='<div style="font-size:11px;color:var(--muted);margin-bottom:16px">Gold accounts with no ZingHR match: '+gldZ.map(function(a){return a.name;}).join(', ')+'</div>';}
-  // ── HIRING TREND
   return o;
 }
 
@@ -1786,7 +1785,7 @@ function render() {
     'overview': renderOverview,
     'ta': renderTA,
     'hrbp': renderHRBP,
-    'ops': renderOps,
+    'ops': function(w,pw){ renderOps(w,pw); return ''; },
     'ld': renderLD,
     'risks': renderRisks,
     'workforce': function(w,pw){ return renderWorkforce(); },
@@ -4021,8 +4020,13 @@ function renderTA_Commitments(el) {
     return;
   }
 
-  // Get critical reqs from TA_ACTIVE_REQS
-  var critReqs = (TA_ACTIVE_REQS||[]).filter(function(r){return r.tat>45;});
+  // Get critical reqs from TA_ACTIVE_REQS — filter by region for regional TA
+  var _taUserRegion = (_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India')?_sbRole.region:null;
+  var critReqs = (TA_ACTIVE_REQS||[]).filter(function(r){
+    if(r.tat<=45) return false;
+    if(_taUserRegion) return r.region===_taUserRegion;
+    return true;
+  });
   critReqs.sort(function(a,b){return b.tat-a.tat;});
 
   // Build recruiter commitment rows
@@ -4359,13 +4363,48 @@ function showSidebarAfterLogin(role) {
   if(submitBtn) submitBtn.style.display = '';
   if(mobSubmit) mobSubmit.style.display = '';
   if(role === 'admin' && adminGroup) adminGroup.style.display = '';
-  // Auto-scope region filters to HRBP's own region
-  if(role === 'hrbp' && typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region) {
+  // Auto-scope region filters to user's own region (non-Pan India)
+  if(role === 'hrbp' && typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') {
     var _r = _sbRole.region;
     if(typeof _odRegion !== 'undefined') _odRegion = _r;
     if(typeof _resRegion !== 'undefined') _resRegion = _r;
     if(typeof _fnfRegion !== 'undefined') _fnfRegion = _r;
     if(typeof _absentFilter !== 'undefined') _absentFilter.region = _r;
+    if(typeof _taRegion !== 'undefined') _taRegion = _r;  // TA pipeline
+  }
+  // Function-type based sidebar visibility
+  if(role === 'hrbp' && typeof _sbRole !== 'undefined' && _sbRole) {
+    var fn = _sbRole.function_type;
+    // TA members: hide HRBP-specific sections from sidebar
+    if(fn === 'ta') {
+      var hideLabels = ['HRBP Connects','Long Absenteeism','OD / WFH','FnF Tracker','HR Ops & Payroll','L&D'];
+      document.querySelectorAll('.sidebar-item').forEach(function(el) {
+        var lbl = el.querySelector('.item-label');
+        if(lbl && hideLabels.indexOf(lbl.textContent.trim()) >= 0) el.style.display = 'none';
+      });
+    }
+    // HR Ops: hide HRBP/TA specific sections
+    if(fn === 'hrops' || fn === 'payroll') {
+      var hideHROps = ['HRBP Connects','Long Absenteeism','OD / WFH','Resignation & Backfill'];
+      document.querySelectorAll('.sidebar-item').forEach(function(el) {
+        var lbl = el.querySelector('.item-label');
+        if(lbl && hideHROps.indexOf(lbl.textContent.trim()) >= 0) el.style.display = 'none';
+      });
+    }
+    // Admin/Facilities: hide HR-specific
+    if(fn === 'admin') {
+      var hideAdmin = ['HRBP Connects','Long Absenteeism','OD / WFH','Resignation & Backfill',
+        'HR Ops & Payroll','FnF Tracker','L&D','TA Pipeline','TA Commitments'];
+      document.querySelectorAll('.sidebar-item').forEach(function(el) {
+        var lbl = el.querySelector('.item-label');
+        if(lbl && hideAdmin.indexOf(lbl.textContent.trim()) >= 0) el.style.display = 'none';
+      });
+    }
+    // Hide empty sidebar groups
+    document.querySelectorAll('.sidebar-group').forEach(function(g){
+      var vis = Array.from(g.querySelectorAll('.sidebar-item')).some(function(i){return i.style.display!=='none';});
+      if(!vis) g.style.display='none';
+    });
   }
 }
 
