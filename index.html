@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -447,6 +446,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <button class="tab-btn" onclick="switchTab('ops',this)">⚙️ HR Ops & Payroll</button>
   <button class="tab-btn" onclick="switchTab('resignation',this)">🔄 Resignation &amp; Backfill</button>
   <button class="tab-btn" onclick="switchTab('absenteeism',this)">⚠️ Long Absenteeism</button>
+  <button class="tab-btn" onclick="switchTab('actioncentre',this)">✅ Action Centre</button>
   <button class="tab-btn" onclick="switchTab('od',this)">📊 OD Intelligence</button>
   <button class="tab-btn" onclick="switchTab('tapipeline',this)">🎯 TA Pipeline</button>
   
@@ -476,6 +476,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-users" class="tab-content"></div>
   <div id="tab-resignation" class="tab-content"></div>
   <div id="tab-absenteeism" class="tab-content"></div>
+  <div id="tab-actioncentre" class="tab-content"></div>
   <div id="tab-od" class="tab-content"></div>
   <div id="tab-tapipeline" class="tab-content"></div>
   
@@ -1896,6 +1897,7 @@ function render() {
     'tapipeline': function(){ return renderTAPipeline(); },
     'fnf': function(){ return renderFnF(); },
     'absenteeism': function(){ var el=document.getElementById('tab-absenteeism'); renderAbsenteeism(el); return ''; },
+    'actioncentre': function(){ var el=document.getElementById('tab-actioncentre'); renderActionCentre(el); return ''; },
   };
 
   Object.entries(renders).forEach(([tab, fn]) => {
@@ -1929,65 +1931,533 @@ function switchTab(id, btn) {
 
 // ─── INIT ─────────────────────────────────────────────────────
 // ── INIT ──────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// LONG ABSENTEEISM TRACKER — Supabase-backed, live status updates
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _absentCases = [];
+var _absentFilter = { region: 'All', tier: 'All', status: 'All' };
+
+const ABSENT_STATUSES = [
+  { val: 'Uncontacted',              col: '#f87171', bg: 'rgba(248,113,113,.15)' },
+  { val: 'Under Investigation',      col: '#fbbf24', bg: 'rgba(251,191,36,.15)' },
+  { val: 'Missed Punch',             col: '#60a5fa', bg: 'rgba(96,165,250,.15)' },
+  { val: 'OD Not Regularised',       col: '#60a5fa', bg: 'rgba(96,165,250,.15)' },
+  { val: 'On Leave (Unplanned)',      col: '#60a5fa', bg: 'rgba(96,165,250,.15)' },
+  { val: 'Medical / Emergency',      col: '#2dd4bf', bg: 'rgba(45,212,191,.15)' },
+  { val: 'Warning Letter Issued',    col: '#fb923c', bg: 'rgba(251,146,60,.15)' },
+  { val: 'Show Cause Notice Issued', col: '#f97316', bg: 'rgba(249,115,22,.15)' },
+  { val: 'Absconding — eSep Initiated', col: '#a78bfa', bg: 'rgba(167,139,250,.15)' },
+  { val: 'Resolved — Returned',      col: '#4ade80', bg: 'rgba(74,222,128,.15)' },
+  { val: 'Resolved — Resigned',      col: '#4ade80', bg: 'rgba(74,222,128,.15)' },
+];
+
+function absentStatusStyle(s) {
+  const found = ABSENT_STATUSES.find(x => x.val === s);
+  return found || { col: 'var(--muted)', bg: 'rgba(100,116,139,.15)' };
+}
+
+async function loadAbsentCases() {
+  const el = document.getElementById('tab-absenteeism');
+  if (!el) return;
+  try {
+    const { data, error } = await _sb
+      .from('absent_cases')
+      .select('*')
+      .not('status', 'in', '("Resolved — Returned","Resolved — Resigned")')
+      .order('consecutive_absent', { ascending: false });
+    if (error) throw error;
+    _absentCases = data || [];
+    renderAbsenteeism(el);
+  } catch(e) {
+    console.error('[loadAbsentCases]', e);
+    if (el) el.innerHTML = '<div style="padding:40px;color:var(--muted)">Failed to load attendance data. ' + e.message + '</div>';
+  }
+}
+
+async function updateAbsentStatus(id, newStatus, note) {
+  try {
+    const { error } = await _sb.from('absent_cases').update({
+      status: newStatus,
+      status_note: note || '',
+      status_updated_by: _sbUser?.user_metadata?.full_name || _sbUser?.email || 'Unknown',
+      status_updated_at: new Date().toISOString(),
+      esep_initiated: newStatus === 'Absconding — eSep Initiated',
+    }).eq('id', id);
+    if (error) throw error;
+    // Update local cache
+    const idx = _absentCases.findIndex(c => c.id === id);
+    if (idx >= 0) {
+      _absentCases[idx].status = newStatus;
+      _absentCases[idx].status_note = note || '';
+    }
+    renderAbsenteeism(document.getElementById('tab-absenteeism'));
+  } catch(e) {
+    alert('Update failed: ' + e.message);
+  }
+}
+
+function openAbsentModal(id) {
+  const c = _absentCases.find(x => x.id === id);
+  if (!c) return;
+  const st = absentStatusStyle(c.status);
+  const opts = ABSENT_STATUSES.map(s =>
+    `<option value="${s.val}" ${c.status===s.val?'selected':''}>${s.val}</option>`
+  ).join('');
+  const modal = document.createElement('div');
+  modal.id = 'absentModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:28px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">Update Status</div>
+          <div style="font-size:16px;font-weight:600;color:var(--text);margin-top:2px">${esc(c.emp_name)}</div>
+          <div style="font-size:12px;color:var(--muted)">${esc(c.emp_code)} · ${esc(c.designation)} · ${esc(c.customer)}</div>
+        </div>
+        <button onclick="document.getElementById('absentModal').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;padding:12px;background:var(--surface3);border-radius:8px;font-size:12px">
+        <div><span style="color:var(--muted)">Absent since:</span> <strong style="color:var(--red)">${esc(c.absent_since||'Unknown')}</strong></div>
+        <div><span style="color:var(--muted)">Consecutive days:</span> <strong style="color:var(--red)">${c.consecutive_absent}d</strong></div>
+        <div><span style="color:var(--muted)">Region:</span> <strong>${esc(c.region)}</strong></div>
+        <div><span style="color:var(--muted)">Manager:</span> <strong>${esc((c.manager_name||'').replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,''))}</strong></div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">Status</label>
+        <select id="absentStatusSel" style="width:100%;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">
+          ${opts}
+        </select>
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">Note / Action taken</label>
+        <textarea id="absentNoteTA" placeholder="Brief note — what was discussed, what action was taken…" style="width:100%;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;min-height:70px;resize:vertical;box-sizing:border-box">${esc(c.status_note||'')}</textarea>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onclick="document.getElementById('absentModal').remove()" style="padding:8px 20px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--muted);cursor:pointer;font-size:13px">Cancel</button>
+        <button onclick="updateAbsentStatus('${id}',document.getElementById('absentStatusSel').value,document.getElementById('absentNoteTA').value);document.getElementById('absentModal').remove()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:13px;font-weight:600">Save Status</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
 function renderAbsenteeism(el) {
   if (!el) el = document.getElementById('tab-absenteeism');
   if (!el) return;
 
-  var data = CMS_ABSENT_DATA.slice();
-  var S = CMS_ABSENT_SUMMARY;
+  // Use Supabase data if loaded, else show loading
+  if (_absentCases.length === 0 && typeof _sbUser !== 'undefined' && _sbUser) {
+    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">⏳</div>Loading attendance data from Supabase…</div>';
+    loadAbsentCases();
+    return;
+  }
 
-  var rfBtns = ['All','North','South','East','West'].map(function(v){
-    return _filterBtn(v, _abRegion===v, "_abRegion='"+v+"';renderAbsenteeism()");
+  let data = _absentCases.slice();
+  if (_absentFilter.region !== 'All') data = data.filter(r => r.region === _absentFilter.region);
+  if (_absentFilter.tier !== 'All') data = data.filter(r => r.account_tier === _absentFilter.tier);
+  if (_absentFilter.status !== 'All') data = data.filter(r => r.status === _absentFilter.status);
+
+  // KPI cards
+  const urgent = _absentCases.filter(r => r.status === 'Uncontacted').length;
+  const critical = _absentCases.filter(r => r.consecutive_absent >= 21).length;
+  const platGold = _absentCases.filter(r => r.account_tier === 'Platinum' || r.account_tier === 'Gold').length;
+  const warned = _absentCases.filter(r => r.status === 'Warning Letter Issued' || r.status === 'Show Cause Notice Issued').length;
+  const esepInitiated = _absentCases.filter(r => r.esep_initiated).length;
+
+  const kpiHTML = `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px">
+    ${[['Open Cases',_absentCases.length,'var(--accent)'],['Uncontacted',urgent,'var(--red)'],['Critical >21d',critical,'#f97316'],['Plat/Gold',platGold,'#a78bfa'],['eSep Raised',esepInitiated,'var(--green)']].map(([l,v,c])=>`
+    <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:12px;text-align:center">
+      <div style="font-family:Bebas_Neue,sans-serif;font-size:30px;color:${c};line-height:1">${v}</div>
+      <div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:3px">${l}</div>
+    </div>`).join('')}
+  </div>`;
+
+  // Filters
+  function fbtn(v, active, key, val) {
+    return `<button onclick="_absentFilter.${key}='${val}';renderAbsenteeism()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:${active?'700':'500'};border:1px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'none'};color:${active?'var(--bg)':'var(--muted)'};cursor:pointer">${v}</button>`;
+  }
+  const rf = ['All','North','South','East','West'].map(v=>fbtn(v,_absentFilter.region===v,'region',v)).join('');
+  const tf = ['All','Platinum','Gold','Regular'].map(v=>fbtn(v,_absentFilter.tier===v,'tier',v)).join('');
+  const sf = ['All','Uncontacted','Under Investigation','Warning Letter Issued','Absconding — eSep Initiated'].map(v=>fbtn(v,_absentFilter.status===v,'status',v)).join('');
+
+  // Rows
+  const rows = data.map(c => {
+    const st = absentStatusStyle(c.status);
+    const tierColor = c.account_tier==='Platinum'?'#a78bfa':c.account_tier==='Gold'?'#f59e0b':'transparent';
+    const dayColor = c.consecutive_absent>=30?'#dc2626':c.consecutive_absent>=21?'var(--red)':c.consecutive_absent>=14?'#f97316':'var(--amber)';
+    const isAdmin = typeof _sbUserRole !== 'undefined' && (_sbUserRole === 'admin' || _sbUserRole === 'executive');
+    return `<div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.25);font-size:11px;align-items:center;border-left:2px solid ${tierColor}">
+      <div>
+        <div style="font-weight:500;color:var(--text)">${esc(c.emp_name.split(' ').slice(0,2).join(' '))}</div>
+        <div style="font-size:10px;color:var(--muted2)">${esc(c.emp_code)}</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted)">${esc((c.customer||'').substring(0,30))}</div>
+        <div style="font-size:10px;color:var(--muted2)">${esc(c.designation||'').substring(0,30)}</div>
+      </div>
+      <div style="font-size:10px;color:var(--muted2)">${esc((c.manager_name||'').replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').substring(0,22))}</div>
+      <div style="font-size:11px;color:var(--muted)">${esc(c.region)}</div>
+      <div style="font-weight:700;color:${dayColor}">${c.consecutive_absent}d</div>
+      <div>
+        <span style="font-size:10px;padding:3px 8px;border-radius:20px;background:${st.bg};color:${st.col};font-weight:600;white-space:nowrap">${esc(c.status)}</span>
+        ${c.status_note?`<div style="font-size:9px;color:var(--muted2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${esc(c.status_note)}</div>`:''}
+      </div>
+      <div><button onclick="openAbsentModal('${c.id}')" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:11px;cursor:pointer">Update</button></div>
+    </div>`;
   }).join('');
-  var typeBtns = ['All','M1-Initiated','HR-Initiated'].map(function(v){
-    return _filterBtn(v, _abType===v, "_abType='"+v+"';renderAbsenteeism()");
-  }).join('');
 
-  if (_abRegion !== 'All') data = data.filter(function(r){return r.region===_abRegion;});
-  if (_abType !== 'All') data = data.filter(function(r){return r.reason===_abType;});
-
-  var rows = data.map(function(r){
-    var tierColor = r.tier==='Platinum'?'var(--purple)':r.tier==='Gold'?'var(--amber)':'var(--muted)';
-    var highlight = (r.tier==='Platinum'||r.tier==='Gold') ? 'border-left:3px solid '+tierColor+';padding-left:8px;' : '';
-    var typeColor = r.reason==='M1-Initiated' ? 'var(--amber)' : 'var(--red)';
-    return '<div style="display:grid;grid-template-columns:140px 1fr 100px 90px 90px 100px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.3);font-size:12px;align-items:center;'+highlight+'">'
-      +'<div style="font-weight:500;color:var(--text)">'+esc(r.name.replace('Mr.','').replace('Ms.','').replace('Mrs.','').trim())+'</div>'
-      +'<div><div style="font-size:11px;color:var(--muted)">'+esc(r.customer||'—')+'</div><div style="margin-top:2px">'+tierBadge(r.tier)+'</div></div>'
-      +'<div style="font-size:11px;color:var(--muted)">'+esc(r.region)+'</div>'
-      +'<div style="font-size:11px;color:var(--muted2)">'+esc(r.desig)+'</div>'
-      +'<div style="font-size:11px;color:var(--muted)">'+esc(r.resign_date)+'</div>'
-      +'<div><span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(0,0,0,.2);color:'+typeColor+'">'+esc(r.reason)+'</span></div>'
-      +'</div>';
-  }).join('');
-
-  el.innerHTML = '<div style="padding:28px 36px;max-width:1200px">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
-    +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Employee Conduct Intelligence</div>'
-    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:28px;letter-spacing:1px;color:var(--text);margin-top:2px">Long Absenteeism &amp; Unauthorised Absence</div></div>'
-    +'<div style="font-size:11px;color:var(--muted)">FnF In Process / Initiated &middot; Pending Clearance</div></div>'
-    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'
-    +[['Pending Cases',S.total,'var(--red)'],['M1-Initiated',S.m1_count,'var(--amber)'],['HR-Initiated',S.hr_count,'var(--accent)'],['YTD 2026 Exits',S.ytd_2026,'var(--muted)']].map(function(a){
-      return '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+a[2]+';border-radius:10px;padding:14px;text-align:center">'
-        +'<div style="font-family:Bebas_Neue,sans-serif;font-size:34px;color:'+a[2]+';line-height:1">'+a[1]+'</div>'
-        +'<div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-top:4px">'+a[0]+'</div></div>';
-    }).join('')+'</div>'
-    +'<div style="background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.25);border-radius:10px;padding:12px 16px;margin-bottom:16px">'
-    +'<div style="font-size:12px;font-weight:500;color:#f87171;margin-bottom:3px">⚠ What is Long Absenteeism?</div>'
-    +'<div style="font-size:11px;color:var(--muted)">Employees who stopped reporting without notice. M1-Initiated = manager raised the eSep. HR-Initiated = HR raised it. Cases shown below are still in FnF flow and not yet cleared. Historical total (all time): 1,397 exits via this route — 711 M1, 686 HR.</div></div>'
-    +'<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'
-    +'<span style="font-size:11px;color:var(--muted)">Region:</span>'+rfBtns
-    +'<span style="width:1px;height:18px;background:var(--border);margin:0 4px"></span>'
-    +'<span style="font-size:11px;color:var(--muted)">Type:</span>'+typeBtns+'</div>'
-    +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
-    +'<div style="display:grid;grid-template-columns:140px 1fr 100px 90px 90px 100px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['Employee','Account','Region','Designation','Resign Date','Type'].map(function(h){
-      return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
-    }).join('')+'</div>'
-    +(rows || '<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>')+'</div>'
-    +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+data.length+' cases &middot; Sorted by tier then region</div>'
-    +'</div>';
+  el.innerHTML = `<div style="padding:24px 32px;max-width:1280px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Employee Conduct Intelligence</div>
+        <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">Long Absenteeism Tracker — No eSep Raised</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted2)">Source: ZingHR Attendance · Feb 1 – Mar 25 2026 · Active employees only · ≥7 consecutive working days</div>
+    </div>
+    ${kpiHTML}
+    <div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:var(--amber)">
+      ⚠ These employees are still <strong>Active</strong> in ZingHR with no eSep initiated. HRBP must investigate and update status. Once "Absconding — eSep Initiated" is selected, the case moves to Resignation &amp; Backfill automatically.
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;color:var(--muted)">Region:</span>${rf}
+      <span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>
+      <span style="font-size:11px;color:var(--muted)">Tier:</span>${tf}
+      <span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>
+      <span style="font-size:11px;color:var(--muted)">Status:</span>${sf}
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px;padding:7px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">
+        ${['Employee','Account / Role','Manager','Region','Days','Status','Action'].map(h=>`<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">${h}</div>`).join('')}
+      </div>
+      ${rows || '<div style="padding:40px;text-align:center;color:var(--muted)">No cases match current filters</div>'}
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:var(--muted2)">Showing ${data.length} of ${_absentCases.length} open cases · Left border: purple = Platinum, amber = Gold</div>
+  </div>`;
 }
-var _abRegion='All', _abType='All';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ACTION CENTRE — Task management for planned actions, risks & escalations
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _actionTasks = [];
+var _taskFilter = { type: 'all', status: 'open' };
+
+const TASK_TYPES = { planned_action: '📋 Planned', risk: '⚠ Risk', escalation: '🔺 Escalation' };
+const FUNCTION_AREAS = ['HRBP','TA','HR Ops','Payroll','Admin','Facilities','L&D','Other'];
+const TASK_STATUSES = ['Open','In Progress','Done','Rolled Over','Closed','Cancelled'];
+
+const TASK_STATUS_STYLE = {
+  'Open':        { col: 'var(--red)',    bg: 'rgba(248,113,113,.12)' },
+  'In Progress': { col: 'var(--amber)',  bg: 'rgba(251,191,36,.12)' },
+  'Done':        { col: 'var(--green)',  bg: 'rgba(74,222,128,.12)' },
+  'Rolled Over': { col: '#94a3b8',       bg: 'rgba(148,163,184,.12)' },
+  'Closed':      { col: 'var(--muted)',  bg: 'rgba(100,116,139,.1)' },
+  'Cancelled':   { col: 'var(--muted2)', bg: 'rgba(100,116,139,.07)' },
+};
+const SEVERITY_STYLE = {
+  'Critical': 'color:#dc2626;font-weight:700',
+  'High':     'color:var(--red)',
+  'Medium':   'color:var(--amber)',
+  'Low':      'color:var(--muted)',
+};
+
+async function loadActionTasks() {
+  const el = document.getElementById('tab-actioncentre');
+  if (!el) return;
+  try {
+    const { data, error } = await _sb
+      .from('action_tasks')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    _actionTasks = data || [];
+    renderActionCentre(el);
+  } catch(e) {
+    console.error('[loadActionTasks]', e);
+    if (el) el.innerHTML = '<div style="padding:40px;color:var(--muted)">Failed to load tasks: ' + e.message + '</div>';
+  }
+}
+
+async function saveTask(taskData) {
+  try {
+    const { data, error } = await _sb.from('action_tasks').insert([taskData]).select();
+    if (error) throw error;
+    _actionTasks.unshift(data[0]);
+    renderActionCentre(document.getElementById('tab-actioncentre'));
+    return data[0];
+  } catch(e) {
+    alert('Save failed: ' + e.message);
+    return null;
+  }
+}
+
+async function updateTask(id, updates) {
+  try {
+    const { error } = await _sb.from('action_tasks').update(updates).eq('id', id);
+    if (error) throw error;
+    const idx = _actionTasks.findIndex(t => t.id === id);
+    if (idx >= 0) Object.assign(_actionTasks[idx], updates);
+    renderActionCentre(document.getElementById('tab-actioncentre'));
+  } catch(e) {
+    alert('Update failed: ' + e.message);
+  }
+}
+
+async function rollOverTasks(weekKey) {
+  // Find all Open/In Progress tasks from previous weeks and create carry-forwards
+  const toBringForward = _actionTasks.filter(t =>
+    t.status !== 'Done' && t.status !== 'Closed' && t.status !== 'Cancelled' &&
+    t.status !== 'Rolled Over' && t.week_key !== weekKey
+  );
+  for (const t of toBringForward) {
+    // Mark original as Rolled Over
+    await _sb.from('action_tasks').update({ status: 'Rolled Over' }).eq('id', t.id);
+    // Create new carry-forward task
+    await _sb.from('action_tasks').insert([{
+      task_type: t.task_type,
+      function_area: t.function_area,
+      severity: t.severity,
+      title: t.title,
+      description: t.description,
+      week_key: weekKey,
+      region: t.region,
+      created_by: t.created_by,
+      created_by_name: t.created_by_name,
+      assigned_to: t.assigned_to,
+      assigned_to_name: t.assigned_to_name,
+      status: 'Open',
+      status_note: '↩ Carried forward from ' + t.week_key,
+      due_date: t.due_date,
+      prev_task_id: t.id,
+      rollover_count: (t.rollover_count || 0) + 1,
+    }]);
+  }
+  await loadActionTasks();
+}
+
+function openNewTaskModal(prefillType) {
+  const isAdmin = typeof _sbUserRole !== 'undefined' && (_sbUserRole === 'admin' || _sbUserRole === 'executive');
+  const typeOpts = Object.entries(TASK_TYPES).map(([k,v]) =>
+    `<option value="${k}" ${k===(prefillType||'planned_action')?'selected':''}>${v}</option>`
+  ).join('');
+  const fnOpts = FUNCTION_AREAS.map(f => `<option value="${f}">${f}</option>`).join('');
+  const sevOpts = ['Low','Medium','High','Critical'].map(s => `<option value="${s}" ${s==='Medium'?'selected':''}>${s}</option>`).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'taskModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:28px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5);max-height:90vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">New Task</div>
+        <button onclick="document.getElementById('taskModal').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div>
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Type</label>
+          <select id="ntType" style="width:100%;padding:7px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">${typeOpts}</select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Function Area</label>
+          <select id="ntArea" style="width:100%;padding:7px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">${fnOpts}</select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Severity / Priority</label>
+          <select id="ntSev" style="width:100%;padding:7px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">${sevOpts}</select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Due Date</label>
+          <input type="date" id="ntDue" style="width:100%;padding:7px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box">
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Title *</label>
+        <input type="text" id="ntTitle" placeholder="Short, clear task title…" style="width:100%;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Description</label>
+        <textarea id="ntDesc" placeholder="Context, background, what action is needed…" style="width:100%;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;min-height:80px;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
+      ${isAdmin ? `<div style="margin-bottom:12px;padding:10px 14px;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);border-radius:8px">
+        <label style="font-size:10px;font-weight:600;color:#a78bfa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Assign To (Admin only — for escalations)</label>
+        <input type="text" id="ntAssign" placeholder="Team member name…" style="width:100%;padding:7px 10px;background:var(--surface3);border:1px solid rgba(167,139,250,.3);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box">
+      </div>` : ''}
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onclick="document.getElementById('taskModal').remove()" style="padding:8px 20px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--muted);cursor:pointer;font-size:13px">Cancel</button>
+        <button onclick="submitNewTask()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:13px;font-weight:600">Create Task</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function submitNewTask() {
+  const title = document.getElementById('ntTitle').value.trim();
+  if (!title) { alert('Title is required'); return; }
+  const isAdmin = typeof _sbUserRole !== 'undefined' && (_sbUserRole === 'admin' || _sbUserRole === 'executive');
+  const assignEl = document.getElementById('ntAssign');
+  const task = {
+    task_type: document.getElementById('ntType').value,
+    function_area: document.getElementById('ntArea').value,
+    severity: document.getElementById('ntSev').value,
+    title: title,
+    description: document.getElementById('ntDesc').value.trim(),
+    week_key: currentWeek || 'W11-2026',
+    region: typeof _sbUserRegion !== 'undefined' ? _sbUserRegion : '',
+    created_by: _sbUser?.id,
+    created_by_name: _sbUser?.user_metadata?.full_name || _sbUser?.email || 'Unknown',
+    assigned_to_name: (isAdmin && assignEl) ? assignEl.value.trim() : null,
+    status: 'Open',
+    due_date: document.getElementById('ntDue').value || null,
+  };
+  document.getElementById('taskModal').remove();
+  await saveTask(task);
+}
+
+function openTaskUpdateModal(id) {
+  const t = _actionTasks.find(x => x.id === id);
+  if (!t) return;
+  const stOpts = TASK_STATUSES.map(s => `<option value="${s}" ${s===t.status?'selected':''}>${s}</option>`).join('');
+  const modal = document.createElement('div');
+  modal.id = 'taskUpdateModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:600;color:var(--text)">${esc(t.title)}</div>
+        <button onclick="document.getElementById('taskUpdateModal').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">✕</button>
+      </div>
+      ${t.description?`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;padding:10px;background:var(--surface3);border-radius:6px">${esc(t.description)}</div>`:''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;font-size:11px;color:var(--muted2)">
+        <div>Type: <strong>${TASK_TYPES[t.task_type]||t.task_type}</strong></div>
+        <div>Area: <strong>${t.function_area||'—'}</strong></div>
+        <div>Created: <strong>${(t.created_at||'').substring(0,10)}</strong></div>
+        <div>Rollover count: <strong>${t.rollover_count||0}</strong></div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Status</label>
+        <select id="tuStatus" style="width:100%;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px">${stOpts}</select>
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Update note</label>
+        <textarea id="tuNote" placeholder="What progress was made? What's blocking?" style="width:100%;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;min-height:60px;resize:vertical;box-sizing:border-box">${esc(t.status_note||'')}</textarea>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onclick="document.getElementById('taskUpdateModal').remove()" style="padding:8px 20px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--muted);cursor:pointer;font-size:13px">Cancel</button>
+        <button onclick="updateTask('${id}',{status:document.getElementById('tuStatus').value,status_note:document.getElementById('tuNote').value});document.getElementById('taskUpdateModal').remove()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:13px;font-weight:600">Update</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function renderActionCentre(el) {
+  if (!el) el = document.getElementById('tab-actioncentre');
+  if (!el) return;
+
+  if (_actionTasks.length === 0 && typeof _sbUser !== 'undefined' && _sbUser) {
+    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">⏳</div>Loading tasks…</div>';
+    loadActionTasks();
+    return;
+  }
+
+  const open = _actionTasks.filter(t => t.status === 'Open' || t.status === 'In Progress');
+  const planned = open.filter(t => t.task_type === 'planned_action');
+  const risks = open.filter(t => t.task_type === 'risk');
+  const escalations = open.filter(t => t.task_type === 'escalation');
+  const overdue = open.filter(t => t.due_date && new Date(t.due_date) < new Date());
+  const done = _actionTasks.filter(t => t.status === 'Done').slice(0, 5);
+  const rolledOver = _actionTasks.filter(t => t.rollover_count > 0 && t.status !== 'Done' && t.status !== 'Closed');
+
+  function taskCard(t) {
+    const st = TASK_STATUS_STYLE[t.status] || { col: 'var(--muted)', bg: 'rgba(100,116,139,.1)' };
+    const isOverdue = t.due_date && new Date(t.due_date) < new Date() && t.status !== 'Done' && t.status !== 'Closed';
+    const sevStyle = SEVERITY_STYLE[t.severity] || '';
+    const rollBadge = t.rollover_count > 0 ? `<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(148,163,184,.15);color:#94a3b8">↩${t.rollover_count}x</span>` : '';
+    return `<div style="background:var(--surface2);border:1px solid ${isOverdue?'rgba(248,113,113,.4)':' var(--border)'};border-radius:8px;padding:12px 14px;margin-bottom:8px${isOverdue?';box-shadow:0 0 0 1px rgba(248,113,113,.2)':''}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.4">${esc(t.title)}</div>
+        <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+          ${rollBadge}
+          <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${st.bg};color:${st.col};font-weight:600;white-space:nowrap">${t.status}</span>
+        </div>
+      </div>
+      ${t.description?`<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${esc(t.description.substring(0,120))}${t.description.length>120?'…':''}</div>`:''}
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:10px;padding:1px 7px;border-radius:4px;background:rgba(96,165,250,.12);color:#60a5fa">${t.function_area||'—'}</span>
+        ${t.severity?`<span style="font-size:10px;${sevStyle}">${t.severity}</span>`:''}
+        ${t.due_date?`<span style="font-size:10px;color:${isOverdue?'var(--red)':'var(--muted2)'}">Due ${t.due_date}</span>`:''}
+        ${t.assigned_to_name?`<span style="font-size:10px;color:#a78bfa">→ ${esc(t.assigned_to_name)}</span>`:''}
+        ${t.status_note?`<span style="font-size:10px;color:var(--muted2);font-style:italic">${esc(t.status_note.substring(0,50))}</span>`:''}
+        <button onclick="openTaskUpdateModal('${t.id}')" style="margin-left:auto;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">Update</button>
+      </div>
+    </div>`;
+  }
+
+  const isAdmin = typeof _sbUserRole !== 'undefined' && (_sbUserRole === 'admin' || _sbUserRole === 'executive');
+
+  el.innerHTML = `<div style="padding:24px 32px;max-width:1280px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Team Intelligence</div>
+        <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">Action Centre</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="openNewTaskModal('planned_action')" style="padding:7px 16px;border:1px solid var(--accent);border-radius:8px;background:none;color:var(--accent);font-size:12px;cursor:pointer;font-weight:600">+ Planned Action</button>
+        <button onclick="openNewTaskModal('risk')" style="padding:7px 16px;border:1px solid var(--amber);border-radius:8px;background:none;color:var(--amber);font-size:12px;cursor:pointer;font-weight:600">+ Risk</button>
+        ${isAdmin?`<button onclick="openNewTaskModal('escalation')" style="padding:7px 16px;border:1px solid #a78bfa;border-radius:8px;background:none;color:#a78bfa;font-size:12px;cursor:pointer;font-weight:600">+ Escalation</button>`:''}
+      </div>
+    </div>
+
+    <!-- Summary strip -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
+      ${[['Open Tasks',open.length,'var(--accent)'],['Overdue',overdue.length,'var(--red)'],['Risks Open',risks.length,'var(--amber)'],['Escalations',escalations.length,'#a78bfa'],['Rolled Over',rolledOver.length,'#94a3b8']].map(([l,v,c])=>`
+      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:12px;text-align:center">
+        <div style="font-family:Bebas_Neue,sans-serif;font-size:30px;color:${c};line-height:1">${v}</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:3px">${l}</div>
+      </div>`).join('')}
+    </div>
+
+    <!-- Three columns -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start">
+
+      <!-- Planned Actions -->
+      <div>
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+          📋 Planned Actions <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span>
+        </div>
+        ${overdue.filter(t=>t.task_type==='planned_action').length>0?
+          `<div style="font-size:10px;color:var(--red);margin-bottom:6px">⚠ ${overdue.filter(t=>t.task_type==='planned_action').length} overdue</div>`:''}
+        ${planned.length ? planned.map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open planned actions</div>'}
+      </div>
+
+      <!-- Risks -->
+      <div>
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+          ⚠ Risks <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(251,191,36,.12);color:var(--amber)">${risks.length}</span>
+        </div>
+        ${risks.filter(t=>t.severity==='Critical'||t.severity==='High').length>0?
+          `<div style="font-size:10px;color:var(--red);margin-bottom:6px">🔴 ${risks.filter(t=>t.severity==='Critical'||t.severity==='High').length} high/critical</div>`:''}
+        ${risks.length ? risks.sort((a,b)=>{const o={Critical:0,High:1,Medium:2,Low:3};return (o[a.severity]??3)-(o[b.severity]??3);}).map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open risks</div>'}
+      </div>
+
+      <!-- Escalations (admin-assigned) -->
+      <div>
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+          🔺 Escalations <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${escalations.length}</span>
+          ${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin assigns)</span>':''}
+        </div>
+        ${escalations.length ? escalations.map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open escalations</div>'}
+      </div>
+    </div>
+
+    <!-- Recently Done -->
+    ${done.length?`<div style="margin-top:20px">
+      <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:10px">✓ Recently Completed</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${done.map(taskCard).join('')}</div>
+    </div>`:''}
+  </div>`;
+}
+
 
 function init() {
   const wKeys = WEEK_ORDER.filter(k => WEEKS_DATA[k]);
@@ -2019,6 +2489,8 @@ function switchTab(id, btn) {
   currentTab=id;
   if(id==='upload') { if(el){el.innerHTML=renderUploadTab(); document.getElementById('weeksList').innerHTML=weeksListHTML();} }
   if(id==='hrbp' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadHRBPVisitAlerts, 100); }
+  if(id==='absenteeism' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadAbsentCases, 100); }
+  if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadActionTasks, 100); }
   else if(id==='users') renderUsersTab(el);
   else if(id==='gallery') renderGalleryTab();
   else if(id==='resignation'){const mc=document.getElementById('tab-resignation');if(mc)mc.innerHTML=renderResignation();}
