@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -893,135 +892,224 @@ function extractAgingPositions(weekData) {
 
 // ─── RENDER OVERVIEW ──────────────────────────────────────────
 function renderOverview(w, pw) {
-  const taClosedWow = wowBadge(w.ta_closed, pw.ta_closed);
-  const taOffersWow = wowBadge(w.ta_offers, pw.ta_offers);
-  const hcWow = wowBadge(w.payroll_hc, pw.payroll_hc);
-  const visitsWow = wowBadge(w.hrbp_visits, pw.hrbp_visits);
+  if(!w) return '<div style="padding:60px;text-align:center;color:var(--muted)">No data loaded</div>';
+  var S = CMS_SUMMARY || {};
+  var W = WI || {};
+  var wAttr = W.attrition||{};
+  var wReg  = W.regions||{};
 
-  const ldCovNum = parseInt(w.ld_coverage) || 0;
-  const ldPrevNum = parseInt(pw.ld_coverage) || 0;
+  // ── 1. COMMAND STRIP ──────────────────────────────────────────────────
+  var q1exits = (wAttr.Jan&&wAttr.Jan.exits||0)+(wAttr.Feb&&wAttr.Feb.exits||0)+(wAttr.Mar&&wAttr.Mar.exits||0);
+  var q1hc = ((wAttr.Jan&&wAttr.Jan.active_hc||0)+(wAttr.Feb&&wAttr.Feb.active_hc||0)+(wAttr.Mar&&wAttr.Mar.active_hc||0))/3||1;
+  var q1attr = Math.round(q1exits/q1hc*4*100*10)/10;
+  var absCases = (W.absenteeism&&W.absenteeism.total)||0;
+  var openReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.length : (S.total_reqs||0);
+  var critReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.tat>45;}).length : (S.reqs_critical||0);
+  var mJoiners  = w.ta_closed||0;
 
-  // WoW cards
-  const wowCards = [
-    { label:'Positions Closed', curr:w.ta_closed, prev:pw.ta_closed, good:'up' },
-    { label:'Offers Released', curr:w.ta_offers, prev:pw.ta_offers, good:'up' },
-    { label:'Offer Dropouts', curr:w.ta_dropouts, prev:pw.ta_dropouts, good:'down' },
-    { label:'HRBP Site Visits', curr:w.hrbp_visits, prev:pw.hrbp_visits, good:'up' },
-  ].map(m => {
-    const diff = m.curr - m.prev;
-    const sign = diff > 0 ? '+' : '';
-    const isGood = (m.good==='up' && diff>0)||(m.good==='down' && diff<0);
-    const isNeutral = diff === 0;
-    const cls = isNeutral ? 'neutral' : isGood ? 'up' : 'down';
-    const arrow = diff>0?'↑':diff<0?'↓':'→';
-    return `<div class="wow-card animate d${Math.floor(Math.random()*4)+1}">
-      <div class="wow-label">${m.label}</div>
-      <div class="wow-compare">
-        <div class="wow-prev">${pw.label.split('–')[0]}: ${m.prev}</div>
-        <div class="wow-arrow">→</div>
-        <div class="wow-curr ${cls}">${m.curr}</div>
-      </div>
-      <div class="wow-change ${cls}">${arrow} ${sign}${diff} week-on-week</div>
-    </div>`;
+  function cmdKpi(icon, val, label, color, sub) {
+    return '<div style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+color+';border-radius:10px;padding:14px 16px">'
+      +'<div style="font-size:18px;margin-bottom:4px">'+icon+'</div>'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:30px;color:'+color+';line-height:1;letter-spacing:1px">'+val+'</div>'
+      +'<div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-top:3px">'+label+'</div>'
+      +(sub?'<div style="font-size:10px;color:var(--muted2);margin-top:2px">'+sub+'</div>':'')
+      +'</div>';
+  }
+
+  var cmdStrip = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'
+    +cmdKpi('👥', (W.active_hc_mar||0).toLocaleString(), 'Total Headcount', 'var(--accent)', 'Active as on Mar 26')
+    +cmdKpi('📋', openReqs, 'Open Positions', openReqs>200?'var(--red)':'var(--amber)', critReqs+' critical (>45d)')
+    +cmdKpi('✅', mJoiners, 'W'+w.week_num+' Joiners', mJoiners>5?'var(--green)':'var(--muted)', w.ta_offers+' offers released')
+    +cmdKpi('📈', q1attr+'%', 'Q1 Attrition', q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)', q1exits+' exits Jan–Mar')
+    +cmdKpi('🚨', absCases, 'Absent >7 Days', absCases>20?'var(--red)':absCases>10?'var(--amber)':'var(--muted)', 'No eSep raised')
+    +'</div>';
+
+  // ── 2. REGION PANEL ───────────────────────────────────────────────────
+  var regionOrder = ['North','South','East','West'];
+  var regCards = regionOrder.map(function(reg) {
+    var rd = wReg[reg]||{hc:0,wage_cr:0,ta_sourced:0,ta_joined:0,female_pct:0};
+    var regAttr = 0;
+    var regExits = 0;
+    ['Jan','Feb','Mar'].forEach(function(m){
+      var ra = wAttr[m]&&wAttr[m].region&&wAttr[m].region[reg]||0;
+      regExits += ra;
+    });
+    var regHC = rd.hc||1;
+    regAttr = Math.round(regExits/regHC*4*100*10)/10;
+    var fillRate = rd.ta_sourced>0?Math.round(rd.ta_joined/rd.ta_sourced*100):0;
+    var attrCol = regAttr>15?'var(--red)':regAttr>10?'var(--amber)':'var(--green)';
+    var regCritical = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.region===reg&&r.tat>45;}).length : 0;
+    var regColor = {'North':'#60a5fa','South':'#34d399','East':'#f59e0b','West':'#a78bfa'}[reg]||'var(--accent)';
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+regColor+';border-radius:10px;padding:14px 16px">'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:18px;color:'+regColor+';letter-spacing:1px;margin-bottom:8px">'+reg+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">'+rd.hc.toLocaleString()+'</div><div style="font-size:10px;color:var(--muted)">Headcount</div></div>'
+      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+attrCol+'">'+regAttr+'%</div><div style="font-size:10px;color:var(--muted)">Q1 Attrition</div></div>'
+      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">'+rd.ta_joined+'</div><div style="font-size:10px;color:var(--muted)">Joined Q1</div></div>'
+      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+(regCritical>5?'var(--red)':'var(--amber)')+'">'+regCritical+'</div><div style="font-size:10px;color:var(--muted)">Critical Reqs</div></div>'
+      +'</div>'
+      +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Fill rate: '+fillRate+'% &nbsp;|&nbsp; Wage: &#8377;'+rd.wage_cr+'Cr</div>'
+      +'</div>';
   }).join('');
 
-  // Risks
-  const risks = buildRisks(w);
-  const topRisks = risks.slice(0,4).map(r => `
-    <div class="risk-item ${r.level}">
-      <span class="risk-tag">${esc(r.tag)}</span>
-      <span class="risk-title">${esc(r.title)}</span>
-      <span class="risk-detail">${esc(r.detail)}</span>
-    </div>`).join('');
+  var regionPanel = '<div style="margin-bottom:18px">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Region Snapshot</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'+regCards+'</div>'
+    +'</div>';
 
-  return `
-    <div class="section-label">Headline Numbers · ${esc(w.label)}</div>
-    <div class="kpi-grid">
-      <div class="kpi-card blue animate d1">
-        <div class="kpi-icon">🏢</div>
-        <div class="kpi-label">Payroll Headcount</div>
-        <div class="kpi-value">${w.payroll_hc > 0 ? w.payroll_hc.toLocaleString() : '—'}</div>
-        ${w.payroll_hc > 0 ? wowBadge(w.payroll_hc, pw.payroll_hc) : '<span class="kpi-wow neutral">See prev weeks</span>'}
-        <div class="kpi-sub">Month: ${esc(w.payroll_month)||'In progress'}</div>
-      </div>
-      <div class="kpi-card green animate d2">
-        <div class="kpi-icon">✅</div>
-        <div class="kpi-label">Positions Closed</div>
-        <div class="kpi-value">${w.ta_closed}</div>
-        ${wowBadge(w.ta_closed, pw.ta_closed)}
-        <div class="kpi-sub">Opened: ${w.ta_opened} this week</div>
-      </div>
-      <div class="kpi-card amber animate d3">
-        <div class="kpi-icon">📋</div>
-        <div class="kpi-label">Offers Released</div>
-        <div class="kpi-value">${w.ta_offers}</div>
-        ${wowBadge(w.ta_offers, pw.ta_offers)}
-        <div class="kpi-sub">Dropouts: ${w.ta_dropouts}</div>
-      </div>
-      <div class="kpi-card red animate d4">
-        <div class="kpi-icon">🤝</div>
-        <div class="kpi-label">HRBP Site Visits</div>
-        <div class="kpi-value">${w.hrbp_visits}</div>
-        ${wowBadge(w.hrbp_visits, pw.hrbp_visits)}
-        <div class="kpi-sub">${w.hrbp_connects.length} connects logged</div>
-      </div>
-      <div class="kpi-card purple animate d5">
-        <div class="kpi-icon">📚</div>
-        <div class="kpi-label">L&D Sessions</div>
-        <div class="kpi-value">${w.ld_sessions}</div>
-        ${wowBadge(w.ld_sessions, pw.ld_sessions)}
-        <div class="kpi-sub">Coverage: ${esc(w.ld_coverage)||'—'} attendees</div>
-      </div>
-    </div>
+  // ── 3. RECRUITER LEADERBOARD ──────────────────────────────────────────
+  // Score: Hiring Volume 25 + Fill Speed 25 + Offer Acceptance 20 + Source Eff 15 + Pipeline 15
+  function recruiterScore(r) {
+    var hiringTarget = 5; // Regular
+    var hiringScore = Math.min(25, Math.round(r.joined/hiringTarget*25));
+    var fillScore = r.avg_fill_days>0 ? (r.avg_fill_days<=30?25:r.avg_fill_days<=45?15:r.avg_fill_days<=60?8:0) : 0;
+    var acc = r.pipeline>0?r.joined/r.pipeline:0;
+    var accScore = Math.min(20, Math.round(acc/0.75*20));
+    var srcScore = r.top_source==='Referral'?15:r.top_source==='Job-Portals'?10:r.top_source==='LinkedIn'?8:5;
+    var pipeRatio = r.active>0?r.pipeline/r.active:0;
+    var pipeScore = pipeRatio>=0.3?15:pipeRatio>=0.15?10:5;
+    return hiringScore+fillScore+accScore+srcScore+pipeScore;
+  }
 
-    <div class="section-label">Week-on-Week Momentum · ${esc(pw.label)} → ${esc(w.label)}</div>
-    <div class="wow-grid">${wowCards}</div>
+  var scored = (TA_SCORECARD||[]).map(function(r){return Object.assign({},r,{score:recruiterScore(r)});});
+  scored.sort(function(a,b){return b.score-a.score;});
+  var maxScore = scored.length>0?scored[0].score:100;
 
-    <div class="section-label">Function Health</div>
-    <div class="two-col">
-      <div class="card animate d1">
-        <div class="card-header">
-          <div class="card-title">📈 Performance vs Last Week</div>
-          <span class="card-badge blue">${esc(w.label)}</span>
-        </div>
-        <div class="card-body">
-          ${[
-            {label:'TA Closure Rate', curr:w.ta_closed, prev:pw.ta_closed, max:25, color:'var(--accent)', good:true},
-            {label:'Offers Released', curr:w.ta_offers, prev:pw.ta_offers, max:35, color:'var(--green)', good:true},
-            {label:'HRBP Site Coverage', curr:w.hrbp_visits, prev:pw.hrbp_visits, max:8, color:'var(--green)', good:true},
-            {label:'L&D Sessions', curr:w.ld_sessions, prev:pw.ld_sessions, max:6, color:'var(--purple)', good:true},
-            {label:'Offer Dropouts', curr:w.ta_dropouts, prev:pw.ta_dropouts, max:5, color:'var(--red)', good:false},
-          ].map(m => {
-            const pct = Math.min(100, (m.curr/m.max)*100);
-            const dc = getDeltaClass(m.curr, m.prev, m.good);
-            const diff = m.curr - m.prev;
-            const sign = diff > 0 ? '+' : '';
-            return `<div class="progress-item">
-              <div class="progress-meta">
-                <span class="progress-label">${m.label}</span>
-                <div class="progress-values">
-                  <span class="progress-val">${m.prev} → ${m.curr}</span>
-                  <span class="progress-delta ${dc}">${sign}${diff}</span>
-                </div>
-              </div>
-              <div class="progress-bar-track"><div class="progress-bar-fill" style="width:${pct}%;background:${m.color}"></div></div>
-            </div>`;
-          }).join('')}
-        </div>
-      </div>
-      <div class="card animate d2">
-        <div class="card-header">
-          <div class="card-title">🚨 Top Risks This Week</div>
-          <span class="card-badge red">${risks.filter(r=>r.level==='critical').length} Critical</span>
-        </div>
-        <div class="card-body">
-          <div class="risk-list">${topRisks || '<div class="empty-state">No critical risks flagged this week.</div>'}</div>
-        </div>
-      </div>
-    </div>`;
+  var recRows = scored.slice(0,8).map(function(r,i){
+    var barW = Math.round(r.score/100*100);
+    var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    var scoreCol = r.score>=70?'var(--green)':r.score>=50?'var(--amber)':'var(--red)';
+    var sName = r.name.split(' ').slice(0,2).join(' ');
+    var convPct = r.pipeline>0?Math.round(r.joined/r.pipeline*100):0;
+    return '<div style="display:grid;grid-template-columns:22px 130px 1fr 45px 40px 40px 50px;gap:6px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+      +'<div style="font-size:13px">'+medal+'</div>'
+      +'<div style="font-weight:500;color:var(--text)">'+esc(sName)+'</div>'
+      +'<div><div style="background:var(--surface3);border-radius:3px;height:5px"><div style="background:'+scoreCol+';height:100%;border-radius:3px;width:'+barW+'%"></div></div></div>'
+      +'<div style="font-weight:700;color:'+scoreCol+'">'+r.score+'</div>'
+      +'<div style="color:var(--green)">'+r.joined+'</div>'
+      +'<div style="color:var(--muted)">'+( r.avg_fill_days>0?r.avg_fill_days+'d':'—')+'</div>'
+      +'<div style="color:'+(convPct>=60?'var(--green)':convPct>=40?'var(--amber)':'var(--red)')+'">'+convPct+'%</div>'
+      +'</div>';
+  }).join('');
+
+  var recColHdr = '<div style="display:grid;grid-template-columns:22px 130px 1fr 45px 40px 40px 50px;gap:6px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+    +['','Recruiter','Score','Pts','Joined','Avg TTF','Conv%'].map(function(h){
+      return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
+    }).join('')+'</div>';
+
+  var recLeaderboard = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:18px">'
+    +'<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)">Recruiter Leaderboard</div>'
+    +'<div style="font-size:10px;color:var(--muted2)">Hiring 25 + Fill Speed 25 + Acceptance 20 + Source 15 + Pipeline 15</div>'
+    +'</div>'
+    +recColHdr+recRows+'</div>';
+
+  // ── 4. HRBP PULSE ─────────────────────────────────────────────────────
+  // Pull from weekly submission data (w.hrbp_connects is array)
+  var connects = (w && w.hrbp_connects) ? w.hrbp_connects : [];
+  var hrbpByName = {};
+  connects.forEach(function(c){
+    var name = (c.name||'Unknown').replace(/\s+for\s+\w+/i,'').trim();
+    if(!hrbpByName[name]) hrbpByName[name] = {name:name, region:getHRBPRegion?getHRBPRegion(name):'', visits:0, escalations:0, submitted:true};
+    var detail = c.detail||'';
+    var siteCount = /site name\s*[-–:]/gi.test(detail) ? (detail.match(/site name\s*[-–:]/gi)||[]).length : 1;
+    hrbpByName[name].visits += siteCount;
+    if(c.er_cases && c.er_cases.trim() && !['na','nil','none'].includes(c.er_cases.toLowerCase().trim())) hrbpByName[name].escalations++;
+  });
+  var hrbpArr = Object.values(hrbpByName).sort(function(a,b){return (b.visits+b.escalations)-(a.visits+a.escalations);});
+
+  var hrbpRows = hrbpArr.length
+    ? hrbpArr.map(function(h, i){
+        var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+        var regCol = {'East':'#f59e0b','West':'#a78bfa','North':'#60a5fa','South':'#34d399'}[h.region]||'var(--muted)';
+        return '<div style="display:grid;grid-template-columns:22px 150px 80px 50px 60px;gap:6px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+          +'<div style="font-size:13px">'+medal+'</div>'
+          +'<div style="font-weight:500;color:var(--text)">'+esc(h.name)+'</div>'
+          +'<div><span style="font-size:10px;padding:1px 8px;border-radius:10px;background:rgba(0,0,0,.2);color:'+regCol+'">'+h.region+'</span></div>'
+          +'<div style="font-weight:600;color:var(--green)">'+h.visits+'</div>'
+          +'<div style="color:'+(h.escalations>0?'var(--amber)':'var(--muted2)')+'">'+( h.escalations>0?h.escalations+' ER':'Clean')+'</div>'
+          +'</div>';
+      }).join('')
+    : '<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">No HRBP connects submitted for '+esc(w.label)+'</div>';
+
+  var hrbpColHdr = '<div style="display:grid;grid-template-columns:22px 150px 80px 50px 60px;gap:6px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+    +['','HRBP','Region','Visits','ER Cases'].map(function(h){
+      return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
+    }).join('')+'</div>';
+
+  var hrbpPanel = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:18px">'
+    +'<div style="padding:10px 14px;border-bottom:1px solid var(--border)">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--green)">HRBP Pulse — '+esc(w.label)+'</div>'
+    +'</div>'
+    +hrbpColHdr+hrbpRows+'</div>';
+
+  // ── 5. WORKFORCE HEALTH STRIP ─────────────────────────────────────────
+  var srcStats = W.source_stats||{};
+  var topSrc = Object.entries(srcStats).sort(function(a,b){return b[1]-a[1];}).slice(0,3);
+  var topSrcText = topSrc.map(function(s){return esc(s[0])+': '+s[1];}).join(' &nbsp;|&nbsp; ');
+
+  var plat_open = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.tier==='Platinum'&&r.tat>45;}).length : 0;
+  var gold_open = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.tier==='Gold'&&r.tat>45;}).length : 0;
+  var attrCol = q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)';
+
+  function healthChip(label, val, color) {
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:3px">'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:'+color+';line-height:1">'+val+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);letter-spacing:.5px">'+label+'</div>'
+      +'</div>';
+  }
+
+  var healthStrip = '<div style="margin-bottom:18px">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Workforce Health Indicators</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +healthChip('Q1 Attrition', q1attr+'%', attrCol)
+    +healthChip('Active HC', (W.active_hc_mar||0).toLocaleString(), 'var(--accent)')
+    +healthChip('Female %', (W.female_pct||0)+'%', 'var(--accent)')
+    +healthChip('Absent >7d', absCases, absCases>20?'var(--red)':'var(--amber)')
+    +healthChip('Plat Critical', plat_open, plat_open>3?'var(--red)':'var(--amber)')
+    +healthChip('Gold Critical', gold_open, gold_open>3?'var(--amber)':'var(--muted)')
+    +healthChip('W'+w.week_num+' Offers', w.ta_offers||0, 'var(--green)')
+    +healthChip('Offer Dropouts', w.ta_dropouts||0, (w.ta_dropouts||0)>3?'var(--red)':'var(--muted)')
+    +'</div>'
+    +'<div style="margin-top:6px;font-size:10px;color:var(--muted2)">Top sources: '+topSrcText+'</div>'
+    +'</div>';
+
+  // ── 6. OPEN ACTIONS ───────────────────────────────────────────────────
+  var risksHTML = '';
+  if(typeof buildRisks === 'function') {
+    var risks = buildRisks(w);
+    risksHTML = risks.slice(0,4).map(function(r){
+      var lc = r.level==='high'?'var(--red)':r.level==='medium'?'var(--amber)':'var(--muted)';
+      return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+lc+';border-radius:8px;padding:9px 12px;margin-bottom:6px;font-size:11px">'
+        +'<span style="font-size:10px;padding:1px 8px;border-radius:10px;background:rgba(0,0,0,.2);color:'+lc+';margin-right:6px">'+esc(r.tag)+'</span>'
+        +'<span style="font-weight:500;color:var(--text)">'+esc(r.title)+'</span>'
+        +(r.detail?'<div style="font-size:10px;color:var(--muted);margin-top:3px">'+esc(r.detail)+'</div>':'')
+        +'</div>';
+    }).join('') || '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;border:1px dashed var(--border);border-radius:8px">No critical alerts this week</div>';
+  }
+
+  var actionsPanel = risksHTML ? '<div style="margin-bottom:18px">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">Critical Alerts &amp; Open Actions</div>'
+    +risksHTML+'</div>' : '';
+
+  // ── ASSEMBLE ──────────────────────────────────────────────────────────
+  return '<div style="padding:20px 28px;max-width:1400px">'
+    +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">'
+    +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Command Centre</div>'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:28px;letter-spacing:1px;color:var(--text)">HR Intelligence Overview — '+esc(w.label)+'</div></div>'
+    +'<div style="font-size:11px;color:var(--muted)">W'+esc(String(w.week_num||''))+' &nbsp;·&nbsp; '+esc(w.from_label||'')+'&ndash;'+esc(w.to_label||'')+'</div>'
+    +'</div>'
+    +cmdStrip
+    +regionPanel
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">'
+    +'<div>'+recLeaderboard+'</div>'
+    +'<div>'+hrbpPanel+'</div>'
+    +'</div>'
+    +healthStrip
+    +actionsPanel
+    +'</div>';
 }
 
-// ─── RENDER TA ────────────────────────────────────────────────
 function renderTA(w,pw){ var el=document.getElementById('tab-ta'); renderTA_Commitments(el); }
 
 function renderOps(w, pw, elArg) {
