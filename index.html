@@ -903,7 +903,8 @@ function renderOverview(w, pw) {
   var q1exits = (wAttr.Jan&&wAttr.Jan.exits||0)+(wAttr.Feb&&wAttr.Feb.exits||0)+(wAttr.Mar&&wAttr.Mar.exits||0);
   var q1hc = ((wAttr.Jan&&wAttr.Jan.active_hc||0)+(wAttr.Feb&&wAttr.Feb.active_hc||0)+(wAttr.Mar&&wAttr.Mar.active_hc||0))/3||1;
   var q1attr = Math.round(q1exits/q1hc*4*100*10)/10;
-  var absCases = (W.absenteeism&&W.absenteeism.total)||0;
+  var absCases = (W.absenteeism&&(W.absenteeism.pending_cases||W.absenteeism.total))||0;
+  // pending_cases = active long-absent cases with no eSep raised
   var openReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.length : (S.total_reqs||0);
   var critReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.tat>45;}).length : (S.reqs_critical||0);
   var mJoiners  = w.ta_closed||0;
@@ -922,7 +923,7 @@ function renderOverview(w, pw) {
     +cmdKpi('📋', openReqs, 'Open Positions', openReqs>200?'var(--red)':'var(--amber)', critReqs+' critical (>45d)')
     +cmdKpi('✅', mJoiners, 'W'+w.week_num+' Joiners', mJoiners>5?'var(--green)':'var(--muted)', w.ta_offers+' offers released')
     +cmdKpi('📈', q1attr+'%', 'Q1 Attrition', q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)', q1exits+' exits Jan–Mar')
-    +cmdKpi('🚨', absCases, 'Absent >7 Days', absCases>20?'var(--red)':absCases>10?'var(--amber)':'var(--muted)', 'No eSep raised')
+    +cmdKpi('🚨', absCases, 'Long Absent Cases', absCases>20?'var(--red)':absCases>10?'var(--amber)':'var(--muted)', 'Pending action / no eSep')
     +'</div>';
 
   // ── 2. REGION PANEL ───────────────────────────────────────────────────
@@ -1008,18 +1009,83 @@ function renderOverview(w, pw) {
   // ── 4. HRBP PULSE ─────────────────────────────────────────────────────
   // Pull from weekly submission data (w.hrbp_connects is array)
   var connects = (w && w.hrbp_connects) ? w.hrbp_connects : [];
+  // Compute OD% per region from CMS_OD_DATA
+  var regionODpct = {};
+  if(typeof CMS_OD_DATA !== 'undefined' && CMS_OD_DATA) {
+    var odByRegion = {};
+    CMS_OD_DATA.forEach(function(r){
+      var reg = r.region||'';
+      if(!odByRegion[reg]) odByRegion[reg] = new Set();
+      odByRegion[reg].add(r.name||r.emp_code||Math.random());
+    });
+    var wReg = (typeof WI!=='undefined'&&WI.regions)||{};
+    Object.keys(odByRegion).forEach(function(reg){
+      var hc = (wReg[reg]&&wReg[reg].hc)||1;
+      regionODpct[reg] = Math.round(odByRegion[reg].size/hc*100);
+    });
+  }
   var hrbpByName = {};
   connects.forEach(function(c){
     var name = (c.name||'Unknown').replace(/\s+for\s+\w+/i,'').trim();
-    if(!hrbpByName[name]) hrbpByName[name] = {name:name, region:getHRBPRegion?getHRBPRegion(name):'', visits:0, escalations:0, submitted:true};
+    if(!hrbpByName[name]) hrbpByName[name] = {
+      name:name, region:getHRBPRegion?getHRBPRegion(name):'',
+      visits:0, pgVisits:0, escalations:0,
+      absent_action:false, rr_event:false
+    };
     var detail = c.detail||'';
     var siteCount = /site name\s*[-–:]/gi.test(detail) ? (detail.match(/site name\s*[-–:]/gi)||[]).length : 1;
     hrbpByName[name].visits += siteCount;
+    // Count Plat/Gold account visits for bonus scoring
+    var tier = (c.tier||c.account_tier||'').toLowerCase();
+    if(tier==='platinum'||tier==='gold') hrbpByName[name].pgVisits = (hrbpByName[name].pgVisits||0)+1;
+    // Long absent action
+    var abscond = (c.absent_action||c.hrbp_abscond||'').trim();
+    if(abscond && !['na','nil','none','no cases'].includes(abscond.toLowerCase()))
+      hrbpByName[name].absent_action = true;
+    // R&R / Townhall / Engagement event
+    var activities = (c.activities||c.hrbp_activities||'').toLowerCase();
+    if(/r.r|r&r|townhall|town hall|engagement|cultural/.test(activities))
+      hrbpByName[name].rr_event = true;
+    // Geo-tag days (from new form field f_hrbp_geo_days)
+    if(c.geo_days != null) hrbpByName[name].geo_days = Math.min(5, Math.max(0, c.geo_days||0));
+    // OD days → OD% (od_days/5*100)
+    if(c.od_days != null) hrbpByName[name].od_pct = Math.min(100, Math.max(0, Math.round((c.od_days||0)/5*100)));
+    // R&R events from form field
+    if(c.rr_events && c.rr_events.trim()) hrbpByName[name].rr_event = true;
     if(c.er_cases && c.er_cases.trim() && !['na','nil','none'].includes(c.er_cases.toLowerCase().trim())) hrbpByName[name].escalations++;
   });
-  // Score: visits (5pts each) + ER actions (3pts each) + submitted (10pts)
+  // ── HRBP Engagement Score (4 params + bonus) ─────────────────────
+  // Site Visits:    5pts each + 3pts bonus per Plat/Gold visit  (no hard cap)
+  // Long Absent:    20pts — reported action this week
+  // ER Cases:       15pts — ER cases × 3, max 15
+  // Region OD%:     25pts — lower OD% = higher score (region-level data)
+  // R&R Bonus:      +5pts
+  // Geo-tag:        not yet — will add when ZingHR attendance data available
   Object.values(hrbpByName).forEach(function(h) {
-    h.score = Math.min(100, h.visits * 5 + h.escalations * 3 + (h.submitted ? 10 : 0));
+    // Site visits: 5 pts each + 3 bonus per Plat/Gold visit
+    var visitPts  = h.visits * 5 + (h.pgVisits||0) * 3;
+    // Long absent action reported
+    var absentPts = h.absent_action ? 20 : 0;
+    // ER cases: 3 pts each, max 15
+    var erPts     = Math.min(15, (h.escalations||0) * 3);
+    // Region OD%: inverse score out of 25
+    // Get OD% for this HRBP's region
+    var hRegion   = h.region||'';
+    var odPct     = regionODpct[hRegion]||0;
+    // 0% OD = 25pts, 10%+ OD = 0pts, linear
+    var odPts     = Math.max(0, Math.round((1 - Math.min(odPct,10)/10) * 25));
+    // R&R / engagement bonus
+    var rrBonus   = h.rr_event ? 5 : 0;
+    var raw       = visitPts + absentPts + erPts + odPts + rrBonus;
+    var maxPts    = 40 + 20 + 15 + 25 + 5; // 105
+    h.score       = Math.min(100, Math.round(raw / maxPts * 100));
+    h.visitPts    = visitPts;
+    h.absentPts   = absentPts;
+    h.erPts       = erPts;
+    h.odPts       = odPts;
+    h.odPct       = odPct;
+    h.rrBonus     = rrBonus;
+    h.dataPending = false;  // no pending params — OD is from system data
   });
   var hrbpArr = Object.values(hrbpByName).sort(function(a,b){return b.score-a.score;});
 
@@ -1027,28 +1093,36 @@ function renderOverview(w, pw) {
     ? hrbpArr.map(function(h, i){
         var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
         var regCol = {'East':'#f59e0b','West':'#a78bfa','North':'#60a5fa','South':'#34d399'}[h.region]||'var(--muted)';
-        var scoreColH = h.score>=60?'var(--green)':h.score>=30?'var(--amber)':'var(--red)';
+        var scoreColH = h.score>=70?'var(--green)':h.score>=40?'var(--amber)':'var(--red)';
         var barWH = Math.min(100,h.score);
-        return '<div style="display:grid;grid-template-columns:22px 130px 80px 1fr 44px 40px;gap:6px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+        // Breakdown tooltip-style mini chips
+        var chips = '';
+        chips += '<span title="Site Visits" style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(96,165,250,.15);color:var(--accent)">V:'+h.visitPts+'</span> ';
+        chips += '<span title="Long Absent Action" style="font-size:9px;padding:1px 5px;border-radius:4px;background:'+(h.absentPts?'rgba(74,222,128,.12)':'rgba(248,113,113,.12)')+';color:'+(h.absentPts?'var(--green)':'var(--red)')+'">LA:'+(h.absentPts?'✓':'✗')+'</span> ';
+        chips += '<span title="ER Cases" style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(251,191,36,.12);color:var(--amber)">ER:'+h.erPts+'</span> ';
+        chips += '<span title="Region OD% ('+h.odPct+'%)" style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(167,139,250,.12);color:#a78bfa">OD:'+h.odPts+'</span>';
+        if(h.rrBonus) chips += ' <span title="R&amp;R Bonus" style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(251,191,36,.15);color:var(--amber)">R&amp;R+5</span>';
+        if(h.rrBonus) chips += ' <span title="R&R Bonus" style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(251,191,36,.15);color:var(--amber)">R&R+5</span>';
+        return '<div style="display:grid;grid-template-columns:22px 120px 70px 44px 5px 1fr;gap:5px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
           +'<div style="font-size:13px">'+medal+'</div>'
-          +'<div style="font-weight:500;color:var(--text)">'+esc(h.name)+'</div>'
-          +'<div><span style="font-size:10px;padding:1px 8px;border-radius:10px;background:rgba(0,0,0,.2);color:'+regCol+'">'+h.region+'</span></div>'
-          +'<div><div style="background:var(--surface3);border-radius:3px;height:5px"><div style="background:'+scoreColH+';height:100%;border-radius:3px;width:'+barWH+'%"></div></div></div>'
-          +'<div style="font-weight:700;color:'+scoreColH+'">'+h.score+'</div>'
-          +'<div style="font-weight:600;color:var(--green)">'+h.visits+'v</div>'
+          +'<div style="font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(h.name)+'</div>'
+          +'<div><span style="font-size:10px;padding:1px 6px;border-radius:10px;background:rgba(0,0,0,.2);color:'+regCol+'">'+h.region+'</span></div>'
+          +'<div style="font-weight:700;color:'+scoreColH+';text-align:right">'+h.score+(h.dataPending?'<span style="font-size:8px;color:var(--muted2)">*</span>':'')+'</div>'
+          +'<div style="background:var(--surface3);border-radius:3px;height:5px;width:3px"></div>'
+          +'<div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center">'+chips+'</div>'
           +'</div>';
       }).join('')
     : '<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">No HRBP connects submitted for '+esc(w.label)+'</div>';
 
-  var hrbpColHdr = '<div style="display:grid;grid-template-columns:22px 130px 80px 1fr 44px 40px;gap:6px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['','HRBP','Region','Score','Pts','Visits'].map(function(h){
+  var hrbpColHdr = '<div style="display:grid;grid-template-columns:22px 120px 70px 44px 5px 1fr;gap:5px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+    +['','HRBP','Region','Score','','V / LA / ER / Geo / OD'].map(function(h){
       return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
     }).join('')+'</div>';
 
   var hrbpPanel = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:18px">'
     +'<div style="padding:10px 14px;border-bottom:1px solid var(--border)">'
     +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--green)">HRBP Engagement — '+esc(w.label)+'</div>'
-    +'<div style="font-size:10px;color:var(--muted2)">Site Visits 5pts · ER Actions 3pts · Submitted 10pts</div>'
+    +'<div style="font-size:10px;color:var(--muted2)">Geo-tag 30 · Visits 25 · Long Absent 20 · ER 15 · OD/WFH 10 · R&amp;R +5 &nbsp;|&nbsp; ― = data pending from form</div>'
     +'</div>'
     +hrbpColHdr+hrbpRows+'</div>';
 
@@ -3024,7 +3098,7 @@ function buildFunctionSections(t){
     +'<div class="wform-row"><label>Accounts visited — one per line: Account name · Date · Key discussion</label>'
     +'<textarea id="f_hrbp_connect_details" style="min-height:100px" placeholder="HDBFS · 24-Mar · Discussed 3 pending replacements, R1 approval delay\nABFRL · 22-Mar · WFH query with delivery head…"></textarea></div>'
     +'</div>'
-    +'<div class="wform-section"><div class="wform-section-title">Employee Relations</div>'
+    +'<div class="wform-section"><div class="wform-section-title">Engagement &amp; Events</div><div class="wform-row"><label>R&amp;R / Townhall / Engagement Events this week</label><input type="text" id="f_hrbp_rr_events" placeholder="Birthday celebration at ABFRL, Townhall at HDB…" style="padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;width:100%;box-sizing:border-box"><div style="font-size:10px;color:var(--muted2);margin-top:4px">Any R&amp;R / Townhall / engagement event = +5 bonus pts. Geo-tag scoring will be added once ZingHR attendance data is live.</div></div></div><div class="wform-section"><div class="wform-section-title">Employee Relations</div>'
     +'<div class="wform-row"><label>Discipline / ER cases handled (be specific — employee, issue, action taken)</label>'
     +'<textarea id="f_hrbp_discipline" placeholder="Emp ID 11XXXXX — ABFRL — verbal warning for attendance | Resignation revoked — Pradeep S…" style="min-height:72px"></textarea></div>'
     +'<div class="wform-row"><label>Long absent / absconding employees — action taken</label>'
@@ -3107,7 +3181,7 @@ async function rebuildWeekFromSubmissions(weekKey){
   if(!subs||!subs.length)return;
   const wT=WEEKS_DATA[weekKey]||{};
   const agg={week_key:weekKey,week_num:wT.week_num||0,label:wT.label||weekKey,from_label:wT.from_label||'',to_label:wT.to_label||'',total_respondents:subs.length,ta_opened:0,ta_closed:0,ta_offers:0,ta_dropouts:0,ta_detail:[],ta_constraints:[],ta_aging_raw:[],hrbp_visits:0,hrbp_connects:[],hrbp_discipline:[],hrbp_abscond:[],hrbp_retention:[],hrbp_issues:[],hrbp_risks:[],hrbp_activities:[],payroll_hc:0,payroll_errors:0,payroll_month:'',payroll_risks:[],payroll_pending:[],payroll_statutory:[],hrops_onboard:0,hrops_fnf:'',hrops_compliance:[],hrops_gaps:[],hrops_esc:0,hrops_esc_texts:[],ld_sessions:0,ld_coverage:'',ld_details:[],ld_upcoming:[],ld_gaps:[],ld_risks:[],admin_issues:[],admin_savings:[]};
-  subs.forEach(s=>{const fn=s.function_type;if(fn==='ta'){agg.ta_opened+=s.ta_opened||0;agg.ta_closed+=s.ta_closed||0;agg.ta_offers+=s.ta_offers||0;agg.ta_dropouts+=s.ta_dropouts||0;agg.ta_detail.push({name:s.submitter_name||'',region:s.region||'',opened:s.ta_opened||0,closed:s.ta_closed||0,offers:s.ta_offers||0,dropouts:s.ta_dropouts||0,dropout_reason:s.ta_dropout_reason||'',constraint:s.ta_constraints||'',aging:s.ta_aging||'',next_week:s.ta_joining_plan||''});if(s.ta_aging&&s.ta_aging!='NA')agg.ta_aging_raw.push(s.ta_aging);if(s.ta_constraints&&s.ta_constraints!='NA')agg.ta_constraints.push(s.ta_constraints);}if(fn==='hrbp'){if(s.hrbp_site_visited){const d=s.hrbp_connect_details||'';const ct=d?(d.match(/site name/gi)||[d]).length:1;agg.hrbp_visits+=ct;if(d)agg.hrbp_connects.push({name:s.submitter_name||'',detail:d});}if(s.hrbp_discipline)agg.hrbp_discipline.push(s.hrbp_discipline);if(s.hrbp_retention)agg.hrbp_retention.push(s.hrbp_retention);if(s.hrbp_issues)agg.hrbp_issues.push(s.hrbp_issues);if(s.hrbp_risks)agg.hrbp_risks.push(s.hrbp_risks);if(s.hrbp_activities)agg.hrbp_activities.push(s.hrbp_activities);}if(fn==='payroll'){if((s.payroll_hc||0)>agg.payroll_hc)agg.payroll_hc=s.payroll_hc||0;agg.payroll_errors+=(s.payroll_errors||0);if(s.payroll_month)agg.payroll_month=s.payroll_month;if(s.payroll_risks)agg.payroll_risks.push(s.payroll_risks);if(s.payroll_pending)agg.payroll_pending.push(s.payroll_pending);if(s.payroll_statutory)agg.payroll_statutory.push(s.payroll_statutory);}if(fn==='hrops'){agg.hrops_onboard+=(s.hrops_onboard||0);if(s.hrops_fnf)agg.hrops_fnf=s.hrops_fnf;if(s.hrops_compliance)agg.hrops_compliance.push(s.hrops_compliance);if(s.hrops_gaps)agg.hrops_gaps.push(s.hrops_gaps);agg.hrops_esc=Math.max(agg.hrops_esc,s.hrops_esc_count||0);if(s.hrops_esc_details)agg.hrops_esc_texts.push(s.hrops_esc_details);}if(fn==='ld'){agg.ld_sessions+=(s.ld_sessions||0);if(s.ld_coverage)agg.ld_coverage=s.ld_coverage;if(s.ld_details)agg.ld_details.push(s.ld_details);if(s.ld_upcoming)agg.ld_upcoming.push(s.ld_upcoming);if(s.ld_gaps)agg.ld_gaps.push(s.ld_gaps);if(s.ld_risks)agg.ld_risks.push(s.ld_risks);}if(fn==='admin'){if(s.admin_issues)agg.admin_issues.push(s.admin_issues);if(s.admin_savings)agg.admin_savings.push(s.admin_savings);}});
+  subs.forEach(s=>{const fn=s.function_type;if(fn==='ta'){agg.ta_opened+=s.ta_opened||0;agg.ta_closed+=s.ta_closed||0;agg.ta_offers+=s.ta_offers||0;agg.ta_dropouts+=s.ta_dropouts||0;agg.ta_detail.push({name:s.submitter_name||'',region:s.region||'',opened:s.ta_opened||0,closed:s.ta_closed||0,offers:s.ta_offers||0,dropouts:s.ta_dropouts||0,dropout_reason:s.ta_dropout_reason||'',constraint:s.ta_constraints||'',aging:s.ta_aging||'',next_week:s.ta_joining_plan||''});if(s.ta_aging&&s.ta_aging!='NA')agg.ta_aging_raw.push(s.ta_aging);if(s.ta_constraints&&s.ta_constraints!='NA')agg.ta_constraints.push(s.ta_constraints);}if(fn==='hrbp'){if(s.hrbp_site_visited){const d=s.hrbp_connect_details||'';const ct=d?(d.match(/site name/gi)||[d]).length:1;agg.hrbp_visits+=ct;if(d)agg.hrbp_connects.push({name:s.submitter_name||'',detail:d,er_cases:s.hrbp_discipline||'',absent_action:s.hrbp_abscond||'',activities:s.hrbp_activities||'',geo_days:(s.hrbp_geo_days!=null?parseInt(s.hrbp_geo_days):null),od_days:(s.hrbp_od_days!=null?parseInt(s.hrbp_od_days):null),rr_events:s.hrbp_rr_events||''});}if(s.hrbp_discipline)agg.hrbp_discipline.push(s.hrbp_discipline);if(s.hrbp_retention)agg.hrbp_retention.push(s.hrbp_retention);if(s.hrbp_issues)agg.hrbp_issues.push(s.hrbp_issues);if(s.hrbp_risks)agg.hrbp_risks.push(s.hrbp_risks);if(s.hrbp_activities)agg.hrbp_activities.push(s.hrbp_activities);}if(fn==='payroll'){if((s.payroll_hc||0)>agg.payroll_hc)agg.payroll_hc=s.payroll_hc||0;agg.payroll_errors+=(s.payroll_errors||0);if(s.payroll_month)agg.payroll_month=s.payroll_month;if(s.payroll_risks)agg.payroll_risks.push(s.payroll_risks);if(s.payroll_pending)agg.payroll_pending.push(s.payroll_pending);if(s.payroll_statutory)agg.payroll_statutory.push(s.payroll_statutory);}if(fn==='hrops'){agg.hrops_onboard+=(s.hrops_onboard||0);if(s.hrops_fnf)agg.hrops_fnf=s.hrops_fnf;if(s.hrops_compliance)agg.hrops_compliance.push(s.hrops_compliance);if(s.hrops_gaps)agg.hrops_gaps.push(s.hrops_gaps);agg.hrops_esc=Math.max(agg.hrops_esc,s.hrops_esc_count||0);if(s.hrops_esc_details)agg.hrops_esc_texts.push(s.hrops_esc_details);}if(fn==='ld'){agg.ld_sessions+=(s.ld_sessions||0);if(s.ld_coverage)agg.ld_coverage=s.ld_coverage;if(s.ld_details)agg.ld_details.push(s.ld_details);if(s.ld_upcoming)agg.ld_upcoming.push(s.ld_upcoming);if(s.ld_gaps)agg.ld_gaps.push(s.ld_gaps);if(s.ld_risks)agg.ld_risks.push(s.ld_risks);}if(fn==='admin'){if(s.admin_issues)agg.admin_issues.push(s.admin_issues);if(s.admin_savings)agg.admin_savings.push(s.admin_savings);}});
   const{error}=await _sb.from('weekly_reports').upsert(agg,{onConflict:'week_key'});
   if(!error){WEEKS_DATA[weekKey]=agg;console.log('[Form] Rebuilt',weekKey);}
   else{console.error('[Form] Rebuild error:',error);}
@@ -4358,7 +4432,13 @@ function renderTA_Commitments(el) {
       +'<div style="color:'+(r.fill_cnt>0?'var(--text)':'var(--muted2)') +'">'+(r.fill_cnt>0?r.avg_fill_days+'d':'&mdash;')+'</div>'
       +'<div style="font-weight:700;color:'+convC+'">'+conv+'%</div></div>';
   }
-  var allSrcRows = (TA_SCORECARD||[]).filter(function(r){return r.pipeline>0||r.active>0;});
+  // Exclude HRBP-role people from recruiter table (e.g. Suhail, Somasri)
+  var HRBP_ROLE_NAMES = ['suhail','somasri','ayush','abhishek','priya paul','shambhavi'];
+  var allSrcRows = (TA_SCORECARD||[]).filter(function(r){
+    if(!r.pipeline && !r.joined) return false;  // no activity, skip
+    var nl = r.name.toLowerCase();
+    return !HRBP_ROLE_NAMES.some(function(h){return nl.indexOf(h)>=0;});
+  });
   var myRecRow   = allSrcRows.filter(function(r){
     var sn=r.name.toLowerCase();
     return sn.indexOf(firstName)>=0&&(lastName.length<3||sn.indexOf(lastName)>=0);
@@ -4375,47 +4455,32 @@ function renderTA_Commitments(el) {
         : '')
       +otherRows.map(function(r){return buildRecRow(r,false);}).join('');
 
-  // Source channel: personal breakdown + separator + all India aggregate
-  function buildChanRow(s, total, highlight) {
-    var convC=s.pct>=70?'var(--green)':s.pct>=50?'var(--amber)':'var(--red)';
-    var pct=Math.round(s.pipeline/total*100);
-    return '<div style="display:grid;grid-template-columns:140px 1fr 60px 50px;gap:10px;'
-      +'padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;'
-      +(highlight?'background:rgba(96,165,250,.06);border-left:3px solid var(--accent)':'')+'">' 
-      +'<div style="font-weight:'+(highlight?600:400)+';color:'+(highlight?'var(--accent)':'var(--text)')+'">'+esc(s.source)+'</div>'
-      +'<div><div style="background:var(--surface3);border-radius:3px;height:5px">'
-        +'<div style="background:'+(highlight?'var(--accent)':'#60a5fa')+';height:100%;border-radius:3px;width:'+pct+'%"></div></div></div>'
-      +'<div style="font-size:10px;color:var(--muted2);text-align:right">'+s.joined+'/'+s.pipeline+'</div>'
-      +'<div style="font-weight:700;color:'+convC+'">'+s.pct+'%</div></div>';
+  // Source channel: show recruiter's personal top_source card (from TA_SCORECARD),
+  // then all-India channel breakdown as benchmark.
+  // (req-level data has no source field — use scorecard top_source instead)
+  var myScoreRow = (TA_SCORECARD||[]).find(function(r){
+    var sn=r.name.toLowerCase();
+    return sn.indexOf(firstName)>=0&&(lastName.length<3||sn.indexOf(lastName)>=0);
+  });
+  var myTopSrcCard = '';
+  if (!isAdminView && !isPanIndia && myScoreRow && myScoreRow.top_source) {
+    var ts = myScoreRow.top_source;
+    var allInd = (TA_SOURCE_EFF||[]).find(function(x){return x.source===ts;});
+    var tsConv = allInd ? allInd.pct : 0;
+    var tsCol = tsConv>=70?'var(--green)':tsConv>=50?'var(--amber)':'var(--red)';
+    myTopSrcCard = '<div style="background:rgba(96,165,250,.06);border:1px solid rgba(96,165,250,.25);'
+      +'border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:6px;'
+      +'display:flex;align-items:center;justify-content:space-between">'
+      +'<div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">My Primary Source Channel</div>'
+      +'<div style="font-size:14px;font-weight:700;color:var(--accent)">'+esc(ts)+'</div></div>'
+      +'<div style="text-align:right">'
+      +'<div style="font-size:20px;font-weight:700;color:'+tsCol+'">'+tsConv+'%</div>'
+      +'<div style="font-size:10px;color:var(--muted)">All-India conv rate</div>'
+      +'</div></div>';
   }
-  // Derive personal source breakdown from myReqs+regionPool
-  var myReqsPool = (isPanIndia||isAdminView)
-    ? (TA_ACTIVE_REQS||[])
-    : (TA_ACTIVE_REQS||[]).filter(function(r){return matchesMe(r.ta_recruiter||'');});
-  var mySrcMap = {};
-  myReqsPool.forEach(function(r){
-    var src = r.source||r.top_source||'Unknown';
-    if(!mySrcMap[src]) mySrcMap[src]={source:src,pipeline:0,joined:0};
-    mySrcMap[src].pipeline++;
-  });
-  var mySrcEff = Object.values(mySrcMap)
-    .filter(function(s){return s.pipeline>0;})
-    .sort(function(a,b){return b.pipeline-a.pipeline;});
-  mySrcEff.forEach(function(s){
-    var allInd = (TA_SOURCE_EFF||[]).find(function(x){return x.source===s.source;});
-    s.pct = s.pipeline>0 ? (allInd?allInd.pct:0) : 0;
-    s.joined = allInd?allInd.joined:0;
-  });
   var allSrcEff = (TA_SOURCE_EFF||[]).filter(function(s){return s.pipeline>0;});
   var allSrcTotal = allSrcEff.reduce(function(a,x){return a+x.pipeline;},0)||1;
-  var mySrcTotal  = mySrcEff.reduce(function(a,x){return a+x.pipeline;},0)||1;
-  var srcChanRows = (isPanIndia||isAdminView)
-    ? allSrcEff.map(function(s){return buildChanRow(s,allSrcTotal,false);}).join('')
-    : mySrcEff.map(function(s){return buildChanRow(s,mySrcTotal,true);}).join('')
-      +(mySrcEff.length>0
-        ? '<div style="padding:5px 12px;font-size:10px;color:var(--muted2);background:var(--surface3);letter-spacing:.5px;border-bottom:1px solid var(--border)">All India &mdash; Benchmark</div>'
-        : '')
-      +allSrcEff.map(function(s){return buildChanRow(s,allSrcTotal,false);}).join('');
+  var srcChanRows = allSrcEff.map(function(s){return buildChanRow(s,allSrcTotal,false);}).join('');
 
   function srcHdr(labels,cols){
     return '<div style="display:grid;grid-template-columns:'+cols+';padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
@@ -4445,6 +4510,7 @@ function renderTA_Commitments(el) {
     +srcHdr(['Recruiter','Sourced','Offers','Joined','MTD','Fill Spd','Conv'],'140px 55px 50px 55px 50px 55px 55px')
     +srcRows+'</div></div>'
     +'<div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+    +myTopSrcCard
     +srcHdr(['Channel','Pipeline Share','Joined/Total','Conv%'],'150px 1fr 60px 50px')
     +srcChanRows+'</div></div>'
     +'</div>'
