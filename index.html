@@ -3564,15 +3564,8 @@ async function renderSubmissionTracker(mc,displayName,roleLabel){
   mc.innerHTML='<div class="wform-wrap"><div class="wform-header"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report Tracker</div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">'+displayName+'</div><div style="font-size:13px;color:var(--muted)">'+roleLabel+' &nbsp;·&nbsp; Viewing all submissions</div></div><div style="margin-bottom:20px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div><div class="wform-week-select">'+availWeeks.map(k=>'<button class="wform-week-btn'+(k===wk?' active':'')+'" onclick="selectFormWeek(\''+k+'\')">'+( WEEK_NAMES[k]||k)+' · '+(WEEKS_DATA[k]?.label||'')+'</button>').join('')+'</div></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px"><div class="wform-section" style="text-align:center;padding:16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:40px;color:var(--green);line-height:1">'+submitted.length+'</div><div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Submitted</div></div><div class="wform-section" style="text-align:center;padding:16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:40px;color:var(--amber);line-height:1">'+notSubmitted.length+'</div><div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Pending</div></div><div class="wform-section" style="text-align:center;padding:16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:40px;color:var(--accent);line-height:1">'+leads.length+'</div><div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Total Leads</div></div></div><div class="wform-section"><div class="wform-section-title">✓ Submitted ('+submitted.length+')</div>'+(submitted.length?submitted.map(s=>'<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:13px"><div><span style="color:var(--text);font-weight:500">'+(s.submitter_name||s.submitter_email)+'</span>'+(s.region?'<span style="font-size:10px;color:var(--muted);margin-left:8px">'+s.region+'</span>':'')+'</div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;color:'+(FN_COLORS[s.function_type]||'var(--muted)')+';background:rgba(0,0,0,.2)">'+(FN_LABELS[s.function_type]||s.function_type)+'</span><span style="font-size:11px;color:var(--green)">✓ '+(s.updated_at||'').substring(0,10)+'</span></div></div>').join(''):'<div style="font-size:13px;color:var(--muted);padding:12px 0">No submissions yet</div>')+'</div>'+(notSubmitted.length?'<div class="wform-section"><div class="wform-section-title" style="color:var(--amber)">⏳ Pending ('+notSubmitted.length+')</div>'+notSubmitted.map(u=>'<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:13px"><div><span style="color:var(--muted)">'+(u.display_name||u.email)+'</span>'+(u.region?'<span style="font-size:10px;color:var(--muted2);margin-left:8px">'+u.region+'</span>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;color:'+(FN_COLORS[u.function_type]||'var(--muted)')+';background:rgba(0,0,0,.2)">'+(FN_LABELS[u.function_type]||u.function_type)+'</span></div>').join('')+'</div>':'')+'</div>';
 }
 
-// ── USERS ─────────────────────────────────────────────────────────────────
-async function renderUsersTab(mc){
-  if(!_sbRole||_sbRole.role!=='admin'){if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Admin access required</div>';return;}
-  if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>';
-  const{data:users}=await _sb.from('user_profiles').select('id,email,display_name,role,function_type,region,created_at').order('created_at');
-  const list=users||[];
-  if(mc)mc.innerHTML='<div style="padding:28px 36px;max-width:720px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:20px">All Users ('+list.length+')</div>'+list.map(u=>'<div class="urow"><div><div style="font-size:13px;font-weight:500;color:var(--text)">'+(u.display_name||u.email||'—')+'</div><div style="font-size:11px;color:var(--muted);margin-top:3px">'+(u.email||'')+'  ·  '+(u.function_type||u.role||'—')+'  ·  '+(u.region||'All regions')+'</div></div><div style="display:flex;align-items:center;gap:10px"><select class="ssel" onchange="updateUserRole(\''+u.id+'\',this.value)">'+['admin','executive','hrbp','viewer'].map(r=>'<option '+(u.role===r?'selected':'')+'>'+r+'</option>').join('')+'</select>'+(u.id!==_sbUser?.id?'<button onclick="removeUser(\''+u.id+'\')" style="font-size:11px;color:var(--red);background:none;border:1px solid rgba(248,113,113,.3);padding:3px 10px;border-radius:6px;cursor:pointer">Remove</button>':'<span style="font-size:11px;color:var(--muted2)">You</span>')+'</div></div>').join('')+'</div>';
-}
-async function updateUserRole(uid,role){await _sb.from('user_profiles').update({role}).eq('id',uid);}
+// ── USERS ──────────────────────────────────────────────────────────────────
+
 async function removeUser(uid){if(!confirm('Remove user?'))return;await _sb.auth.admin.deleteUser(uid);await _sb.from('user_profiles').delete().eq('id',uid);await renderUsersTab(document.getElementById('tab-users'));}
 
 
@@ -5531,4 +5524,64 @@ async function sbSignOut(){await _sb.auth.signOut();document.getElementById('das
 
 </div><!-- end app-content -->
 </body>
-</html>
+</htmlasync function renderUsersTab(mc){
+  if(!_sbRole||_sbRole.role!=='admin'){
+    if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Admin access required</div>';
+    return;
+  }
+  if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>';
+  const{data:users}=await _sb.from('user_profiles')
+    .select('id,email,display_name,role,function_type,region,created_at')
+    .order('display_name');
+  const list=users||[];
+  const roleOpts_u   = ['admin','executive','hrbp','viewer'];
+  const fnOpts_u     = ['hrbp','ta','hrops','payroll','ld','admin','executive'];
+  const regionOpts_u = ['Pan India','North','South','East','West'];
+  function mkSel_u(opts, cur, onchg){
+    return '<select class="ssel" style="font-size:11px;padding:4px 6px" onchange="'+onchg+'">'
+      +opts.map(function(o){return '<option value="'+o+'" '+(cur===o?'selected':'')+'>'+o+'</option>';}).join('')
+      +'</select>';
+  }
+  var rows = list.map(function(u){
+    var isMe = u.id===(_sbUser&&_sbUser.id);
+    var nameCell = '<div><div style="font-size:13px;font-weight:500;color:var(--text)">'+(u.display_name||u.email||'—')+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(u.email||'')+'</div></div>';
+    var controls = '';
+    if(isMe){
+      controls = '<div style="font-size:11px;color:var(--muted2)">'+u.role+'</div>'
+        +'<div style="font-size:11px;color:var(--muted2)">'+(u.function_type||'—')+'</div>'
+        +'<div style="font-size:11px;color:var(--muted2)">'+(u.region||'—')+'</div>'
+        +'<div style="font-size:11px;color:var(--muted2)">You</div>';
+    } else {
+      var uid = u.id;
+      controls = '<div>'+mkSel_u(roleOpts_u,   u.role,          'updateUserField(''+uid+'','role',this.value)')+'</div>'
+        +'<div>'+mkSel_u(fnOpts_u,    u.function_type, 'updateUserField(''+uid+'','function_type',this.value)')+'</div>'
+        +'<div>'+mkSel_u(regionOpts_u,u.region,        'updateUserField(''+uid+'','region',this.value)')+'</div>'
+        +'<div><button onclick="removeUser(''+uid+'')" style="font-size:11px;color:var(--red);'
+        +'background:none;border:1px solid rgba(248,113,113,.3);padding:3px 10px;border-radius:6px;cursor:pointer">Remove</button></div>';
+    }
+    return '<div style="display:grid;grid-template-columns:1fr 90px 120px 100px 80px;gap:8px;'
+      +'align-items:center;padding:8px 10px;border-bottom:1px solid rgba(42,61,82,.3)">'
+      +nameCell+controls+'</div>';
+  }).join('');
+  if(mc)mc.innerHTML='<div style="padding:28px 36px;max-width:900px">'
+    +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;'
+    +'text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);'
+    +'padding-bottom:8px;margin-bottom:8px">User Management ('+list.length+')</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 90px 120px 100px 80px;gap:8px;'
+    +'padding:4px 10px;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;'
+    +'letter-spacing:.8px;border-bottom:1px solid var(--border);margin-bottom:6px">'
+    +'<div>User</div><div>Role</div><div>Function</div><div>Region</div><div></div></div>'
+    +rows+'</div>';
+}
+async function updateUserField(uid, field, val){
+  var upd = {};
+  upd[field] = val;
+  var res = await _sb.from('user_profiles').update(upd).eq('id', uid);
+  if(res.error){
+    alert('Update failed: '+res.error.message);
+    renderUsersTab(document.getElementById('tab-users'));
+  }
+}
+async function updateUserRole(uid, role){ return updateUserField(uid, 'role', role); }
+>
