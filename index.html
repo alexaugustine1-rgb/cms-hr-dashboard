@@ -339,7 +339,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 // ═══════════════════════════════════════════════════════════════════
 const SUPABASE_URL = 'https://jwfnxskhccgzjmchmrfr.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp3Zm54c2toY2NnempqbWNobXJmciIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzQyMjA3MTY4LCJleHAiOjIwNTc3ODMxNjh9.PZT5lkRTQ8xqxYYvdaMQNiOd9NbiVZLWwwLhqsJ7Pew';
-let supabase;
+
+// Initialize Supabase client immediately
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let userData = null;
 let userRole = null;
@@ -1017,9 +1019,6 @@ if (savedTheme === 'light') {
 // AUTO-START
 // ═══════════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
-  // Initialize Supabase
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  
   const { data: { session } } = await supabase.auth.getSession();
   if (session) {
     userData = session.user;
