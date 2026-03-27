@@ -356,10 +356,14 @@ let configManager = null;
 // AUTHENTICATION
 // ═══════════════════════════════════════════════════════════════════
 async function sbLogin() {
+  console.log('sbLogin called');
   const email = document.getElementById('sbEmail').value.trim();
   const pwd = document.getElementById('sbPwd').value;
   const errDiv = document.getElementById('sbErr');
   const btn = document.getElementById('sbLoginBtn');
+
+  console.log('Email:', email);
+  console.log('Supabase client:', supabase);
 
   if (!email || !pwd) {
     errDiv.style.display = 'block';
@@ -373,18 +377,24 @@ async function sbLogin() {
   btn.disabled = true;
 
   try {
+    console.log('Attempting login...');
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pwd });
+    console.log('Login response:', { data, error });
+    
     if (error) throw error;
 
     userData = data.user;
-    console.log('Logged in:', userData.email);
+    console.log('Logged in successfully:', userData.email);
     
     // Fetch user role
+    console.log('Fetching user role...');
     const { data: roleData, error: roleError } = await supabase
       .from('user_roles')
       .select('role, region')
       .eq('email', userData.email)
       .single();
+
+    console.log('Role data:', { roleData, roleError });
 
     if (roleError) {
       console.warn('No role found, defaulting to HRBP');
@@ -394,6 +404,8 @@ async function sbLogin() {
       userRole = roleData.role;
       userRegion = roleData.region;
     }
+
+    console.log('User role:', userRole, 'Region:', userRegion);
 
     document.getElementById('sbLoginScreen').style.display = 'none';
     document.getElementById('appContainer').style.display = 'block';
@@ -405,7 +417,9 @@ async function sbLogin() {
       document.getElementById('adminSection').style.display = 'block';
     }
 
+    console.log('Calling init()...');
     await init();
+    console.log('Init complete');
   } catch (err) {
     console.error('Login error:', err);
     errDiv.style.display = 'block';
