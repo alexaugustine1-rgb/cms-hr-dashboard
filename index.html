@@ -2735,9 +2735,11 @@ function init() {
       const btn = document.createElement('button');
       btn.className = 'week-btn' + (key === latestKey ? ' active latest' : '');
       btn.textContent = (WEEK_NAMES[key]||key) + '  ' + w.label;
-      btn.onclick = () => { currentWeek=key; document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); };
+      btn.onclick = () => { currentWeek=key; document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); var _c=document.getElementById('weekBtns');if(_c){var _ab=_c.querySelector('.week-btn.active');if(_ab)_c.scrollLeft=_ab.offsetLeft-_c.offsetWidth/2+_ab.offsetWidth/2;} };
       container.appendChild(btn);
     });
+    // Auto-scroll to latest week
+    setTimeout(function(){var _c=container;var _ab=_c.querySelector('.week-btn.active.latest,.week-btn.active');if(_ab)_c.scrollLeft=_ab.offsetLeft-_c.offsetWidth/2+_ab.offsetWidth/2;},80);
   }
   render();
 }
