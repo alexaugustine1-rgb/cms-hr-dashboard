@@ -3015,9 +3015,9 @@ async function loadProspectiveJoiners() {
   if(!_sbUser) return;
   try {
     var today  = new Date();
-    var fwd21  = new Date(today.getTime() + 21*86400000);
-    var fromDt = new Date(today.getTime() - 7*86400000).toISOString().substring(0,10); // include recent past
-    var toDt   = fwd21.toISOString().substring(0,10);
+    var fwd30  = new Date(today.getTime() + 60*86400000);
+    var fromDt = new Date(today.getTime() - 14*86400000).toISOString().substring(0,10);
+    var toDt   = fwd30.toISOString().substring(0,10);
     var q = _sb.from('prospective_joiners')
       .select('*')
       .gte('doj', fromDt)
@@ -3139,12 +3139,14 @@ function renderJoinersTab(el) {
         +'<div style="font-size:10px;color:'+urgency+'">'+dayLabel+'</div>';
 
     return '<tr style="border-bottom:1px solid rgba(42,61,82,.25)">'
-      +'<td style="padding:10px 12px">'
-        +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(r.candidate_name||'—')+'</div>'
-        +'<div style="font-size:11px;color:var(--muted)">'+esc(r.designation||'')+'</div>'
+      +'<td style="padding:10px 12px;min-width:130px">'
+        +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(r.candidate_name||'—')+'</div>'
       +'</td>'
-      +'<td style="padding:10px 12px">'
-        +'<div style="font-size:12px;color:var(--text)">'+esc(r.customer||'—')+'</div>'
+      +'<td style="padding:10px 12px;min-width:150px">'
+        +'<div style="font-size:11px;color:var(--text)">'+esc(r.designation||'—')+'</div>'
+      +'</td>'
+      +'<td style="padding:10px 12px;min-width:160px">'
+        +'<div style="font-size:11px;color:var(--text)">'+esc(r.customer||'—')+'</div>'
         +'<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.25);color:'+tc+'">'+esc(r.account_tier||'Regular')+'</span>'
       +'</td>'
       +'<td style="padding:10px 12px">'
@@ -3154,7 +3156,7 @@ function renderJoinersTab(el) {
       +'<td style="padding:10px 12px;font-size:11px;color:var(--muted)">'+esc(r.recruiter_name||'—')+'</td>'
       +'<td style="padding:10px 12px">'+statusCell+'</td>'
       +'</tr>';
-  }).join('') || '<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--muted2)">No expected joiners matching current filters</td></tr>';
+  }).join('') || '<tr><td colspan="7" style="padding:40px;text-align:center;color:var(--muted2)">No expected joiners matching current filters</td></tr>';
 
   el.innerHTML = '<div style="padding:28px 36px;max-width:1100px">'
     // Header
@@ -3194,7 +3196,9 @@ function renderJoinersTab(el) {
     +'<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">'
     +'<table style="width:100%;border-collapse:collapse">'
     +'<thead style="background:var(--surface3)">'
-    +'<tr><th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Candidate</th>'
+    +'<tr>'
+    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Candidate</th>'
+    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Designation</th>'
     +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Account</th>'
     +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Region</th>'
     +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">DOJ</th>'
