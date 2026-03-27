@@ -5530,58 +5530,66 @@ async function sbSignOut(){await _sb.auth.signOut();document.getElementById('das
     return;
   }
   if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>';
-  const{data:users}=await _sb.from('user_profiles')
+  var {data:users} = await _sb.from('user_profiles')
     .select('id,email,display_name,role,function_type,region,created_at')
     .order('display_name');
-  const list=users||[];
-  const roleOpts_u   = ['admin','executive','hrbp','viewer'];
-  const fnOpts_u     = ['hrbp','ta','hrops','payroll','ld','admin','executive'];
-  const regionOpts_u = ['Pan India','North','South','East','West'];
-  function mkSel_u(opts, cur, onchg){
-    return '<select class="ssel" style="font-size:11px;padding:4px 6px" onchange="'+onchg+'">'
-      +opts.map(function(o){return '<option value="'+o+'" '+(cur===o?'selected':'')+'>'+o+'</option>';}).join('')
-      +'</select>';
+  var list = users||[];
+  var selfId = (_sbUser&&_sbUser.id)||'';
+
+  function selHtml(id, opts, cur, field){
+    var s = '<select class="ssel" style="font-size:11px;padding:4px 6px" '
+      +'onchange="updateUserField(''+id+'',''+field+'',this.value)">';
+    opts.forEach(function(o){
+      s += '<option value="'+o+'"'+(cur===o?' selected':'')+'>'+o+'</option>';
+    });
+    s += '</select>';
+    return s;
   }
-  var rows = list.map(function(u){
-    var isMe = u.id===(_sbUser&&_sbUser.id);
-    var nameCell = '<div><div style="font-size:13px;font-weight:500;color:var(--text)">'+(u.display_name||u.email||'—')+'</div>'
-      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(u.email||'')+'</div></div>';
-    var controls = '';
-    if(isMe){
-      controls = '<div style="font-size:11px;color:var(--muted2)">'+u.role+'</div>'
-        +'<div style="font-size:11px;color:var(--muted2)">'+(u.function_type||'—')+'</div>'
-        +'<div style="font-size:11px;color:var(--muted2)">'+(u.region||'—')+'</div>'
-        +'<div style="font-size:11px;color:var(--muted2)">You</div>';
-    } else {
-      var uid = u.id;
-      controls = '<div>'+mkSel_u(roleOpts_u,   u.role,          'updateUserField(''+uid+'','role',this.value)')+'</div>'
-        +'<div>'+mkSel_u(fnOpts_u,    u.function_type, 'updateUserField(''+uid+'','function_type',this.value)')+'</div>'
-        +'<div>'+mkSel_u(regionOpts_u,u.region,        'updateUserField(''+uid+'','region',this.value)')+'</div>'
-        +'<div><button onclick="removeUser(''+uid+'')" style="font-size:11px;color:var(--red);'
-        +'background:none;border:1px solid rgba(248,113,113,.3);padding:3px 10px;border-radius:6px;cursor:pointer">Remove</button></div>';
-    }
-    return '<div style="display:grid;grid-template-columns:1fr 90px 120px 100px 80px;gap:8px;'
+
+  var roleOpts   = ['admin','executive','hrbp','viewer'];
+  var fnOpts     = ['hrbp','ta','hrops','payroll','ld','admin','executive'];
+  var regionOpts = ['Pan India','North','South','East','West'];
+
+  var rowsHtml = '';
+  list.forEach(function(u){
+    var isMe = u.id === selfId;
+    var nameHtml = '<div>'
+      +'<div style="font-size:13px;font-weight:500;color:var(--text)">'+(u.display_name||u.email||'—')+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(u.email||'')+'</div>'
+      +'</div>';
+    var roleCell   = isMe ? '<div style="font-size:11px;color:var(--muted2)">'+u.role+'</div>'
+                          : '<div>'+selHtml(u.id, roleOpts,   u.role,          'role')+'</div>';
+    var fnCell     = isMe ? '<div style="font-size:11px;color:var(--muted2)">'+(u.function_type||'—')+'</div>'
+                          : '<div>'+selHtml(u.id, fnOpts,     u.function_type, 'function_type')+'</div>';
+    var regionCell = isMe ? '<div style="font-size:11px;color:var(--muted2)">'+(u.region||'—')+'</div>'
+                          : '<div>'+selHtml(u.id, regionOpts, u.region,        'region')+'</div>';
+    var actionCell = isMe
+      ? '<div style="font-size:11px;color:var(--muted2)">You</div>'
+      : '<div><button onclick="removeUser(''+u.id+'')" '
+        +'style="font-size:11px;color:var(--red);background:none;border:1px solid rgba(248,113,113,.3);'
+        +'padding:3px 10px;border-radius:6px;cursor:pointer">Remove</button></div>';
+    rowsHtml += '<div style="display:grid;grid-template-columns:1fr 90px 120px 100px 80px;gap:8px;'
       +'align-items:center;padding:8px 10px;border-bottom:1px solid rgba(42,61,82,.3)">'
-      +nameCell+controls+'</div>';
-  }).join('');
-  if(mc)mc.innerHTML='<div style="padding:28px 36px;max-width:900px">'
+      +nameHtml+roleCell+fnCell+regionCell+actionCell
+      +'</div>';
+  });
+
+  if(mc)mc.innerHTML = '<div style="padding:28px 36px;max-width:920px">'
     +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;'
     +'text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);'
     +'padding-bottom:8px;margin-bottom:8px">User Management ('+list.length+')</div>'
     +'<div style="display:grid;grid-template-columns:1fr 90px 120px 100px 80px;gap:8px;'
-    +'padding:4px 10px;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;'
-    +'letter-spacing:.8px;border-bottom:1px solid var(--border);margin-bottom:6px">'
+    +'padding:4px 10px;font-size:10px;font-weight:600;color:var(--muted2);'
+    +'text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--border);margin-bottom:4px">'
     +'<div>User</div><div>Role</div><div>Function</div><div>Region</div><div></div></div>'
-    +rows+'</div>';
+    +rowsHtml
+    +'</div>';
 }
 async function updateUserField(uid, field, val){
   var upd = {};
   upd[field] = val;
   var res = await _sb.from('user_profiles').update(upd).eq('id', uid);
-  if(res.error){
-    alert('Update failed: '+res.error.message);
-    renderUsersTab(document.getElementById('tab-users'));
-  }
+  if(res.error){ alert('Update failed: '+res.error.message); }
 }
 async function updateUserRole(uid, role){ return updateUserField(uid, 'role', role); }
 >
