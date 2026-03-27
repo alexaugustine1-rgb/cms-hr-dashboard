@@ -989,11 +989,9 @@ function renderOverview(w, pw) {
       regExits += ra;
     });
     var regHC = rd.hc||1;
-    // Guard: if fewer than 20% of total exits have region attribution, data is incomplete
-    var regDataOk = q1exits > 0 && (regExits / q1exits) >= 0.15;
-    regAttr = regDataOk ? Math.round(regExits/regHC*4*100*10)/10 : null;
+    regAttr = regExits > 0 ? Math.round(regExits/regHC*4*100*10)/10 : null;
     var fillRate = rd.ta_sourced>0?Math.round(rd.ta_joined/rd.ta_sourced*100):0;
-    var attrCol = regAttr!==null?(regAttr>15?'var(--red)':regAttr>10?'var(--amber)':'var(--green)'):'var(--muted)';
+    var attrCol = regAttr!==null?(regAttr>25?'var(--red)':regAttr>15?'var(--amber)':'var(--green)'):'var(--muted)';
     var regCritical = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.region===reg&&r.tat>45;}).length : 0;
     var regColor = {'North':'#60a5fa','South':'#34d399','East':'#f59e0b','West':'#a78bfa'}[reg]||'var(--accent)';
     return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+regColor+';border-radius:10px;padding:14px 16px">'
