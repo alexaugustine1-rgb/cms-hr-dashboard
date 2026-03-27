@@ -3174,7 +3174,7 @@ const TEAM_MEMBERS = [
   {id:"8c0330f1-a734-49b8-bdcc-3ec582096b61",name:"Pijush Dutta",fn:"ta",group:"TA"},
   {id:"be9f4faa-2a47-4d93-8525-c25b9528e408",name:"Salma Saifi",fn:"ta",group:"TA"},
   {id:"f53bf0e0-4c11-4611-a516-d19f495dd8a2",name:"Deepak Kumar Shetty",fn:"ld",group:"L&D"},
-  {id:"792b3c45-4c9e-465e-8893-65cfb9336bbd",name:"Ashok B C",fn:"admin",group:"Admin"}
+  {id:"792b3c45-4c9e-465e-8893-65cfb9336bbd",name:"Ashok B C",fn:"facilities",group:"Admin"}
 ];
 
 // ── GLOBAL VARS ──────────────────────────────────────────────────────────────
@@ -3354,8 +3354,8 @@ function buildActionsSection(){
     +'<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">What needs to be done / escalated?</label>'
     +'<textarea id="actionWhat" rows="2" placeholder="e.g. Follow up on R1 approval for HDBFS, escalate payroll correction for Emp 11XXXXX…" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">'
-    +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Account / Area</label>'
-    +'<input type="text" id="actionArea" placeholder="HDBFS, Payroll, etc." style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Area / Category</label>'
+    +'<select id="actionArea" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px"><option value="">Select area…</option><option value="Customer">Customer</option><option value="Payroll">Payroll</option><option value="Leave & Attendance">Leave & Attendance</option><option value="Claims">Claims</option><option value="FnF">FnF</option><option value="PF / ESIC">PF / ESIC</option><option value="Mediclaim">Mediclaim</option><option value="Letters">Letters</option><option value="Onboarding">Onboarding</option><option value="Compliance">Compliance</option><option value="Others">Others</option></select></div>'
     +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Assign to</label>'
     +'<select id="actionAssignee" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'+opts+'</select></div>'
     +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Due by</label>'
@@ -3718,7 +3718,7 @@ async function renderUsersTab(mc){
   const list=users||[];
   var selfId=_sbUser&&_sbUser.id;
   var roleOpts_u=['admin','executive','hrbp','viewer'];
-  var fnOpts_u=['hrbp','ta','hrops','payroll','ld','admin','executive'];
+  var fnOpts_u=['hrbp','ta','hrops','payroll','ld','facilities','admin','executive'];
   var regionOpts_u=['Pan India','North','South','East','West'];
   function mkSel_u(opts,cur,uid,fld){
     var chg='updateUserField(\''+uid+'\',\''+fld+'\',this.value)';
