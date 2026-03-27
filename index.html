@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1023,13 +1024,7 @@ function renderOverview(w, pw) {
   scored.sort(function(a,b){return b.score-a.score;});
   var maxScore = scored.length>0?scored[0].score:100;
 
-  // Exclude HRBP-role names from recruiter leaderboard
-  var HRBP_REC_EXCL = ['suhail','somasri','ayush','abhishek','priya paul','shambhavi'];
-  scored = scored.filter(function(r){
-    var nl = r.name.toLowerCase();
-    return !HRBP_REC_EXCL.some(function(h){return nl.indexOf(h)>=0;});
-  });
-  var recRows = scored.map(function(r,i){
+  var recRows = scored.slice(0,8).map(function(r,i){
     var barW = Math.round(r.score/100*100);
     var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
     var scoreCol = r.score>=70?'var(--green)':r.score>=50?'var(--amber)':'var(--red)';
@@ -2275,7 +2270,7 @@ function openAbsentModal(id) {
 function renderAbsenteeism(el) {
   if (!el) el = document.getElementById('tab-absenteeism');
   if (!el) return;
-  if(typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India'&&(_sbRole.function_type!=='hrops'&&_sbRole.function_type!=='payroll')&&typeof _absentFilter!=='undefined'){_absentFilter.region=_sbRole.region;}
+  if(typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India'&&typeof _absentFilter!=='undefined'){_absentFilter.region=_sbRole.region;}
 
   // Use Supabase data if loaded, else show loading
   if (!_absentLoaded) {
@@ -2378,8 +2373,6 @@ function renderAbsenteeism(el) {
 var _actionTasks = [];
 var _tasksLoaded = false;
 var _caseEntries = [];  // structured ER/abscond/retention cases
-var _actionEntries = []; // combined next-week actions + escalations
-const TEAM_MEMBERS = [{"id": "33e4101d-df9b-44e3-bcc7-56d16abb0c40", "name": "Alex Augustine", "fn": "admin", "group": "Admin"}, {"id": "c2e8382a-7628-44b6-a9f9-0ad507d944d0", "name": "Amit Dasgupta", "fn": "executive", "group": "CXO"}, {"id": "cc470378-954c-4d21-bdfe-b122b3d5fcab", "name": "Neeraj Sharma", "fn": "executive", "group": "CXO"}, {"id": "175277f2-4066-4560-93f5-221452096288", "name": "Shankar Sengupta", "fn": "executive", "group": "CXO"}, {"id": "5c5a5e52-103c-4d99-8a05-b7fa768ab0f2", "name": "Vinay Kumar", "fn": "executive", "group": "CXO"}, {"id": "b4ef2ce4-7ed8-47bc-b68a-87f12f25a495", "name": "Kesavan", "fn": "hrops", "group": "HR Ops"}, {"id": "5c73739b-0cbb-42bc-824c-195f32b2f881", "name": "Sheetal Sadashiv Pachangane", "fn": "hrops", "group": "HR Ops"}, {"id": "78a5be99-4ec4-440e-a01b-b4abe772aacb", "name": "Mohit Kumar", "fn": "payroll", "group": "Payroll"}, {"id": "21ef739d-8892-422b-8187-43922621f3b1", "name": "R Ramesh", "fn": "payroll", "group": "Payroll"}, {"id": "b901fe5b-db37-42dd-a787-57e14b174dd4", "name": "Abhishek Singh", "fn": "hrbp", "group": "HRBP"}, {"id": "8439a906-356a-4189-9a05-8f9554c3003a", "name": "Priya Paul", "fn": "hrbp", "group": "HRBP"}, {"id": "cdbcc9f2-f085-4d07-8cb0-ccb1d47c8849", "name": "Shambhavi Prathamesh Joshi", "fn": "hrbp", "group": "HRBP"}, {"id": "17eda496-dc8b-4631-8b5e-8af08a17f5e2", "name": "Somasri Sukumar Samanta", "fn": "hrbp", "group": "HRBP"}, {"id": "93c6bd40-def6-4e4b-ad79-17c4b4149fb3", "name": "Surajit Sen", "fn": "hrbp", "group": "HRBP"}, {"id": "b454924e-f551-4e3f-9d02-f001a538ceba", "name": "Ajith Inguva", "fn": "ta", "group": "TA"}, {"id": "15a5a42d-e3d8-46e8-8db4-9b38a33e2ebc", "name": "Caral Anitha Dsouza", "fn": "ta", "group": "TA"}, {"id": "e1a71122-b49d-4d9f-aa8c-195fb844f8a4", "name": "Dhananjay Kumar Singh", "fn": "ta", "group": "TA"}, {"id": "2b98f25b-9945-43b1-9c77-d4bc9e664ce5", "name": "Juee Nilesh Patil", "fn": "ta", "group": "TA"}, {"id": "4ab7ec34-cff1-4b8f-877e-969c2e1f9c1b", "name": "Kumari Puja", "fn": "ta", "group": "TA"}, {"id": "4b012b94-8247-4258-8b5d-8f55613fb01b", "name": "Mousumi Priyadarsini Behera", "fn": "ta", "group": "TA"}, {"id": "a38f4fde-aaa4-4006-a54d-cb4f0c1309a1", "name": "Neha Kaur Sammi", "fn": "ta", "group": "TA"}, {"id": "7eb25e10-11e9-405a-9ffb-f956ce76d0a1", "name": "Nikita Yadav", "fn": "ta", "group": "TA"}, {"id": "dc5e862c-8307-4936-847f-7dc776ba0d06", "name": "Nilam Sunil Patil", "fn": "ta", "group": "TA"}, {"id": "8c0330f1-a734-49b8-bdcc-3ec582096b61", "name": "Pijush Dutta", "fn": "ta", "group": "TA"}, {"id": "be9f4faa-2a47-4d93-8525-c25b9528e408", "name": "Salma Saifi", "fn": "ta", "group": "TA"}, {"id": "f53bf0e0-4c11-4611-a516-d19f495dd8a2", "name": "Deepak Kumar Shetty", "fn": "ld", "group": "L&D"}, {"id": "792b3c45-4c9e-465e-8893-65cfb9336bbd", "name": "Ashok B C", "fn": "admin", "group": "Admin"}];
 var _pendingTasks = []; // open tasks from prior weeks shown at top of form
 var _taskFilter = { type: 'all', status: 'open' };
 
@@ -3132,131 +3125,27 @@ async function renderSubmitTab(mc){
   // Render structured entry lists
   if(typeof renderVisitEntries==='function') renderVisitEntries();
   if(typeof renderCaseEntries==='function') renderCaseEntries();
-  if(typeof renderActionEntries==='function')  renderActionEntries();
-  if(typeof renderTaAgingEntries==='function')  renderTaAgingEntries();
-  if(typeof renderTaJoinerEntries==='function') renderTaJoinerEntries();
   // Load pending tasks checklist
   if(typeof loadPendingTasks==='function') loadPendingTasks();
 }
 
-
-function buildActionsSection(){
-  // Build grouped assignee options
-  var groups = ['CXO','Admin','HR Ops','Payroll','HRBP','TA','L&D'];
-  var opts = '<option value="">— Self (me) —</option>';
-  var selfId = (_sbUser&&_sbUser.id)||'';
-  groups.forEach(function(g){
-    var members = TEAM_MEMBERS.filter(function(m){return m.group===g&&m.id!==selfId;});
-    if(!members.length) return;
-    opts += '<optgroup label="'+g+'">';
-    members.forEach(function(m){
-      opts += '<option value="'+m.id+'">'+m.name+'</option>';
-    });
-    opts += '</optgroup>';
-  });
-  // Default due = end of next week (Friday)
-  var today = new Date();
-  var daysToFri = (5 - today.getDay() + 7) % 7 || 7;
-  var nextFri = new Date(today.getTime() + (daysToFri+7)*86400000);
-  var defDue = nextFri.toISOString().substring(0,10);
-  return '<div class="wform-section">'
-    +'<div class="wform-section-title">Actions &amp; Escalations for Next Week</div>'
-    +'<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'
-    +'Each entry creates a tracked task in Action Centre. Assign to yourself or a team member. Max '+ACTION_MAX+' entries.</div>'
-    +'<div id="actionEntriesList" style="margin-bottom:10px"></div>'
-    +'<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
-    +'<div style="font-size:11px;font-weight:600;color:var(--muted2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.8px">Add Entry</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
-    +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Type</label>'
-    +'<select id="actionType" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'
-    +'<option value="next_week_plan">📋 Next Week Plan</option>'
-    +'<option value="escalation">🔺 Escalation</option>'
-    +'<option value="risk">⚠️ Risk / Blocker</option>'
-    +'</select></div>'
-    +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Priority</label>'
-    +'<select id="actionPriority" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'
-    +'<option value="Medium">Medium</option><option value="High">High</option><option value="Low">Low</option>'
-    +'</select></div>'
-    +'</div>'
-    +'<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">What needs to be done / escalated?</label>'
-    +'<textarea id="actionWhat" rows="2" placeholder="e.g. Follow up on R1 approval for HDBFS replacement, escalate payroll correction for Emp 11XXXXX…" '
-    +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">'
-    +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Account / Area</label>'
-    +'<input type="text" id="actionArea" placeholder="HDBFS, Payroll, etc." '
-    +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
-    +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Assign to</label>'
-    +'<select id="actionAssignee" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'+opts+'</select></div>'
-    +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Due by</label>'
-    +'<input type="date" id="actionDue" value="'+defDue+'" '
-    +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
-    +'</div>'
-    +'<button type="button" onclick="addActionEntry()" '
-    +'style="padding:7px 16px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:12px;font-weight:600;cursor:pointer">+ Add Entry</button>'
-    +'</div></div>';
-}
-
 function buildFunctionSections(t){
-    if(t==='ta'){
-    var pendingHTML='<div id="pendingTasksSection"></div>';
-    // ── Dropout reasons (text — qualitative) ─────────────────────────
-    var dropoutHTML=''
-      +'<div class="wform-section">'
-      +'<div class="wform-section-title">Offer Dropouts this Week</div>'
-      +'<div class="wform-row"><label>Dropout reason(s) — be specific per candidate</label>'
-      +'<textarea id="f_ta_dropout_reason" style="min-height:72px" '
-      +'placeholder="Candidate 1: Better offer from competitor | Candidate 2: Location constraint — refused relocation…"></textarea></div>'
-      +'</div>';
-    // ── Aging blockers — structured (Req ID + Account + Blocker) ─────
-    var agingHTML=''
-      +'<div class="wform-section">'
-      +'<div class="wform-section-title">Aging Req Blockers</div>'
-      +'<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'
-      +'Flag open Platinum/Gold reqs >45d where you need help. Each becomes an escalation task.</div>'
-      +'<div id="taAgingList" style="margin-bottom:10px"></div>'
-      +'<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
-      +'<div style="display:grid;grid-template-columns:120px 1fr 1fr;gap:8px;margin-bottom:8px">'
-      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Req ID</label>'
-      +'<input type="text" id="taAgingReq" placeholder="REQ-XXXX" '
-      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
-      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Account</label>'
-      +'<input type="text" id="taAgingAccount" placeholder="HDBFS, ABFRL…" '
-      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
-      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Days Open</label>'
-      +'<input type="number" id="taAgingDays" placeholder="52" min="0" '
-      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
-      +'</div>'
-      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Blocker — what\'s stuck and what do you need?</label>'
-      +'<input type="text" id="taAgingBlocker" placeholder="R1 approval pending with client HR | No suitable candidates in market — need JD relax…" '
-      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
-      +'<button type="button" onclick="addTaAgingEntry()" '
-      +'style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:12px;font-weight:600;cursor:pointer">+ Add Blocker</button>'
-      +'</div></div>';
-    // ── Expected joiners — structured ─────────────────────────────────
-    var joinersHTML=''
-      +'<div class="wform-section">'
-      +'<div class="wform-section-title">Expected Joiners Next Week</div>'
-      +'<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'
-      +'Candidates confirmed to join. Each entry becomes a planned action task.</div>'
-      +'<div id="taJoinerList" style="margin-bottom:10px"></div>'
-      +'<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr 140px;gap:8px;margin-bottom:8px">'
-      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Candidate Name</label>'
-      +'<input type="text" id="taJoinerName" placeholder="Name…" '
-      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
-      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Account</label>'
-      +'<input type="text" id="taJoinerAccount" placeholder="Account…" '
-      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
-      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">DOJ</label>'
-      +'<input type="date" id="taJoinerDOJ" '
-      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
-      +'</div>'
-      +'<button type="button" onclick="addTaJoinerEntry()" '
-      +'style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:12px;font-weight:600;cursor:pointer">+ Add Joiner</button>'
-      +'</div></div>';
-    return pendingHTML + dropoutHTML + agingHTML + joinersHTML + buildActionsSection();
-  }
-if(t==='hrbp'){
+  if(t==='ta')return''
+    +'<div class="wform-section"><div class="wform-section-title">This Week\'s Numbers</div>'
+    +'<div class="wform-grid4">'
+    +'<div><input type="number" min="0" id="f_ta_opened" class="wform-num-input" value="0"><div class="wform-num-label">Positions Opened</div></div>'
+    +'<div><input type="number" min="0" id="f_ta_closed" class="wform-num-input" value="0"><div class="wform-num-label">Positions Closed</div></div>'
+    +'<div><input type="number" min="0" id="f_ta_offers" class="wform-num-input" value="0"><div class="wform-num-label">Offers Released</div></div>'
+    +'<div><input type="number" min="0" id="f_ta_dropouts" class="wform-num-input" value="0"><div class="wform-num-label">Offer Dropouts</div></div>'
+    +'</div></div>'
+    +'<div class="wform-section"><div class="wform-section-title">Key Updates</div>'
+    +'<div class="wform-row"><label>Dropout reason(s) — brief</label><textarea id="f_ta_dropout_reason" placeholder="Offer revoked / better offer / salary mismatch…" style="min-height:54px"></textarea></div>'
+    +'<div class="wform-row"><label>Any ageing req at a Platinum or Gold account? (Req ID · Account · Days · Blocker)</label><textarea id="f_ta_aging" style="min-height:72px" placeholder="REQ-XXXX · HDBFS · 52 days · Candidate declined offer…"></textarea></div>'
+    +'<div class="wform-row"><label>Constraints or escalations needing attention</label><textarea id="f_ta_constraints" placeholder="Portal access issue / no suitable candidates / budget hold…" style="min-height:54px"></textarea></div>'
+    +'<div class="wform-row"><label>Expected joiners next week</label><textarea id="f_ta_joining_plan" placeholder="Name · Account · DOJ…" style="min-height:54px"></textarea></div>'
+    +'<div class="wform-row"><label>Anything else to flag this week?</label><textarea id="f_anything_else" placeholder="Any other observation, risk, or update not covered above…" style="min-height:54px"></textarea></div>'
+    +'</div>';
+  if(t==='hrbp'){
     // ── Pending tasks checklist (injected after form loads) ──
     var pendingHTML='<div id="pendingTasksSection"></div>';
     // ── Site Visits — structured dropdown entry ──────────────
@@ -3336,8 +3225,7 @@ if(t==='hrbp'){
       +'<div class="wform-row"><label>Anything else to flag?</label>'
       +'<textarea id="f_anything_else" placeholder="Any other observation, risk, or escalation not covered above…" style="min-height:54px"></textarea></div>'
       +'</div>';
-    var actHTML = buildActionsSection();
-    return pendingHTML + visitHTML + engHTML + erHTML + issHTML + actHTML;
+    return pendingHTML + visitHTML + engHTML + erHTML + issHTML;
   }
   if(t==='payroll'){
     var pendingHTML='<div id="pendingTasksSection"></div>';
@@ -3363,8 +3251,7 @@ if(t==='hrbp'){
       +'<input type="text" id="srFormTitle" placeholder="Brief issue description…" style="flex:1;min-width:180px;padding:7px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'
       +'<button type="button" onclick="addStatRiskEntry()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:12px;font-weight:600;cursor:pointer">+ Add</button></div></div>'
       +'<div class="wform-section"><div class="wform-section-title">Anything Else to Flag?</div>'
-      +'<div class="wform-row"><textarea id="f_anything_else" placeholder="Any other risk, gap or follow-up item…" style="min-height:54px"></textarea></div></div>'
-      +buildActionsSection();
+      +'<div class="wform-row"><textarea id="f_anything_else" placeholder="Any other risk, gap or follow-up item…" style="min-height:54px"></textarea></div></div>';
   }
   if(t==='hrops'){
     var pendingHTML='<div id="pendingTasksSection"></div>';
@@ -3382,13 +3269,10 @@ if(t==='hrbp'){
       +'<div class="wform-row"><label>Escalation Details <span style="font-size:10px;color:var(--red)">(creates escalation task)</span></label>'
       +'<textarea id="f_hrops_esc_details" placeholder="Nature of escalations handled…"></textarea></div></div>'
       +'<div class="wform-section"><div class="wform-section-title">Anything Else to Flag?</div>'
-      +'<div class="wform-row"><textarea id="f_anything_else" placeholder="Any other gap, risk or follow-up item…" style="min-height:54px"></textarea></div></div>'
-      +buildActionsSection();
+      +'<div class="wform-row"><textarea id="f_anything_else" placeholder="Any other gap, risk or follow-up item…" style="min-height:54px"></textarea></div></div>';
   }
-  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Upcoming Trainings (Next 2–4 Weeks)</label><textarea id="f_ld_upcoming" style="min-height:90px" placeholder="Program name, schedule, target audience…"></textarea></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>'
-  +buildActionsSection();
-  if(t==='admin')return'<div class="wform-section"><div class="wform-section-title">Admin & Facilities</div><div class="wform-row"><label>Facility Issues & Resolution Details</label><textarea id="f_admin_issues" style="min-height:110px" placeholder="AC issues, power supply, internet, office setup…"></textarea></div><div class="wform-row"><label>Cost Optimisation / Savings Initiatives</label><textarea id="f_admin_savings" placeholder="Vendor negotiations, energy savings…"></textarea></div></div>'
-  +buildActionsSection();
+  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Upcoming Trainings (Next 2–4 Weeks)</label><textarea id="f_ld_upcoming" style="min-height:90px" placeholder="Program name, schedule, target audience…"></textarea></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>';
+  if(t==='admin')return'<div class="wform-section"><div class="wform-section-title">Admin & Facilities</div><div class="wform-row"><label>Facility Issues & Resolution Details</label><textarea id="f_admin_issues" style="min-height:110px" placeholder="AC issues, power supply, internet, office setup…"></textarea></div><div class="wform-row"><label>Cost Optimisation / Savings Initiatives</label><textarea id="f_admin_savings" placeholder="Vendor negotiations, energy savings…"></textarea></div></div>';
   return'<div class="wform-section"><div style="color:var(--muted);font-size:13px">Form loading…</div></div>';
 }
 
@@ -3438,42 +3322,10 @@ async function submitWeeklyForm(fnType,region){
         description: ce.description
       }));
     });
-    // ── Actions & Escalations entries ────────────────────────────────
-    (_actionEntries||[]).forEach(function(ae){
-      var sevMap={'High':'High','Medium':'Medium','Low':'Low'};
-      var fnArea = fnType==='ta'?'TA':fnType==='payroll'?'Payroll':fnType==='hrops'?'HR Ops':fnType==='ld'?'L&D':fnType==='admin'?'Admin':'HRBP';
-      var task = Object.assign({},_base,{
-        task_type: ae.type||'next_week_plan',
-        function_area: fnArea,
-        severity: sevMap[ae.priority]||'Medium',
-        title: (ae.area?'['+ae.area+'] ':'')+ae.what.substring(0,100),
-        description: ae.what,
-        due_date: ae.due || _base.due_date
-      });
-      if(ae.assignee&&ae.assignee.id){
-        task.assigned_to = ae.assignee.id;
-        task.assigned_to_name = ae.assignee.name;
-      }
-      _tb.push(task);
-    });
     // ── Text field tasks ────────────────────────────────────────────
     const _fnArea = fnType==='ta'?'TA':fnType==='payroll'?'Payroll':fnType==='hrops'?'HR Ops':'HRBP';
-    // TA — aging blockers (escalation per req) + expected joiners (planned action per candidate)
-    (_taAgingEntries||[]).forEach(function(ae){
-      _tb.push(Object.assign({},_base,{
-        task_type:'escalation', function_area:'TA', severity:'High',
-        title:'Aging blocker'+(ae.req?' '+ae.req:'')+' — '+ae.account+(ae.days?' ('+ae.days+'d)':''),
-        description: ae.blocker
-      }));
-    });
-    (_taJoinerEntries||[]).forEach(function(je){
-      _tb.push(Object.assign({},_base,{
-        task_type:'planned_action', function_area:'TA', severity:'Medium',
-        title:'Joiner: '+je.name+(je.account?' — '+je.account:''),
-        description: 'Expected DOJ: '+(je.doj||'TBC'),
-        due_date: je.doj || _base.due_date
-      }));
-    });
+    // TA
+    if(!_skip(_fv('f_ta_joining_plan'))) _tb.push(Object.assign({},_base,{task_type:'planned_action',function_area:'TA',severity:'Medium',title:'Join plan — '+_wk,description:_fv('f_ta_joining_plan')}));
     if(!_skip(_fv('f_ta_constraints'))) _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'TA',severity:'Medium',title:'TA constraint — '+_wk,description:_fv('f_ta_constraints')}));
     // HRBP
     if(!_skip(_fv('f_hrbp_risks')))    _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'HRBP',severity:'High',title:'HRBP risk — '+_wk,description:_fv('f_hrbp_risks')}));
@@ -3513,12 +3365,6 @@ async function submitWeeklyForm(fnType,region){
       await _sb.from('action_tasks').insert(_tb);
       _caseEntries=[];
       if(typeof renderCaseEntries==='function') renderCaseEntries();
-      _actionEntries=[];
-      if(typeof renderActionEntries==='function')  renderActionEntries();
-  if(typeof renderTaAgingEntries==='function')  renderTaAgingEntries();
-  if(typeof renderTaJoinerEntries==='function') renderTaJoinerEntries();
-      _taAgingEntries=[];  if(typeof renderTaAgingEntries==='function')  renderTaAgingEntries();
-      _taJoinerEntries=[]; if(typeof renderTaJoinerEntries==='function') renderTaJoinerEntries();
       _tasksLoaded=false;
       console.log('[Tasks] Created',_tb.length,'tasks from form submission');
     }
@@ -3564,7 +3410,54 @@ async function renderSubmissionTracker(mc,displayName,roleLabel){
   mc.innerHTML='<div class="wform-wrap"><div class="wform-header"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report Tracker</div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">'+displayName+'</div><div style="font-size:13px;color:var(--muted)">'+roleLabel+' &nbsp;·&nbsp; Viewing all submissions</div></div><div style="margin-bottom:20px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div><div class="wform-week-select">'+availWeeks.map(k=>'<button class="wform-week-btn'+(k===wk?' active':'')+'" onclick="selectFormWeek(\''+k+'\')">'+( WEEK_NAMES[k]||k)+' · '+(WEEKS_DATA[k]?.label||'')+'</button>').join('')+'</div></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px"><div class="wform-section" style="text-align:center;padding:16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:40px;color:var(--green);line-height:1">'+submitted.length+'</div><div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Submitted</div></div><div class="wform-section" style="text-align:center;padding:16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:40px;color:var(--amber);line-height:1">'+notSubmitted.length+'</div><div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Pending</div></div><div class="wform-section" style="text-align:center;padding:16px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:40px;color:var(--accent);line-height:1">'+leads.length+'</div><div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;margin-top:4px">Total Leads</div></div></div><div class="wform-section"><div class="wform-section-title">✓ Submitted ('+submitted.length+')</div>'+(submitted.length?submitted.map(s=>'<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:13px"><div><span style="color:var(--text);font-weight:500">'+(s.submitter_name||s.submitter_email)+'</span>'+(s.region?'<span style="font-size:10px;color:var(--muted);margin-left:8px">'+s.region+'</span>':'')+'</div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;color:'+(FN_COLORS[s.function_type]||'var(--muted)')+';background:rgba(0,0,0,.2)">'+(FN_LABELS[s.function_type]||s.function_type)+'</span><span style="font-size:11px;color:var(--green)">✓ '+(s.updated_at||'').substring(0,10)+'</span></div></div>').join(''):'<div style="font-size:13px;color:var(--muted);padding:12px 0">No submissions yet</div>')+'</div>'+(notSubmitted.length?'<div class="wform-section"><div class="wform-section-title" style="color:var(--amber)">⏳ Pending ('+notSubmitted.length+')</div>'+notSubmitted.map(u=>'<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(42,61,82,.35);font-size:13px"><div><span style="color:var(--muted)">'+(u.display_name||u.email)+'</span>'+(u.region?'<span style="font-size:10px;color:var(--muted2);margin-left:8px">'+u.region+'</span>':'')+'</div><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;font-family:\'DM Mono\',monospace;letter-spacing:.5px;text-transform:uppercase;color:'+(FN_COLORS[u.function_type]||'var(--muted)')+';background:rgba(0,0,0,.2)">'+(FN_LABELS[u.function_type]||u.function_type)+'</span></div>').join('')+'</div>':'')+'</div>';
 }
 
-// ── USERS ──────────────────────────────────────────────────────────────────
+// ── USERS ─────────────────────────────────────────────────────────────────
+async function renderUsersTab(mc){
+  if(!_sbRole||_sbRole.role!=='admin'){
+    if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Admin access required</div>';
+    return;
+  }
+  if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading...</div>';
+  const{data:users}=await _sb.from('user_profiles')
+    .select('id,email,display_name,role,function_type,region,created_at')
+    .order('display_name');
+  const list=users||[];
+  var selfId=_sbUser&&_sbUser.id;
+  var roleOpts_u=['admin','executive','hrbp','viewer'];
+  var fnOpts_u=['hrbp','ta','hrops','payroll','ld','admin','executive'];
+  var regionOpts_u=['Pan India','North','South','East','West'];
+  function mkSel_u(opts,cur,uid,fld){
+    var chg='updateUserField(\''+uid+'\',\''+fld+'\',this.value)';
+    return '<select class="ssel" style="font-size:11px;padding:4px 6px" onchange="'+chg+'">'
+      +opts.map(function(o){return '<option value="'+o+'" '+(cur===o?'selected':'')+'>'+o+'</option>';}).join('')
+      +'</select>';
+  }
+  var rows=list.map(function(u){
+    var isMe=u.id===selfId;
+    var uid=u.id;
+    var nameCell='<div><div style="font-size:13px;font-weight:500;color:var(--text)">'+(u.display_name||u.email||'&mdash;')+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(u.email||'')+'</div></div>';
+    var controls=isMe
+      ?'<div style="font-size:11px;color:var(--muted2)">'+u.role+'</div>'
+        +'<div style="font-size:11px;color:var(--muted2)">'+(u.function_type||'&mdash;')+'</div>'
+        +'<div style="font-size:11px;color:var(--muted2)">'+(u.region||'&mdash;')+'</div>'
+        +'<div style="font-size:11px;color:var(--muted2)">You</div>'
+      :'<div>'+mkSel_u(roleOpts_u,u.role,uid,'role')+'</div>'
+        +'<div>'+mkSel_u(fnOpts_u,u.function_type,uid,'function_type')+'</div>'
+        +'<div>'+mkSel_u(regionOpts_u,u.region,uid,'region')+'</div>'
+        +'<div><button onclick="removeUser(\''+uid+'\')" style="font-size:11px;color:var(--red);background:none;border:1px solid rgba(248,113,113,.3);padding:3px 10px;border-radius:6px;cursor:pointer">Remove</button></div>';
+    return '<div style="display:grid;grid-template-columns:1fr 90px 120px 100px 80px;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(42,61,82,.3)">'+nameCell+controls+'</div>';
+  }).join('');
+  if(mc)mc.innerHTML='<div style="padding:28px 36px;max-width:900px">'
+    +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:8px">User Management ('+list.length+')</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 90px 120px 100px 80px;gap:8px;padding:4px 10px;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--border);margin-bottom:6px"><div>User</div><div>Role</div><div>Function</div><div>Region</div><div></div></div>'
+    +rows+'</div>';
+}
+async function updateUserField(uid,field,val){
+  var upd={}; upd[field]=val;
+  var res=await _sb.from('user_profiles').update(upd).eq('id',uid);
+  if(res.error){alert('Update failed: '+res.error.message);renderUsersTab(document.getElementById('tab-users'));}
+}
+async function updateUserRole(uid,role){return updateUserField(uid,'role',role);}
 
 async function removeUser(uid){if(!confirm('Remove user?'))return;await _sb.auth.admin.deleteUser(uid);await _sb.from('user_profiles').delete().eq('id',uid);await renderUsersTab(document.getElementById('tab-users'));}
 
@@ -3925,12 +3818,7 @@ function renderResignation(){
   if(_resReq==='Req Raised')data=data.filter(function(r){return!!r.req_id;});
   if(_resR1==='Pending')data=data.filter(function(r){return r.r1_status==='Pending'||!r.r1_status;});
   if(_resR1==='Approved')data=data.filter(function(r){return r.r1_status==='Accepted';});
-  var tierOrder={'Platinum':0,'Gold':1,'Silver':2,'Regular':3};
-  data.sort(function(a,b){
-    var ta=tierOrder[a.tier]||3, tb=tierOrder[b.tier]||3;
-    if(ta!==tb) return ta-tb;          // tier first
-    return a.days_to_lwd-b.days_to_lwd; // then urgency
-  });
+  data.sort(function(a,b){return a.days_to_lwd-b.days_to_lwd;});
   var platGoldNoReq=CMS_RES_DATA.filter(function(r){return['Platinum','Gold'].includes(r.tier)&&!r.req_id;});
   var rf=['All','North','South','East','West'].map(function(v){return _filterBtn(v,_resRegion===v,"_resRegion='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
   var tf=['All','Platinum','Gold','Silver','Regular'].map(function(v){return _filterBtn(v,_resTier===v,"_resTier='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
@@ -4323,142 +4211,6 @@ function addVisitEntry(){
   if(accInp)accInp.value='';if(accSel)accSel.value='';if(notesInp)notesInp.value='';
 }
 function removeVisitEntry(i){_visitEntries.splice(i,1);renderVisitEntries();}
-
-// ── ACTIONS & ESCALATIONS WIDGET ─────────────────────────────────────────
-var ACTION_MAX = 5;
-function addActionEntry(){
-  if(_actionEntries.length >= ACTION_MAX){
-    alert('Maximum '+ACTION_MAX+' entries per submission. Use Action Centre to add more.');
-    return;
-  }
-  var typeEl   = document.getElementById('actionType');
-  var whatEl   = document.getElementById('actionWhat');
-  var areaEl   = document.getElementById('actionArea');
-  var assignEl = document.getElementById('actionAssignee');
-  var dueEl    = document.getElementById('actionDue');
-  var priEl    = document.getElementById('actionPriority');
-  if(!whatEl||!whatEl.value.trim()){alert('Please describe the action or escalation');return;}
-  var assignee = null;
-  if(assignEl&&assignEl.value){
-    var m = TEAM_MEMBERS.find(function(t){return t.id===assignEl.value;});
-    assignee = m ? {id:m.id, name:m.name} : null;
-  }
-  _actionEntries.push({
-    type:     typeEl ? typeEl.value : 'next_week_plan',
-    what:     whatEl.value.trim(),
-    area:     areaEl ? areaEl.value.trim() : '',
-    assignee: assignee,
-    due:      dueEl ? dueEl.value : '',
-    priority: priEl ? priEl.value : 'Medium'
-  });
-  renderActionEntries();
-  if(whatEl) whatEl.value='';
-  if(areaEl) areaEl.value='';
-  if(dueEl)  dueEl.value='';
-}
-function removeActionEntry(i){ _actionEntries.splice(i,1); renderActionEntries(); }
-
-// ── TA STRUCTURED ENTRIES ─────────────────────────────────────────────────
-var _taAgingEntries  = [];
-var _taJoinerEntries = [];
-
-function addTaAgingEntry(){
-  var req  = (document.getElementById('taAgingReq')||{}).value||'';
-  var acc  = (document.getElementById('taAgingAccount')||{}).value||'';
-  var days = (document.getElementById('taAgingDays')||{}).value||'';
-  var blk  = (document.getElementById('taAgingBlocker')||{}).value||'';
-  if(!acc||!blk){alert('Please fill Account and Blocker fields');return;}
-  _taAgingEntries.push({req:req.trim(), account:acc.trim(), days:parseInt(days)||0, blocker:blk.trim()});
-  renderTaAgingEntries();
-  ['taAgingReq','taAgingAccount','taAgingDays','taAgingBlocker'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.value='';
-  });
-}
-function removeTaAgingEntry(i){ _taAgingEntries.splice(i,1); renderTaAgingEntries(); }
-function renderTaAgingEntries(){
-  var c=document.getElementById('taAgingList'); if(!c)return;
-  c.innerHTML = _taAgingEntries.length===0
-    ? '<div style="color:var(--muted2);font-size:12px;padding:6px 0">No blockers added yet</div>'
-    : _taAgingEntries.map(function(e,i){
-        var dCol = e.days>60?'var(--red)':e.days>45?'var(--amber)':'var(--muted)';
-        return '<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;'
-          +'background:var(--surface3);border-radius:8px;margin-bottom:6px;border-left:3px solid var(--red)">'
-          +'<div style="flex:1">'
-          +'<div style="display:flex;gap:6px;align-items:center;margin-bottom:3px">'
-          +(e.req?'<span style="font-size:11px;font-family:DM Mono,monospace;color:var(--accent)">'+esc(e.req)+'</span>':'')
-          +'<span style="font-size:12px;font-weight:600;color:var(--text)">'+esc(e.account)+'</span>'
-          +(e.days?'<span style="font-size:10px;color:'+dCol+'">'+e.days+'d open</span>':'')
-          +'</div>'
-          +'<div style="font-size:12px;color:var(--muted)">'+esc(e.blocker)+'</div>'
-          +'</div>'
-          +'<button onclick="removeTaAgingEntry('+i+')" style="padding:2px 8px;border:1px solid var(--border);'
-          +'border-radius:6px;background:none;color:var(--muted);font-size:11px;cursor:pointer">✕</button>'
-          +'</div>';
-      }).join('');
-}
-
-function addTaJoinerEntry(){
-  var name = (document.getElementById('taJoinerName')||{}).value||'';
-  var acc  = (document.getElementById('taJoinerAccount')||{}).value||'';
-  var doj  = (document.getElementById('taJoinerDOJ')||{}).value||'';
-  if(!name){alert('Please enter candidate name');return;}
-  _taJoinerEntries.push({name:name.trim(), account:acc.trim(), doj:doj});
-  renderTaJoinerEntries();
-  ['taJoinerName','taJoinerAccount','taJoinerDOJ'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.value='';
-  });
-}
-function removeTaJoinerEntry(i){ _taJoinerEntries.splice(i,1); renderTaJoinerEntries(); }
-function renderTaJoinerEntries(){
-  var c=document.getElementById('taJoinerList'); if(!c)return;
-  c.innerHTML = _taJoinerEntries.length===0
-    ? '<div style="color:var(--muted2);font-size:12px;padding:6px 0">No joiners added yet</div>'
-    : _taJoinerEntries.map(function(e,i){
-        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;'
-          +'background:var(--surface3);border-radius:8px;margin-bottom:6px;border-left:3px solid var(--green)">'
-          +'<div style="flex:1;display:flex;gap:12px;align-items:center">'
-          +'<span style="font-size:12px;font-weight:600;color:var(--text)">'+esc(e.name)+'</span>'
-          +(e.account?'<span style="font-size:11px;color:var(--muted)">'+esc(e.account)+'</span>':'')
-          +(e.doj?'<span style="font-size:11px;color:var(--green)">DOJ: '+e.doj+'</span>':'')
-          +'</div>'
-          +'<button onclick="removeTaJoinerEntry('+i+')" style="padding:2px 8px;border:1px solid var(--border);'
-          +'border-radius:6px;background:none;color:var(--muted);font-size:11px;cursor:pointer">✕</button>'
-          +'</div>';
-      }).join('');
-}
-function renderActionEntries(){
-  var c = document.getElementById('actionEntriesList');
-  if(!c) return;
-  var typeIcon = {'next_week_plan':'📋','escalation':'🔺','risk':'⚠️'};
-  var typeLabel = {'next_week_plan':'Next Week Plan','escalation':'Escalation','risk':'Risk'};
-  var priCol = {'High':'var(--red)','Medium':'var(--amber)','Low':'var(--muted)'};
-  c.innerHTML = _actionEntries.length===0
-    ? '<div style="color:var(--muted2);font-size:12px;padding:6px 0">No entries yet — max '+ACTION_MAX+'</div>'
-    : _actionEntries.map(function(e,i){
-        var pc = priCol[e.priority]||'var(--muted)';
-        var icon = typeIcon[e.type]||'📋';
-        var tl = typeLabel[e.type]||e.type;
-        return '<div style="display:flex;align-items:flex-start;gap:8px;padding:9px 12px;'
-          +'background:var(--surface3);border-radius:8px;margin-bottom:6px;'
-          +'border-left:3px solid '+pc+'">'
-          +'<div style="flex:1">'
-          +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:3px">'
-          +'<span style="font-size:12px">'+icon+'</span>'
-          +'<span style="font-size:12px;font-weight:600;color:var(--text)">'+esc(e.what.substring(0,60))+'</span>'
-          +'<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:rgba(0,0,0,.2);color:'+pc+'">'+tl+'</span>'
-          +'<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:rgba(0,0,0,.15);color:var(--muted2)">'+e.priority+'</span>'
-          +'</div>'
-          +(e.area?'<div style="font-size:11px;color:var(--muted)">Area: '+esc(e.area)+'</div>':'')
-          +'<div style="display:flex;gap:10px;font-size:11px;color:var(--muted2);margin-top:2px">'
-          +(e.assignee?'<span>→ '+esc(e.assignee.name)+'</span>':'<span>Self-owned</span>')
-          +(e.due?'<span>Due '+e.due+'</span>':'')
-          +'</div>'
-          +'</div>'
-          +'<button onclick="removeActionEntry('+i+')" style="padding:2px 8px;border:1px solid var(--border);'
-          +'border-radius:6px;background:none;color:var(--muted);font-size:11px;cursor:pointer">✕</button>'
-          +'</div>';
-      }).join('');
-}
 
 // ── CASE ENTRY SYSTEM (ER / Abscond / Retention) ─────────────────────────
 function addCaseEntry(){
@@ -5468,12 +5220,7 @@ async function sbBoot(user){
   }
   init();
   // Re-apply region filters AFTER weeks data loaded and init() ran
-  // Skip for HR Ops / Payroll — they have Pan India access
-  var _fnTypeSb = _sbRole ? (_sbRole.function_type||'') : '';
-  var _isRegSb  = _sbRole && _sbRole.role === 'hrbp'
-    && _fnTypeSb !== 'hrops' && _fnTypeSb !== 'payroll'
-    && _sbRole.region && _sbRole.region !== 'Pan India';
-  if(_isRegSb) {
+  if(_sbRole && _sbRole.role === 'hrbp' && _sbRole.region && _sbRole.region !== 'Pan India') {
     var _regn = _sbRole.region;
     if(typeof _odRegion !== 'undefined')    _odRegion    = _regn;
     if(typeof _resRegion !== 'undefined')   _resRegion   = _regn;
@@ -5524,72 +5271,4 @@ async function sbSignOut(){await _sb.auth.signOut();document.getElementById('das
 
 </div><!-- end app-content -->
 </body>
-</htmlasync function renderUsersTab(mc){
-  if(!_sbRole||_sbRole.role!=='admin'){
-    if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Admin access required</div>';
-    return;
-  }
-  if(mc)mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>';
-  var {data:users} = await _sb.from('user_profiles')
-    .select('id,email,display_name,role,function_type,region,created_at')
-    .order('display_name');
-  var list = users||[];
-  var selfId = (_sbUser&&_sbUser.id)||'';
-
-  function selHtml(id, opts, cur, field){
-    var s = '<select class="ssel" style="font-size:11px;padding:4px 6px" '
-      +'onchange="updateUserField(''+id+'',''+field+'',this.value)">';
-    opts.forEach(function(o){
-      s += '<option value="'+o+'"'+(cur===o?' selected':'')+'>'+o+'</option>';
-    });
-    s += '</select>';
-    return s;
-  }
-
-  var roleOpts   = ['admin','executive','hrbp','viewer'];
-  var fnOpts     = ['hrbp','ta','hrops','payroll','ld','admin','executive'];
-  var regionOpts = ['Pan India','North','South','East','West'];
-
-  var rowsHtml = '';
-  list.forEach(function(u){
-    var isMe = u.id === selfId;
-    var nameHtml = '<div>'
-      +'<div style="font-size:13px;font-weight:500;color:var(--text)">'+(u.display_name||u.email||'—')+'</div>'
-      +'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+(u.email||'')+'</div>'
-      +'</div>';
-    var roleCell   = isMe ? '<div style="font-size:11px;color:var(--muted2)">'+u.role+'</div>'
-                          : '<div>'+selHtml(u.id, roleOpts,   u.role,          'role')+'</div>';
-    var fnCell     = isMe ? '<div style="font-size:11px;color:var(--muted2)">'+(u.function_type||'—')+'</div>'
-                          : '<div>'+selHtml(u.id, fnOpts,     u.function_type, 'function_type')+'</div>';
-    var regionCell = isMe ? '<div style="font-size:11px;color:var(--muted2)">'+(u.region||'—')+'</div>'
-                          : '<div>'+selHtml(u.id, regionOpts, u.region,        'region')+'</div>';
-    var actionCell = isMe
-      ? '<div style="font-size:11px;color:var(--muted2)">You</div>'
-      : '<div><button onclick="removeUser(''+u.id+'')" '
-        +'style="font-size:11px;color:var(--red);background:none;border:1px solid rgba(248,113,113,.3);'
-        +'padding:3px 10px;border-radius:6px;cursor:pointer">Remove</button></div>';
-    rowsHtml += '<div style="display:grid;grid-template-columns:1fr 90px 120px 100px 80px;gap:8px;'
-      +'align-items:center;padding:8px 10px;border-bottom:1px solid rgba(42,61,82,.3)">'
-      +nameHtml+roleCell+fnCell+regionCell+actionCell
-      +'</div>';
-  });
-
-  if(mc)mc.innerHTML = '<div style="padding:28px 36px;max-width:920px">'
-    +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;'
-    +'text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);'
-    +'padding-bottom:8px;margin-bottom:8px">User Management ('+list.length+')</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 90px 120px 100px 80px;gap:8px;'
-    +'padding:4px 10px;font-size:10px;font-weight:600;color:var(--muted2);'
-    +'text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--border);margin-bottom:4px">'
-    +'<div>User</div><div>Role</div><div>Function</div><div>Region</div><div></div></div>'
-    +rowsHtml
-    +'</div>';
-}
-async function updateUserField(uid, field, val){
-  var upd = {};
-  upd[field] = val;
-  var res = await _sb.from('user_profiles').update(upd).eq('id', uid);
-  if(res.error){ alert('Update failed: '+res.error.message); }
-}
-async function updateUserRole(uid, role){ return updateUserField(uid, 'role', role); }
->
+</html>
