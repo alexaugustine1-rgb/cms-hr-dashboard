@@ -355,7 +355,7 @@ let configManager = null;
 // ═══════════════════════════════════════════════════════════════════
 // AUTHENTICATION
 // ═══════════════════════════════════════════════════════════════════
-async function sbLogin() {
+window.sbLogin = async function() {
   console.log('sbLogin called');
   const email = document.getElementById('sbEmail').value.trim();
   const pwd = document.getElementById('sbPwd').value;
@@ -363,7 +363,7 @@ async function sbLogin() {
   const btn = document.getElementById('sbLoginBtn');
 
   console.log('Email:', email);
-  console.log('Supabase client:', supabase);
+  console.log('Supabase client:', window.supabase);
 
   if (!email || !pwd) {
     errDiv.style.display = 'block';
@@ -431,7 +431,7 @@ async function sbLogin() {
   }
 }
 
-async function sbLogout() {
+window.sbLogout = async function() {
   await supabase.auth.signOut();
   location.reload();
 }
@@ -627,13 +627,13 @@ function renderWeekButtons() {
   document.getElementById('currentWeekLabel').textContent = WEEKS_DATA[currentWeek]?.week_label || '—';
 }
 
-function setWeek(wid) {
+window.setWeek = function(wid) {
   currentWeek = wid;
   renderWeekButtons();
   switchTab(currentTab);
 }
 
-function switchTab(tab) {
+window.switchTab = function(tab) {
   currentTab = tab;
   
   // Update sidebar active state
@@ -910,7 +910,7 @@ function renderSettings() {
   `;
 }
 
-async function saveSettings() {
+window.saveSettings = async function() {
   const hrbpTargets = {
     geo_punch_target: parseFloat(document.getElementById('cfg_geo_punch_target').value),
     wfh_od_target: parseFloat(document.getElementById('cfg_wfh_od_target').value),
@@ -942,7 +942,7 @@ async function saveSettings() {
   alert('✅ Settings saved successfully!');
 }
 
-function exportConfig() {
+window.exportConfig = function() {
   const json = JSON.stringify(configManager.config, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -999,11 +999,11 @@ function renderUploadData() {
   `;
 }
 
-function processUpload() {
+window.processUpload = function() {
   alert('📊 Excel parsing feature will be implemented. For now, please manually enter data into Supabase.');
 }
 
-function copySQL() {
+window.copySQL = function() {
   const textarea = document.getElementById('upload_sql');
   textarea.select();
   document.execCommand('copy');
@@ -1013,7 +1013,7 @@ function copySQL() {
 // ═══════════════════════════════════════════════════════════════════
 // THEME TOGGLE
 // ═══════════════════════════════════════════════════════════════════
-function toggleTheme() {
+window.toggleTheme = function() {
   document.body.classList.toggle('light-mode');
   const icon = document.getElementById('themeIcon');
   icon.textContent = document.body.classList.contains('light-mode') ? '☀️' : '🌙';
