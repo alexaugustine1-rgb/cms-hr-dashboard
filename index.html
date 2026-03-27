@@ -581,6 +581,12 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <button class="sidebar-item" id="snav-ta" onclick="snavClick('ta',this)">
         <span class="item-icon">📋</span><span class="item-label">TA Commitments</span>
       </button>
+      <button class="sidebar-item" id="snav-joiners" onclick="snavClick('joiners',this)" style="display:none">
+        <span class="item-icon">🧑‍💼</span><span class="item-label">Prospective Joiners</span>
+      </button>
+      <button class="sidebar-item" id="snav-joiners" onclick="snavClick('joiners',this)" style="display:none">
+        <span class="item-icon">🧑‍💼</span><span class="item-label">Expected Joiners</span>
+      </button>
       <button class="sidebar-item" id="snav-resignation" onclick="snavClick('resignation',this)">
         <span class="item-icon">🔄</span><span class="item-label">Resignation &amp; Backfill</span>
       </button>
@@ -703,6 +709,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-upload" class="tab-content"></div>
   <div id="tab-users" class="tab-content"></div>
   <div id="tab-resignation" class="tab-content"></div>
+  <div id="tab-joiners" class="tab-content"></div>
+  <div id="tab-joiners" class="tab-content"></div>
   <div id="tab-absenteeism" class="tab-content"></div>
   <div id="tab-actioncentre" class="tab-content"></div>
   <div id="tab-od" class="tab-content"></div>
@@ -2758,6 +2766,7 @@ function switchTab(id, btn) {
   else if(id==='admin'){const mc=document.getElementById('tab-admin');if(mc)mc.innerHTML=renderAdmin(WEEKS_DATA[currentWeek],currentWeek);}
   else if(id==='submit') renderSubmitTab(el);
   else if(id==='absenteeism') renderAbsenteeism(el);
+  else if(id==='joiners'){if(!_pjLoaded)loadProspectiveJoiners();else renderJoinersTab(el);}
 }
 
 // ── UPLOAD & PARSE ────────────────────────────────────────────────────────
@@ -2993,6 +3002,244 @@ async function processEsep(wb) {
   // Show the JSON they need to paste
   log('Copy this into WI.attrition in your Python refresh script:', 'ok');
   log(JSON.stringify(attrition, null, 2), 'info');
+}
+
+// ── EXPECTED JOINERS TAB ─────────────────────────────────────────────────────
+var _pjData         = [];
+var _pjLoaded       = false;
+var _pjRegion       = 'All';
+var _pjTier         = 'All';
+var _pjStatusFilter = 'Active';
+
+async function loadProspectiveJoiners() {
+  if(!_sbUser) return;
+  try {
+    var today  = new Date();
+    var fwd21  = new Date(today.getTime() + 21*86400000);
+    var fromDt = new Date(today.getTime() - 7*86400000).toISOString().substring(0,10); // include recent past
+    var toDt   = fwd21.toISOString().substring(0,10);
+    var q = _sb.from('prospective_joiners')
+      .select('*')
+      .gte('doj', fromDt)
+      .lte('doj', toDt)
+      .order('doj', {ascending:true});
+    if(_sbRole && _sbRole.role==='hrbp' && _sbRole.function_type==='hrbp'
+       && _sbRole.region && _sbRole.region!=='Pan India') {
+      q = q.eq('region', _sbRole.region);
+    }
+    var {data, error} = await q;
+    if(error) throw error;
+    _pjData   = data || [];
+    _pjLoaded = true;
+    renderJoinersTab(document.getElementById('tab-joiners'));
+  } catch(e) {
+    console.error('[PJ]', e.message);
+    _pjLoaded = true;
+    var el = document.getElementById('tab-joiners');
+    if(el) el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Could not load: '+esc(e.message)+'</div>';
+  }
+}
+
+function renderJoinersTab(el) {
+  if(!el) el = document.getElementById('tab-joiners');
+  if(!el) return;
+  if(!_pjLoaded) {
+    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:10px">⏳</div>Loading expected joiners…</div>';
+    loadProspectiveJoiners();
+    return;
+  }
+
+  var isAdmin   = _sbRole && (_sbRole.role==='admin'||_sbRole.role==='executive');
+  var isTa      = _sbRole && _sbRole.function_type==='ta';
+  var isHrbp    = _sbRole && _sbRole.function_type==='hrbp';
+  var canUpdate = isAdmin || isTa || isHrbp;
+
+  // Filter data
+  var data = _pjData.slice();
+  if(_pjRegion !== 'All') data = data.filter(function(r){return r.region===_pjRegion;});
+  if(_pjTier   !== 'All') data = data.filter(function(r){return r.account_tier===_pjTier;});
+  if(_pjStatusFilter === 'Active')
+    data = data.filter(function(r){return !['Joined','No Show','Dropped Out'].includes(r.status);});
+  else if(_pjStatusFilter !== 'All')
+    data = data.filter(function(r){return r.status===_pjStatusFilter;});
+
+  // TA sees only own candidates
+  if(isTa && !isAdmin && _sbRole.display_name) {
+    var myName = (_sbRole.display_name||'').toLowerCase().split(' ')[0];
+    data = data.filter(function(r){
+      return (r.recruiter_name||'').toLowerCase().includes(myName);
+    });
+  }
+
+  // Summary
+  var byReg  = {North:0,South:0,East:0,West:0};
+  var byTier = {Platinum:0,Gold:0};
+  data.forEach(function(r){
+    if(byReg[r.region]!==undefined) byReg[r.region]++;
+    if(r.account_tier==='Platinum') byTier.Platinum++;
+    else if(r.account_tier==='Gold') byTier.Gold++;
+  });
+
+  var tierCol   = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Regular:'var(--muted2)'};
+  var statusCol = {'Offer Accepted':'var(--accent)','Induction Scheduled':'#34d399',
+                   'Joined':'#4ade80','No Show':'var(--red)','Dropped Out':'#ef4444','Deferred':'var(--amber)'};
+  var STATUS_OPTS = ['Offer Accepted','Induction Scheduled','Joined','No Show','Dropped Out','Deferred'];
+  var REGIONS     = ['All','North','South','East','West'];
+  var TIERS       = ['All','Platinum','Gold','Silver','Regular'];
+  var SF_OPTS     = ['Active','All','Offer Accepted','Induction Scheduled','Joined','No Show','Dropped Out'];
+
+  function fbtn(v, active, onclick){
+    return '<button onclick="'+onclick+'" style="padding:4px 12px;border-radius:20px;font-size:11px;'
+      +'font-weight:'+(active?'600':'400')+';border:1px solid '+(active?'var(--accent)':'var(--border)')+';'
+      +'background:'+(active?'rgba(96,165,250,.12)':'none')+';color:'+(active?'var(--accent)':'var(--muted)')+';cursor:pointer;margin-right:4px">'+v+'</button>';
+  }
+
+  var regBtns = REGIONS.map(function(v){return fbtn(v,_pjRegion===v,'_pjRegion=\''+v+'\';renderJoinersTab()');}).join('');
+  var tierBtns= TIERS.map(function(v){return fbtn(v,_pjTier===v,'_pjTier=\''+v+'\';renderJoinersTab()');}).join('');
+  var sfBtns  = SF_OPTS.map(function(v){return fbtn(v,_pjStatusFilter===v,'_pjStatusFilter=\''+v+'\';renderJoinersTab()');}).join('');
+
+  function fmtDoj(dojStr){
+    if(!dojStr) return '—';
+    var d = new Date(dojStr+'T00:00:00');
+    return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'});
+  }
+  function daysAway(dojStr){
+    if(!dojStr) return null;
+    var diff = Math.round((new Date(dojStr+'T00:00:00').getTime()-Date.now())/86400000);
+    return diff;
+  }
+
+  var rows = data.map(function(r){
+    var tc  = tierCol[r.account_tier]  || 'var(--muted2)';
+    var sc  = statusCol[r.status]      || 'var(--muted)';
+    var days= daysAway(r.doj);
+    var urgency = days===null ? 'var(--muted)' : days<0?'var(--muted2)':days<=3?'var(--red)':days<=7?'var(--amber)':'var(--green)';
+    var dojLabel= fmtDoj(r.doj);
+    var dayLabel= days===null?'':(days<0?'Overdue':days===0?'Today':days+'d away');
+
+    // Status dropdown (TA can update; HRBP limited to Induction Scheduled)
+    var canEdit = isAdmin || isTa || (isHrbp && ['Offer Accepted','Induction Scheduled'].includes(r.status));
+    var statusCell = canEdit
+      ? '<select onchange="updateJoinerStatus(\''+r.id+'\',this.value)" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer">'
+          +STATUS_OPTS.map(function(s){
+            // HRBP can only set Induction Scheduled; TA/admin can set all
+            var disabled = (isHrbp&&!isAdmin&&!isTa&&!['Offer Accepted','Induction Scheduled'].includes(s)) ? 'disabled' : '';
+            return '<option value="'+s+'" '+(r.status===s?'selected':'')+' '+disabled+'>'+s+'</option>';
+          }).join('')
+          +'</select>'
+      : '<span style="font-size:11px;color:'+sc+'">'+r.status+'</span>';
+
+    // DOJ is editable by TA and admin
+    var dojCell = (isAdmin||isTa)
+      ? '<div style="font-size:13px;font-weight:700;color:'+urgency+'">'+dojLabel+'</div>'
+        +'<div style="font-size:10px;color:'+urgency+'">'+dayLabel+'</div>'
+        +'<input type="date" value="'+(r.doj||'')+'" onchange="updateJoinerDoj(\''+r.id+'\',this.value)" '
+        +'style="margin-top:4px;font-size:10px;padding:2px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:5px;color:var(--text);width:100%">'
+      : '<div style="font-size:13px;font-weight:700;color:'+urgency+'">'+dojLabel+'</div>'
+        +'<div style="font-size:10px;color:'+urgency+'">'+dayLabel+'</div>';
+
+    return '<tr style="border-bottom:1px solid rgba(42,61,82,.25)">'
+      +'<td style="padding:10px 12px">'
+        +'<div style="font-size:13px;font-weight:600;color:var(--text)">'+esc(r.candidate_name||'—')+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+esc(r.designation||'')+'</div>'
+      +'</td>'
+      +'<td style="padding:10px 12px">'
+        +'<div style="font-size:12px;color:var(--text)">'+esc(r.customer||'—')+'</div>'
+        +'<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.25);color:'+tc+'">'+esc(r.account_tier||'Regular')+'</span>'
+      +'</td>'
+      +'<td style="padding:10px 12px">'
+        +'<span style="font-size:12px;color:var(--text)">'+esc(r.region||'—')+'</span>'
+      +'</td>'
+      +'<td style="padding:10px 12px;min-width:110px">'+dojCell+'</td>'
+      +'<td style="padding:10px 12px;font-size:11px;color:var(--muted)">'+esc(r.recruiter_name||'—')+'</td>'
+      +'<td style="padding:10px 12px">'+statusCell+'</td>'
+      +'</tr>';
+  }).join('') || '<tr><td colspan="6" style="padding:40px;text-align:center;color:var(--muted2)">No expected joiners matching current filters</td></tr>';
+
+  el.innerHTML = '<div style="padding:28px 36px;max-width:1100px">'
+    // Header
+    +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Talent Pipeline</div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
+      +'<div style="font-size:22px;font-weight:700;color:var(--text)">Prospective Joiners — Onboarding Tracker</div>'
+      +'<button onclick="_pjLoaded=false;loadProspectiveJoiners()" style="padding:7px 14px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;cursor:pointer">⟳ Refresh</button>'
+    +'</div>'
+
+    // Summary strip
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;text-align:center;min-width:60px">'
+        +'<div style="font-size:22px;font-weight:700;color:var(--accent)">'+data.length+'</div>'
+        +'<div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px">Expected</div>'
+      +'</div>'
+      +['North','South','East','West'].map(function(r){
+        var cnt=byReg[r]||0;
+        var col={'North':'#60a5fa','South':'#34d399','East':'#f59e0b','West':'#a78bfa'}[r];
+        return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+col+';border-radius:8px;padding:10px 16px;text-align:center;min-width:50px">'
+          +'<div style="font-size:18px;font-weight:700;color:'+col+'">'+cnt+'</div>'
+          +'<div style="font-size:10px;color:var(--muted2)">'+r+'</div></div>';
+      }).join('')
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid #a78bfa;border-radius:8px;padding:10px 16px;text-align:center;min-width:50px">'
+        +'<div style="font-size:18px;font-weight:700;color:#a78bfa">'+byTier.Platinum+'</div>'
+        +'<div style="font-size:10px;color:var(--muted2)">Platinum</div></div>'
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid #f59e0b;border-radius:8px;padding:10px 16px;text-align:center;min-width:50px">'
+        +'<div style="font-size:18px;font-weight:700;color:#f59e0b">'+byTier.Gold+'</div>'
+        +'<div style="font-size:10px;color:var(--muted2)">Gold</div></div>'
+    +'</div>'
+
+    // Filters
+    +'<div style="margin-bottom:8px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Region</span>'+regBtns+'</div>'
+    +'<div style="margin-bottom:8px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Tier</span>'+tierBtns+'</div>'
+    +'<div style="margin-bottom:18px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Status</span>'+sfBtns+'</div>'
+
+    // Table
+    +'<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">'
+    +'<table style="width:100%;border-collapse:collapse">'
+    +'<thead style="background:var(--surface3)">'
+    +'<tr><th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Candidate</th>'
+    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Account</th>'
+    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Region</th>'
+    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">DOJ</th>'
+    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Recruiter</th>'
+    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Status</th>'
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div>'
+
+    // Role notes
+    +(isTa?'<div style="font-size:11px;color:var(--muted2);margin-top:12px">📌 You can update DOJ and status. Changes save immediately.</div>':'')
+    +(isHrbp&&!isTa?'<div style="font-size:11px;color:var(--muted2);margin-top:12px">📌 Mark candidates as Induction Scheduled once you have confirmed the date with the candidate. TA updates DOJ.</div>':'')
+    +'</div>';
+}
+
+async function updateJoinerStatus(id, status) {
+  try {
+    var {error} = await _sb.from('prospective_joiners').update({
+      status: status,
+      status_updated_by: (_sbUser&&_sbUser.email)||'',
+      status_updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).eq('id', id);
+    if(error) throw error;
+    var rec = _pjData.find(function(r){return r.id===id;});
+    if(rec) rec.status = status;
+    renderJoinersTab(document.getElementById('tab-joiners'));
+  } catch(e) {
+    alert('Could not update status: '+e.message);
+  }
+}
+
+async function updateJoinerDoj(id, doj) {
+  try {
+    var {error} = await _sb.from('prospective_joiners').update({
+      doj: doj,
+      updated_at: new Date().toISOString()
+    }).eq('id', id);
+    if(error) throw error;
+    var rec = _pjData.find(function(r){return r.id===id;});
+    if(rec) rec.doj = doj;
+    renderJoinersTab(document.getElementById('tab-joiners'));
+  } catch(e) {
+    alert('Could not update DOJ: '+e.message);
+  }
 }
 
 async function processWeekly(wb) {
@@ -4769,6 +5016,49 @@ async function processCandidate(wb) {
     TA_SUMMARY.mar_joined = marJoined;
   }
   
+  // ── Extract prospective joiners (Offer Accepted + no ECode yet) ──────
+  var prospective = [];
+  for(var _pi=0;_pi<rows.length;_pi++){
+    var _pr = rows[_pi];
+    var _pStatus = ss(_pr['Offer Status']||'');
+    var _pHasCode = !!ss(_pr['Employee Code']||'');
+    var _pDoj = ss(_pr['Tentative Date Of Joining']||_pr['Final Date of Joining']||_pr['Final DOJ']||_pr['Expected DOJ']||'');
+    if(_pStatus==='Accepted' && !_pHasCode && _pDoj) {
+      var _pCust = ss(_pr['CustomerNameRoleandLocation']||_pr['Customer Name']||_pr['Customer']||'');
+      // Extract customer name — before first hyphen
+      var _pCustShort = _pCust.split(' - ')[0].split('-')[0].trim();
+      var _pRecs = splitRecruiters(ss(_pr['Recruiter Name']||''));
+      prospective.push({
+        candidate_name: ss(_pr['Candidate Name']||_pr['Name']||''),
+        designation:    ss(_pr['Designation']||_pr['Job Role']||''),
+        customer:       _pCustShort,
+        account_tier:   ss(_pr['Account Tier']||'Regular'),
+        region:         ss(_pr['Region']||''),
+        doj:            _pDoj,
+        recruiter_name: _pRecs[0]||'',
+        resume_source:  ss(_pr['Resume Source']||''),
+        req_id:         ss(_pr['Req ID']||_pr['Requisition ID']||''),
+        offer_status:   'Accepted',
+        status:         'Offer Accepted'
+      });
+    }
+  }
+  if(prospective.length > 0) {
+    log(prospective.length+' prospective joiners found (Offer Accepted, no ECode)', 'ok');
+    // Upsert to Supabase prospective_joiners table
+    var today_str = new Date().toISOString().substring(0,10);
+    var batch = 'Candidate_'+today_str;
+    // Mark existing batch as updated
+    var upsertRows = prospective.map(function(p){
+      return Object.assign({}, p, {upload_batch:batch, data_as_of:today_str, updated_at:new Date().toISOString()});
+    });
+    _sb.from('prospective_joiners').upsert(upsertRows, {onConflict:'candidate_name,customer,doj'}).then(function(res){
+      if(res.error) log('Prospective joiners: '+res.error.message+' — check upsert conflict key','warn');
+      else log('Prospective joiners saved to database ('+upsertRows.length+' records)','ok');
+    });
+  } else {
+    log('No prospective joiners found — check Final DOJ column exists in file','info');
+  }
   log('✓ Candidate data refreshed — '+rows.length+' records, '+marJoined+' March joiners','ok');
   log('Refreshing TA Pipeline…','info');
   
@@ -5518,6 +5808,19 @@ function showSidebarAfterLogin(role) {
   if(submitBtn) submitBtn.style.display = '';
   if(mobSubmit) mobSubmit.style.display = '';
   if(role === 'admin' && adminGroup) adminGroup.style.display = '';
+  (function(){
+    var _pjEl=document.getElementById('snav-joiners'); if(!_pjEl) return;
+    var _pjFn=(typeof _sbRole!=='undefined'&&_sbRole)?(_sbRole.function_type||''):'';
+    var _showPj=(role==='admin'||role==='executive'||(role==='hrbp'&&(_pjFn==='hrbp'||_pjFn==='ta')));
+    _pjEl.style.display=_showPj?'':'none';
+  })();
+  // Expected Joiners: show for hrbp (all fn types) and admin/executive
+  var _jEl = document.getElementById('snav-joiners');
+  if(_jEl) {
+    var _jFn = (typeof _sbRole!=='undefined'&&_sbRole)?(_sbRole.function_type||''):'';
+    var _showJ = role==='admin'||role==='executive'||(role==='hrbp'&&['hrbp','ta'].includes(_jFn));
+    _jEl.style.display = _showJ ? '' : 'none';
+  }
   // Auto-scope region filters — only for HRBP function type, not HR Ops or Payroll
   var _fnType = (typeof _sbRole !== 'undefined' && _sbRole) ? _sbRole.function_type : '';
   var _isRegionalHRBP = role === 'hrbp' && _fnType !== 'hrops' && _fnType !== 'payroll';
