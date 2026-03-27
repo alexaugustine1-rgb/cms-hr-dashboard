@@ -4929,6 +4929,48 @@ document.addEventListener('click',function(e){
 
 // ── SUPABASE AUTH ─────────────────────────────────────────────────────────
 // ── CANDIDATE TRANSACTIONAL PARSER ──────────────────────────────────────
+var CUSTOMER_TIER_MAP = {
+  'ADITYA BIRLA FASHION AND RETAIL LIMITED':'Platinum',
+  'ALL CARGO':'Bronze',
+  'AMUL':'Gold',
+  'AVENUE SUPERMARTS LIMITED':'Platinum',
+  'BAJAJ FINANCE':'Silver',
+  'BHARAT BIJLEE LTD.':'Silver',
+  'CAPACITE INFRAPROJECTS LIMITED':'Silver',
+  'CEAT LIMITED':'Gold',
+  'CLSA INDIA LTD':'Gold',
+  'DIALOGIC NETWORKS (INDIA) PRIVATE LIMITE':'Bronze',
+  'DSP ASSET MANAGERS PRIVATE LIMITED':'Bronze',
+  'EXIDE LIFE INSURANCE COMPANY LIMITED':'Gold',
+  'GARFIELD HEALTH SOLUTIONS EAST PVT LTD (KAISER)':'Gold',
+  'HDB FINANCIAL SERVICES LIMITED':'Platinum',
+  'HDFC':'Silver',
+  'HDFC ERGO GENERAL INSURANCE COMPANY LIMITED':'Silver',
+  'HOUSE OF ABHINANDAN LODHA ESTATE HOLDING':'Silver',
+  'INDIAN HOTELS COMPANY LIMITED':'Platinum',
+  'LIC (WEST)':'Platinum',
+  'MAERSK LINE INDIA PRIVATE LIMITED':'Bronze',
+  'MAJESCO':'Gold',
+  'MONDELEZ INDIA FOODS PVT. LTD.':'Silver',
+  'NATIONAL SECURITIES DEPOSITORY LIMITED':'Silver',
+  'NSDL DATABASE MANAGEMENT LIMITED':'Silver',
+  'PROTEAN EGOV TECHNOLOGIES LIMITED':'Silver',
+  'RCOM':'Gold',
+  'RELIANCE CAPITAL LTD':'Gold',
+  'RELIANCE CORPORATE IT PARK LIMITED':'Platinum',
+  'SBI GIC':'Gold',
+  'STL DIGITAL LIMITED':'Silver',
+  'STOVEC INDUSTRIES LIMITED':'Bronze',
+  'SYNAPSEWAVE INNOVATIONS PRIVATE LIMITED':'Gold',
+  'TATA AIG GENERAL INSURANCE COMPANY LTD':'Platinum',
+  'TATA CONSULTANCY SERVICES LIMITED':'Gold',
+  'TORRENT POWER LIMITED':'Gold',
+  'SBI GENERAL INSURANCE COMPANY LIMITED':'Gold',
+  'OIL AND NATURAL GAS CORPORATION LIMITED':'Silver',
+  'OIL AND NATURAL GAS CORPORATION LTD':'Silver',
+  'INDUS TOWERS LIMITED':'Gold'
+};
+
 async function processCandidate(wb) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = getRows(ws);
@@ -5036,7 +5078,7 @@ async function processCandidate(wb) {
         candidate_name: ss(_pr['Candidate Name']||_pr['Name']||''),
         designation:    ss(_pr['Designation']||_pr['Job Role']||''),
         customer:       _pCustShort,
-        account_tier:   ss(_pr['Account Tier']||'Regular'),
+        account_tier:   (function(c){var cu=(c||'').toUpperCase().trim();if(CUSTOMER_TIER_MAP[cu])return CUSTOMER_TIER_MAP[cu];var ks=Object.keys(CUSTOMER_TIER_MAP);for(var _ti=0;_ti<ks.length;_ti++){var k=ks[_ti];if(k.length>5&&(cu.indexOf(k)>=0||k.indexOf(cu)>=0))return CUSTOMER_TIER_MAP[k];}return ss(_pr['Account Tier']||'Regular');})(_pCustShort),
         region:         ss(_pr['Region']||''),
         doj:            _pDoj,
         recruiter_name: _pRecs[0]||'',
