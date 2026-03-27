@@ -1295,7 +1295,58 @@ function renderOps(w, pw, elArg) {
           +'<button onclick="openStatRiskModal(\''+r.id+'\')" style="padding:2px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">Edit</button></div></div>';
       }).join('')
     : '<div style="padding:32px;text-align:center;color:var(--muted)">No items match current filters</div>';
+
+  // ── Weekly Submission Summary from ta_detail ──────────────────────────
+  var _wkData = WEEKS_DATA[currentWeek] || {};
+  var _taDetail = (_wkData.ta_detail || []);
+  var _wkLabel  = _wkData.label || currentWeek;
+  var _wkWeeklyHTML = '';
+  if(_taDetail.length > 0) {
+    var _wkRows = _taDetail.map(function(r) {
+      var _mine = matchesMe(r.name);
+      var _bg   = _mine ? 'rgba(96,165,250,.07)' : 'transparent';
+      var _nxt  = (r.next_week||'').trim().replace(/^(\d+)$/,'$1 expected');
+      return '<tr style="border-bottom:1px solid rgba(42,61,82,.25);background:'+_bg+'">'
+        +'<td style="padding:7px 10px;font-size:12px;color:var(--text);font-weight:'+(_mine?'600':'400')+'">'+esc(r.name||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(r.region||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--text);text-align:center">'+((r.opened||0))+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--green);text-align:center">'+((r.closed||0))+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--amber);text-align:center">'+((r.offers||0))+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(_nxt||'—')+'</td>'
+        +(isAdminView?'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc((r.dropout_reason||'—').substring(0,40))+'</td>':'')
+        +'</tr>';
+    }).join('');
+    var _totO = _taDetail.reduce(function(s,r){return s+(r.opened||0);},0);
+    var _totC = _taDetail.reduce(function(s,r){return s+(r.closed||0);},0);
+    var _totOf= _taDetail.reduce(function(s,r){return s+(r.offers||0);},0);
+    _wkWeeklyHTML = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px">'
+      +'<div style="padding:10px 14px;background:var(--surface3);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
+      +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)">Weekly Submission — '+esc(_wkLabel)+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">'+_taDetail.length+' recruiter'+(+_taDetail.length!==1?'s':'')+' submitted</div>'
+      +'</div>'
+      +'<table style="width:100%;border-collapse:collapse">'
+      +'<thead><tr style="border-bottom:1px solid var(--border)">'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Recruiter</th>'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Region</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Opened</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--green);font-weight:600;text-transform:uppercase">Closed</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--amber);font-weight:600;text-transform:uppercase">Offers</th>'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Joining Plan</th>'
+      +(isAdminView?'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Dropout Reason</th>':'')
+      +'</tr></thead>'
+      +'<tbody>'+_wkRows+'</tbody>'
+      +'<tfoot><tr style="border-top:2px solid var(--border);background:var(--surface3)">'
+      +'<td colspan="2" style="padding:7px 10px;font-size:11px;font-weight:600;color:var(--muted)">TOTAL</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--text);text-align:center">'+_totO+'</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--green);text-align:center">'+_totC+'</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--amber);text-align:center">'+_totOf+'</td>'
+      +'<td'+(isAdminView?' colspan="2"':'')+' style="padding:7px 10px"></td>'
+      +'</tr></tfoot>'
+      +'</table></div>';
+  }
+
   el.innerHTML='<div style="padding:20px 28px;max-width:1280px">'
+    +_wkWeeklyHTML
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">'
     +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">HR Ops Intelligence</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">HR Ops, Payroll &amp; Statutory Risk</div></div>'
@@ -1533,7 +1584,7 @@ function renderHRBP(w, pw) {
   function parseConnects(c) {
     const name = (c.name||'').replace(/\s+for\s+\w+/i,'').trim();
     const hrbpRegion = getHRBPRegion(name);
-    const detail = c.detail || '';
+    const detail = c.detail || c.activities || '';
     const isLong = detail.length > 200;
     const ciId = 'ci_' + (++_ciIdx);
 
@@ -1630,7 +1681,7 @@ function renderHRBP(w, pw) {
 
   // Count actual site visits (multi-site submissions count each site)
   const actualVisits = w.hrbp_connects.reduce((total, c) => {
-    const detail = c.detail || '';
+    const detail = c.detail || c.activities || '';
     if (/site name\s*[-–:]/i.test(detail)) {
       return total + (detail.match(/site name\s*[-–:]/gi) || []).length;
     }
@@ -3966,7 +4017,11 @@ async function submitWeeklyForm(fnType,region){
     // ── Text field tasks ────────────────────────────────────────────
     const _fnArea = fnType==='ta'?'TA':fnType==='payroll'?'Payroll':fnType==='hrops'?'HR Ops':'HRBP';
     // TA
-    if(!_skip(_fv('f_ta_joining_plan'))) _tb.push(Object.assign({},_base,{task_type:'planned_action',function_area:'TA',severity:'Medium',title:'Join plan — '+_wk,description:_fv('f_ta_joining_plan')}));
+    if(!_skip(_fv('f_ta_joining_plan'))){
+      var _jpTxt=_fv('f_ta_joining_plan');
+      var _jpTitle=_jpTxt.length<=60?'Expected joiners: '+_jpTxt:'Expected joiners — '+_wk+'  ('+_jpTxt.substring(0,50)+'…)';
+      _tb.push(Object.assign({},_base,{task_type:'planned_action',function_area:'TA',severity:'Medium',title:_jpTitle,description:_jpTxt}));
+    }
     if(!_skip(_fv('f_ta_constraints'))) _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'TA',severity:'Medium',title:'TA constraint — '+_wk,description:_fv('f_ta_constraints')}));
     // HRBP
     if(!_skip(_fv('f_hrbp_risks')))    _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'HRBP',severity:'High',title:'HRBP risk — '+_wk,description:_fv('f_hrbp_risks')}));
@@ -4031,7 +4086,7 @@ async function rebuildWeekFromSubmissions(weekKey){
   var _wkFrom = wT.from_label || _wkLabel.split(' – ')[0] || '';
   var _wkTo   = wT.to_label   || _wkLabel.split(' – ')[1] || '';
   const agg={week_key:weekKey,week_num:_wkNum,label:_wkLabel,from_label:_wkFrom,to_label:_wkTo,total_respondents:subs.length,ta_opened:0,ta_closed:0,ta_offers:0,ta_dropouts:0,ta_detail:[],ta_constraints:[],ta_aging_raw:[],hrbp_visits:0,hrbp_connects:[],hrbp_discipline:[],hrbp_abscond:[],hrbp_retention:[],hrbp_issues:[],hrbp_risks:[],hrbp_activities:[],payroll_hc:0,payroll_errors:0,payroll_month:'',payroll_risks:[],payroll_pending:[],payroll_statutory:[],hrops_onboard:0,hrops_fnf:'',hrops_compliance:[],hrops_gaps:[],hrops_esc:0,hrops_esc_texts:[],ld_sessions:0,ld_coverage:'',ld_details:[],ld_upcoming:[],ld_gaps:[],ld_risks:[],admin_issues:[],admin_savings:[]};
-  subs.forEach(s=>{const fn=s.function_type;if(fn==='ta'){agg.ta_opened+=s.ta_opened||0;agg.ta_closed+=s.ta_closed||0;agg.ta_offers+=s.ta_offers||0;agg.ta_dropouts+=s.ta_dropouts||0;agg.ta_detail.push({name:s.submitter_name||'',region:s.region||'',opened:s.ta_opened||0,closed:s.ta_closed||0,offers:s.ta_offers||0,dropouts:s.ta_dropouts||0,dropout_reason:s.ta_dropout_reason||'',constraint:s.ta_constraints||'',aging:s.ta_aging||'',next_week:s.ta_joining_plan||''});if(s.ta_aging&&s.ta_aging!='NA')agg.ta_aging_raw.push(s.ta_aging);if(s.ta_constraints&&s.ta_constraints!='NA')agg.ta_constraints.push(s.ta_constraints);}if(fn==='hrbp'){if(s.hrbp_site_visited){const d=s.hrbp_connect_details||'';const ct=d?(d.match(/site name/gi)||[d]).length:1;agg.hrbp_visits+=ct;if(d)agg.hrbp_connects.push({name:s.submitter_name||'',detail:d,er_cases:s.hrbp_discipline||'',absent_action:s.hrbp_abscond||'',activities:s.hrbp_activities||'',geo_days:(s.hrbp_geo_days!=null?parseInt(s.hrbp_geo_days):null),od_days:(s.hrbp_od_days!=null?parseInt(s.hrbp_od_days):null),rr_events:s.hrbp_rr_events||''});}if(s.hrbp_discipline)agg.hrbp_discipline.push(s.hrbp_discipline);if(s.hrbp_retention)agg.hrbp_retention.push(s.hrbp_retention);if(s.hrbp_issues)agg.hrbp_issues.push(s.hrbp_issues);if(s.hrbp_risks)agg.hrbp_risks.push(s.hrbp_risks);if(s.hrbp_activities)agg.hrbp_activities.push(s.hrbp_activities);}if(fn==='payroll'){if((s.payroll_hc||0)>agg.payroll_hc)agg.payroll_hc=s.payroll_hc||0;agg.payroll_errors+=(s.payroll_errors||0);if(s.payroll_month)agg.payroll_month=s.payroll_month;if(s.payroll_risks)agg.payroll_risks.push(s.payroll_risks);if(s.payroll_pending)agg.payroll_pending.push(s.payroll_pending);if(s.payroll_statutory)agg.payroll_statutory.push(s.payroll_statutory);}if(fn==='hrops'){agg.hrops_onboard+=(s.hrops_onboard||0);if(s.hrops_fnf)agg.hrops_fnf=s.hrops_fnf;if(s.hrops_compliance)agg.hrops_compliance.push(s.hrops_compliance);if(s.hrops_gaps)agg.hrops_gaps.push(s.hrops_gaps);agg.hrops_esc=Math.max(agg.hrops_esc,s.hrops_esc_count||0);if(s.hrops_esc_details)agg.hrops_esc_texts.push(s.hrops_esc_details);}if(fn==='ld'){agg.ld_sessions+=(s.ld_sessions||0);if(s.ld_coverage)agg.ld_coverage=s.ld_coverage;if(s.ld_details)agg.ld_details.push(s.ld_details);if(s.ld_upcoming)agg.ld_upcoming.push(s.ld_upcoming);if(s.ld_gaps)agg.ld_gaps.push(s.ld_gaps);if(s.ld_risks)agg.ld_risks.push(s.ld_risks);}if(fn==='admin'){if(s.admin_issues)agg.admin_issues.push(s.admin_issues);if(s.admin_savings)agg.admin_savings.push(s.admin_savings);}});
+  subs.forEach(s=>{const fn=s.function_type;if(fn==='ta'){agg.ta_opened+=s.ta_opened||0;agg.ta_closed+=s.ta_closed||0;agg.ta_offers+=s.ta_offers||0;agg.ta_dropouts+=s.ta_dropouts||0;agg.ta_detail.push({name:s.submitter_name||'',region:s.region||'',opened:s.ta_opened||0,closed:s.ta_closed||0,offers:s.ta_offers||0,dropouts:s.ta_dropouts||0,dropout_reason:s.ta_dropout_reason||'',constraint:s.ta_constraints||'',aging:s.ta_aging||'',next_week:s.ta_joining_plan||''});if(s.ta_aging&&s.ta_aging!='NA')agg.ta_aging_raw.push(s.ta_aging);if(s.ta_constraints&&s.ta_constraints!='NA')agg.ta_constraints.push(s.ta_constraints);}if(fn==='hrbp'){if(s.hrbp_site_visited){const d=s.hrbp_connect_details||s.hrbp_activities||'';const ct=d?(d.match(/site name/gi)||[d]).length:1;agg.hrbp_visits+=ct;if(d)agg.hrbp_connects.push({name:s.submitter_name||'',detail:d,er_cases:s.hrbp_discipline||'',absent_action:s.hrbp_abscond||'',activities:s.hrbp_activities||'',geo_days:(s.hrbp_geo_days!=null?parseInt(s.hrbp_geo_days):null),od_days:(s.hrbp_od_days!=null?parseInt(s.hrbp_od_days):null),rr_events:s.hrbp_rr_events||''});}if(s.hrbp_discipline)agg.hrbp_discipline.push(s.hrbp_discipline);if(s.hrbp_retention)agg.hrbp_retention.push(s.hrbp_retention);if(s.hrbp_issues)agg.hrbp_issues.push(s.hrbp_issues);if(s.hrbp_risks)agg.hrbp_risks.push(s.hrbp_risks);if(s.hrbp_activities)agg.hrbp_activities.push(s.hrbp_activities);}if(fn==='payroll'){if((s.payroll_hc||0)>agg.payroll_hc)agg.payroll_hc=s.payroll_hc||0;agg.payroll_errors+=(s.payroll_errors||0);if(s.payroll_month)agg.payroll_month=s.payroll_month;if(s.payroll_risks)agg.payroll_risks.push(s.payroll_risks);if(s.payroll_pending)agg.payroll_pending.push(s.payroll_pending);if(s.payroll_statutory)agg.payroll_statutory.push(s.payroll_statutory);}if(fn==='hrops'){agg.hrops_onboard+=(s.hrops_onboard||0);if(s.hrops_fnf)agg.hrops_fnf=s.hrops_fnf;if(s.hrops_compliance)agg.hrops_compliance.push(s.hrops_compliance);if(s.hrops_gaps)agg.hrops_gaps.push(s.hrops_gaps);agg.hrops_esc=Math.max(agg.hrops_esc,s.hrops_esc_count||0);if(s.hrops_esc_details)agg.hrops_esc_texts.push(s.hrops_esc_details);}if(fn==='ld'){agg.ld_sessions+=(s.ld_sessions||0);if(s.ld_coverage)agg.ld_coverage=s.ld_coverage;if(s.ld_details)agg.ld_details.push(s.ld_details);if(s.ld_upcoming)agg.ld_upcoming.push(s.ld_upcoming);if(s.ld_gaps)agg.ld_gaps.push(s.ld_gaps);if(s.ld_risks)agg.ld_risks.push(s.ld_risks);}if(fn==='admin'){if(s.admin_issues)agg.admin_issues.push(s.admin_issues);if(s.admin_savings)agg.admin_savings.push(s.admin_savings);}});
   const{error}=await _sb.from('weekly_reports').upsert(agg,{onConflict:'week_key'});
   if(!error){
     WEEKS_DATA[weekKey]=agg;
@@ -4792,6 +4847,7 @@ function renderTAPipeline(){
   }).join('');
 
   return'<div style="padding:20px 28px;max-width:1280px">'
+    +_wkWeeklyHTML
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">'
     +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Talent Acquisition Intelligence</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">TA Pipeline &amp; Recruiter Performance</div></div>'
@@ -5657,7 +5713,58 @@ function renderTA_Commitments(el) {
       +'</div>';
   }
 
+
+  // ── Weekly Submission Summary from ta_detail ──────────────────────────
+  var _wkData = WEEKS_DATA[currentWeek] || {};
+  var _taDetail = (_wkData.ta_detail || []);
+  var _wkLabel  = _wkData.label || currentWeek;
+  var _wkWeeklyHTML = '';
+  if(_taDetail.length > 0) {
+    var _wkRows = _taDetail.map(function(r) {
+      var _mine = matchesMe(r.name);
+      var _bg   = _mine ? 'rgba(96,165,250,.07)' : 'transparent';
+      var _nxt  = (r.next_week||'').trim().replace(/^(\d+)$/,'$1 expected');
+      return '<tr style="border-bottom:1px solid rgba(42,61,82,.25);background:'+_bg+'">'
+        +'<td style="padding:7px 10px;font-size:12px;color:var(--text);font-weight:'+(_mine?'600':'400')+'">'+esc(r.name||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(r.region||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--text);text-align:center">'+((r.opened||0))+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--green);text-align:center">'+((r.closed||0))+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--amber);text-align:center">'+((r.offers||0))+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(_nxt||'—')+'</td>'
+        +(isAdminView?'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc((r.dropout_reason||'—').substring(0,40))+'</td>':'')
+        +'</tr>';
+    }).join('');
+    var _totO = _taDetail.reduce(function(s,r){return s+(r.opened||0);},0);
+    var _totC = _taDetail.reduce(function(s,r){return s+(r.closed||0);},0);
+    var _totOf= _taDetail.reduce(function(s,r){return s+(r.offers||0);},0);
+    _wkWeeklyHTML = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px">'
+      +'<div style="padding:10px 14px;background:var(--surface3);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
+      +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)">Weekly Submission — '+esc(_wkLabel)+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">'+_taDetail.length+' recruiter'+(+_taDetail.length!==1?'s':'')+' submitted</div>'
+      +'</div>'
+      +'<table style="width:100%;border-collapse:collapse">'
+      +'<thead><tr style="border-bottom:1px solid var(--border)">'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Recruiter</th>'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Region</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Opened</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--green);font-weight:600;text-transform:uppercase">Closed</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--amber);font-weight:600;text-transform:uppercase">Offers</th>'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Joining Plan</th>'
+      +(isAdminView?'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Dropout Reason</th>':'')
+      +'</tr></thead>'
+      +'<tbody>'+_wkRows+'</tbody>'
+      +'<tfoot><tr style="border-top:2px solid var(--border);background:var(--surface3)">'
+      +'<td colspan="2" style="padding:7px 10px;font-size:11px;font-weight:600;color:var(--muted)">TOTAL</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--text);text-align:center">'+_totO+'</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--green);text-align:center">'+_totC+'</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--amber);text-align:center">'+_totOf+'</td>'
+      +'<td'+(isAdminView?' colspan="2"':'')+' style="padding:7px 10px"></td>'
+      +'</tr></tfoot>'
+      +'</table></div>';
+  }
+
   el.innerHTML='<div style="padding:20px 28px;max-width:1280px">'
+    +_wkWeeklyHTML
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">'
     +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">TA Intelligence</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">Commitments, Escalations &amp; Source Mix</div></div>'
