@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1174,6 +1175,97 @@ function renderOps(w, pw, elArg) {
     +'<div style="margin-top:6px;font-size:10px;color:var(--muted2)">Open &amp; Escalated items auto-appear in Action Centre. Use &ldquo;+ New Risk&rdquo; for ad-hoc entries.</div></div>';
 }
 
+
+function buildRisks(w) {
+  var risks = [];
+  var S = CMS_SUMMARY || {};
+  if (!w) return risks;
+
+  var critical90 = (S.req_aging && S.req_aging['90+']) || 0;
+  if (critical90 > 0) risks.push({
+    tag:'TA', level: critical90>20?'critical':'high',
+    title: critical90+' positions open 90+ days',
+    detail: 'Immediate escalation. Impacts delivery commitments.',
+    owner: 'TA Head + HRBP'
+  });
+
+  var critical45 = S.reqs_critical || 0;
+  if (critical45 > 50) risks.push({
+    tag:'TA', level:'high',
+    title: critical45+' critical open reqs (>45d)',
+    detail: 'Review blockers by region with TA leads.',
+    owner: 'TA Head'
+  });
+
+  var platNoReq = S.plat_gold_no_req || 0;
+  if (platNoReq > 5) risks.push({
+    tag:'Platinum', level:'high',
+    title: platNoReq+' Platinum/Gold exits with no req raised',
+    detail: 'Client SLA risk. Raise backfill reqs immediately.',
+    owner: 'HRBP + TA'
+  });
+
+  var lwdPast = S.lwd_past || 0;
+  if (lwdPast > 0) risks.push({
+    tag:'FnF', level: lwdPast>10?'high':'medium',
+    title: lwdPast+' employees past LWD — still on payroll',
+    detail: 'Payroll and compliance risk. Immediate eSep required.',
+    owner: 'HR Ops + HRBP'
+  });
+
+  var r1Pending = S.r1_pending || 0;
+  if (r1Pending > 30) risks.push({
+    tag:'Resignation', level:'medium',
+    title: r1Pending+' resignations pending R1 approval',
+    detail: 'Process delays impacting backfill timelines.',
+    owner: 'HRBP + Managers'
+  });
+
+  var payErrors = w.payroll_errors || 0;
+  if (payErrors > 0) risks.push({
+    tag:'Payroll', level: payErrors>5?'critical':'high',
+    title: payErrors+' payroll errors — '+(w.payroll_month||'current cycle'),
+    detail: 'Must resolve before salary disbursement.',
+    owner: 'Payroll Team'
+  });
+
+  (w.payroll_risks||[]).filter(function(r){
+    return r&&r.trim()&&!['na','nil','none','no'].includes(r.toLowerCase().trim());
+  }).slice(0,2).forEach(function(r){
+    risks.push({tag:'Payroll',level:'medium',title:r.substring(0,120),detail:'',owner:'Payroll Team'});
+  });
+
+  var odPending = S.od_pending || 0;
+  if (odPending > 200) risks.push({
+    tag:'OD', level:'medium',
+    title: odPending+' OD applications pending',
+    detail: 'Accumulated backlog — manager action required.',
+    owner: 'HRBPs + Managers'
+  });
+
+  var dropouts = w.ta_dropouts || 0;
+  if (dropouts > 3) risks.push({
+    tag:'TA', level: dropouts>7?'high':'medium',
+    title: dropouts+' offer dropouts this week',
+    detail: 'Review offer competitiveness and engagement.',
+    owner: 'TA Team'
+  });
+
+  (w.ta_constraints||[]).filter(function(c){
+    return c&&c.length>15&&!['na','none','nil'].includes(c.toLowerCase().trim());
+  }).slice(0,2).forEach(function(c){
+    risks.push({tag:'TA',level:'medium',title:c.substring(0,120),detail:'',owner:'TA Lead'});
+  });
+
+  (w.hrops_gaps||[]).filter(function(g){return g&&g.length>10;}).slice(0,1).forEach(function(g){
+    risks.push({tag:'HR Ops',level:'medium',title:g.substring(0,120),detail:'',owner:'HR Ops'});
+  });
+
+  var order = {critical:0,high:1,medium:2};
+  risks.sort(function(a,b){return (order[a.level]||3)-(order[b.level]||3);});
+  return risks;
+}
+
 function renderRisks(w, pw) {
   const risks = buildRisks(w);
   const critical = risks.filter(r=>r.level==='critical');
@@ -1638,7 +1730,6 @@ function renderLD(w, pw) {
 
 function renderWorkforce() {
   var W = WI;
-  var F = W.fnf;
   function pb(pct,col){return '<div class="wi-bar-track"><div class="wi-bar-fill" style="width:'+Math.min(pct,100)+'%;background:'+col+'"></div></div>';}
   var o='';
   o+='<div style="padding:28px 36px">';
@@ -2505,9 +2596,7 @@ function switchTab(id, btn) {
   currentTab=id;
   if(id==='upload') { if(el){el.innerHTML=renderUploadTab(); document.getElementById('weeksList').innerHTML=weeksListHTML();} }
   if(id==='hrbp' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadHRBPVisitAlerts, 100); }
-  if(id==='absenteeism' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadAbsentCases, 100); }
-  if(id==='ta' && typeof _sbUser !== 'undefined' && _sbUser && !_taEscLoaded) { setTimeout(loadTAEscalations, 100); }
-  if(id==='ops' && typeof _sbUser !== 'undefined' && _sbUser && !_statRisksLoaded) { setTimeout(loadStatutoryRisks, 100); }
+
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadActionTasks, 100); }
   else if(id==='users') renderUsersTab(el);
   else if(id==='gallery') renderGalleryTab();
@@ -4412,6 +4501,14 @@ function snavClick(id, el) {
   document.querySelectorAll('.mobile-nav-btn').forEach(function(b){b.classList.remove('active');});
   // Switch tab content
   switchTab(id);
+  // Re-render static tabs so region/filter changes are applied
+  var staticTabs = ['overview','risks','workforce','resignation','od','fnf','ld','hrbp','tapipeline','ta'];
+  if(staticTabs.indexOf(id) >= 0 && typeof render === 'function') render();
+  // Async tabs handled separately
+  if(id==='ta' && typeof _sbUser !== 'undefined' && _sbUser && !_taEscLoaded) { setTimeout(loadTAEscalations, 100); }
+  if(id==='ops' && typeof _sbUser !== 'undefined' && _sbUser && !_statRisksLoaded) { setTimeout(loadStatutoryRisks, 100); }
+  if(id==='absenteeism' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadAbsentCases, 100); }
+  if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(renderActionCentre, 50); }
 }
 
 function toggleSidebar() {
@@ -4510,7 +4607,7 @@ async function sbLogin(){
 
 async function sbBoot(user){
   _sbUser=user;
-  const{data:profile}=await _sb.from('user_profiles').select('role,region').eq('id',user.id).single();
+  const{data:profile}=await _sb.from('user_profiles').select('role,region,function_type,tab_scope,display_name').eq('id',user.id).single();
   _sbRole=profile||{role:'viewer',region:null};
   // Apply tab_scope restrictions
   if(_sbRole && (_sbRole.tab_scope === 'admin_facilities_only' || _sbRole.tab_scope === 'admin_facilities_overview_actions')) {
