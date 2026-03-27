@@ -1,4 +1,9 @@
 
+{
+  "success": true,
+  "status": 200,
+  "statusText": "OK",
+  "text": "
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -4520,6 +4525,18 @@ function renderTA_Commitments(el) {
       +'<div style="font-size:10px;color:var(--muted)">All-India conv rate</div>'
       +'</div></div>';
   }
+  function buildChanRow(s,total,highlight){
+    var convC=s.pct>=70?'var(--green)':s.pct>=50?'var(--amber)':'var(--red)';
+    var pct=Math.round(s.pipeline/total*100);
+    return '<div style="display:grid;grid-template-columns:140px 1fr 60px 50px;gap:10px;'
+      +'padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center'
+      +(highlight?';background:rgba(96,165,250,.06);border-left:3px solid var(--accent)':'')+'">' 
+      +'<div style="font-weight:'+(highlight?600:400)+';color:'+(highlight?'var(--accent)':'var(--text)')+'">'+esc(s.source)+'</div>'
+      +'<div><div style="background:var(--surface3);border-radius:3px;height:5px">'
+        +'<div style="background:#60a5fa;height:100%;border-radius:3px;width:'+pct+'%"></div></div></div>'
+      +'<div style="font-size:10px;color:var(--muted2);text-align:right">'+s.joined+'/'+s.pipeline+'</div>'
+      +'<div style="font-weight:700;color:'+convC+'">'+s.pct+'%</div></div>';
+  }
   var allSrcEff = (TA_SOURCE_EFF||[]).filter(function(s){return s.pipeline>0;});
   var allSrcTotal = allSrcEff.reduce(function(a,x){return a+x.pipeline;},0)||1;
   var srcChanRows = allSrcEff.map(function(s){return buildChanRow(s,allSrcTotal,false);}).join('');
@@ -4907,3 +4924,21 @@ async function sbSignOut(){await _sb.auth.signOut();document.getElementById('das
 </div><!-- end app-content -->
 </body>
 </html>
+",
+  "headers": {
+    "access-control-allow-origin": "*",
+    "age": "0",
+    "cache-control": "public, max-age=0, must-revalidate",
+    "content-disposition": "inline",
+    "content-encoding": "br",
+    "content-type": "text/html; charset=utf-8",
+    "date": "Fri, 27 Mar 2026 06:40:59 GMT",
+    "etag": "W/"e0ca9fd127be52c33b220c12a313928c"",
+    "last-modified": "Fri, 27 Mar 2026 06:40:59 GMT",
+    "server": "Vercel",
+    "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "x-vercel-cache": "HIT",
+    "x-vercel-id": "iad1:iad1::v7k5v-1774593659417-cd11ba7c1aff"
+  }
+}
