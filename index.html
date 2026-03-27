@@ -4274,19 +4274,59 @@ async function loadTAEscalations() {
       .limit(50);
     if (error) throw error;
     _taEscalations = data || [];
-    _taEscLoaded = true;
-    const el = document.getElementById('tab-ta');
-    if (el && el.classList.contains('active')) renderTA_Commitments(el);
-  } catch(e) { console.error('[TA Esc]', e); _taEscLoaded = true; }
+  } catch(e) {
+    console.error('[TA Esc]', e);
+    _taEscalations = [];
+  }
+  _taEscLoaded = true;
+  // Patch the escalations section in-place if tab is visible
+  var escDiv = document.getElementById('ta-esc-section');
+  if (escDiv) {
+    // Re-render just the escalations cards
+    var role = (_sbRole&&_sbRole.role)||'';
+    var region = (_sbRole&&_sbRole.region)||'';
+    var isAdmin = role==='admin'||role==='executive';
+    var isPan   = region==='Pan India';
+    var filtered = _taEscalations.filter(function(t){
+      if(isAdmin||isPan) return true;
+      return !t.region||t.region===region;
+    });
+    if(filtered.length===0){
+      var lbl = isAdmin?'All India':isPan?'Pan India':region;
+      escDiv.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted);background:var(--surface2);border:1px dashed var(--border);border-radius:8px;font-size:12px">No open escalations for '+lbl+'</div>';
+    } else {
+      escDiv.innerHTML=filtered.map(function(t){
+        var stC=t.status==='Open'?'var(--red)':t.status==='In Progress'?'var(--amber)':'var(--green)';
+        var svC=t.severity==='Critical'?'#dc2626':t.severity==='High'?'var(--red)':t.severity==='Medium'?'var(--amber)':'var(--muted)';
+        return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+stC+';border-radius:8px;padding:10px 14px;margin-bottom:6px">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+          +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+(t.title||'')+'</div>'
+          +'<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(0,0,0,.2);color:'+stC+';font-weight:600">'+t.status+'</span></div>'
+          +(t.description?'<div style="font-size:11px;color:var(--muted);margin-bottom:5px">'+t.description.substring(0,150)+'</div>':'')
+          +'<div style="display:flex;gap:10px;font-size:10px;color:var(--muted2)">'
+          +(t.severity?'<span style="color:'+svC+'">'+t.severity+'</span>':'')
+          +(t.assigned_to_name?'<span>&rarr; '+t.assigned_to_name+'</span>':'')
+          +(t.due_date?'<span>Due '+t.due_date+'</span>':'')
+          +'<button onclick="openTaskUpdateModal(\''+t.id+'\')" style="margin-left:auto;padding:2px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">Update</button>'
+          +'</div></div>';
+      }).join('');
+    }
+    // Update count chip
+    var chipEl=document.querySelector('#tab-ta [data-esc-count]');
+    if(chipEl)chipEl.textContent=filtered.length;
+  } else {
+    // Tab not rendered yet — full re-render when tab opens
+    var el=document.getElementById('tab-ta');
+    if(el&&el.classList.contains('active'))renderTA_Commitments(el);
+  }
 }
 
 function renderTA_Commitments(el) {
   if (!el) el = document.getElementById('tab-ta');
   if (!el) return;
+  // Render immediately — escalations load async in background
   if (!_taEscLoaded && typeof _sb !== 'undefined') {
-    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:10px">&#9203;</div>Loading&hellip;</div>';
-    loadTAEscalations();
-    return;
+    loadTAEscalations();  // fire and forget — will patch #ta-esc-section when done
   }
 
   var userRegion  = (_sbRole && _sbRole.region)         || 'All';
@@ -4415,6 +4455,8 @@ function renderTA_Commitments(el) {
           +'</div></div>';
       }).join('')
     : '<div style="padding:20px;text-align:center;color:var(--muted);background:var(--surface2);border:1px dashed var(--border);border-radius:8px;font-size:12px">No open escalations for '+viewLabel+'</div>';
+  // If still loading, show a non-blocking spinner
+  if (!_taEscLoaded) escCards = '<div style="padding:16px;text-align:center;color:var(--muted2);font-size:12px">&#9203; Loading escalations&hellip;</div>';
 
   // Recruiter table: for regional TA — own row first, then all India with divider
   function buildRecRow(r, highlight) {
@@ -4499,11 +4541,11 @@ function renderTA_Commitments(el) {
     +'<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
     +(!isAdminView&&!isPanIndia&&myReqs.length>0?'<div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:8px;padding:8px 14px;font-size:11px"><span style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:var(--accent)">'+myReqs.length+'</span> <span style="color:var(--muted)">assigned to me</span></div>':'')
     +'<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:8px 14px;font-size:11px"><span style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:var(--red)">'+regionPool.length+'</span> <span style="color:var(--muted)">critical open ('+viewLabel+')</span></div>'
-    +'<div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);border-radius:8px;padding:8px 14px;font-size:11px"><span style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:#a78bfa">'+escFiltered.length+'</span> <span style="color:var(--muted)">open escalations</span></div>'
+    +'<div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);border-radius:8px;padding:8px 14px;font-size:11px"><span data-esc-count style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:#a78bfa">'+escFiltered.length+'</span> <span style="color:var(--muted)">open escalations</span></div>'
     +'</div>'
     +mySection+regSection
     +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:#a78bfa;margin-bottom:8px">&#x1F53A; Open Escalations &mdash; '+viewLabel+'</div>'
-    +'<div style="margin-bottom:18px">'+escCards+'</div>'
+    +'<div id="ta-esc-section" style="margin-bottom:18px">'+escCards+'</div>'
     +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);margin-bottom:6px">'+(!isAdminView&&!isPanIndia?'&#x1F4CA; My Performance vs All India (benchmark)':'&#x1F4CA; Recruiter Performance &mdash; All India')+'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:0">'
     +'<div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
