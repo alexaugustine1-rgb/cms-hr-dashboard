@@ -1,13 +1,54 @@
 
-{
-  "success": true,
-  "status": 200,
-  "statusText": "OK",
-  "text": "
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script>
+  // ── Remove Vercel toolbar (prevents response headers leaking into page) ──
+  (function(){
+    function removeVercelToolbar(){
+      ['vercel-live-feedback','vercel-toolbar','#vercel-live-feedback',
+       '#__vercel-toolbar','#vercel-toolbar-container'].forEach(function(sel){
+        var el = sel.startsWith('#') 
+          ? document.getElementById(sel.substring(1))
+          : document.querySelector(sel);
+        if(el) el.remove();
+      });
+      // Remove any element with vercel in its id or class at body level
+      Array.from(document.body.children).forEach(function(child){
+        var id = (child.id||'').toLowerCase();
+        var cls = (child.className||'').toLowerCase();
+        if(id.indexOf('vercel')>=0 || cls.indexOf('vercel')>=0){
+          child.remove();
+        }
+      });
+    }
+    // Run immediately and observe for dynamic injection
+    if(document.readyState !== 'loading'){
+      removeVercelToolbar();
+    } else {
+      document.addEventListener('DOMContentLoaded', removeVercelToolbar);
+    }
+    window.addEventListener('load', removeVercelToolbar);
+    // MutationObserver catches late injection
+    var obs = new MutationObserver(function(mutations){
+      mutations.forEach(function(m){
+        m.addedNodes.forEach(function(node){
+          if(node.nodeType===1){
+            var tag=(node.tagName||'').toLowerCase();
+            var id=(node.id||'').toLowerCase();
+            if(tag.indexOf('vercel')>=0||id.indexOf('vercel')>=0){
+              node.remove();
+            }
+          }
+        });
+      });
+    });
+    document.addEventListener('DOMContentLoaded',function(){
+      obs.observe(document.body,{childList:true,subtree:false});
+    });
+  })();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HR Ops Command Centre ⚡ — CMS IT Services</title>
 <style>
@@ -3185,8 +3226,50 @@ function buildFunctionSections(t){
       +'</div>';
     return pendingHTML + visitHTML + engHTML + erHTML + issHTML;
   }
-  if(t==='payroll')return'<div class="wform-section"><div class="wform-section-title">Payroll Issues &amp; Compliance</div><div class="wform-row"><label>Payroll Errors Identified</label><input type="number" id="f_payroll_errors" value="0"></div><div class="wform-row"><label>Payroll Cycle / Month Covered</label><input type="text" id="f_payroll_month" placeholder="February 2026"></div></div><div class="wform-section"><div class="wform-section-title">Issues &amp; Compliance</div><div class="wform-row"><label>Risks for Upcoming Payroll Cycle</label><textarea id="f_payroll_risks" placeholder="Leave config issues, attendance not rectified…"></textarea></div><div class="wform-row"><label>Pending Payroll Corrections</label><textarea id="f_payroll_pending" placeholder="Holiday not reflecting, leave mapping issues…"></textarea></div><div class="wform-row"><label>Statutory Submissions Status</label><textarea id="f_payroll_statutory" placeholder="Completed / In process / Pending…"></textarea></div></div><div class="wform-section"><div class="wform-section-title">Statutory Risk Items this Week</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px">Log PF / ESIC / S&amp;E / Grievance issues raised this week.</div><div id="statRiskFormList"></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px"><select id="srFormType" style="padding:7px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px"><option value="PF">PF</option><option value="ESIC">ESIC</option><option value="S&E">S&amp;E</option><option value="Grievance">Grievance</option><option value="Labour Notice">Labour Notice</option><option value="Other">Other</option></select><input type="text" id="srFormTitle" placeholder="Brief issue description…" style="flex:1;min-width:180px;padding:7px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px"><button type="button" onclick="addStatRiskEntry()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:12px;font-weight:600;cursor:pointer">+ Add</button></div></div>'
-  if(t==='hrops')return'<div class="wform-section"><div class="wform-section-title">HR Ops Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Onboardings Processed</label><input type="number" id="f_hrops_onboard" value="0"></div><div class="wform-row"><label>Escalations Handled</label><input type="number" id="f_hrops_esc_count" value="0"></div></div><div class="wform-row"><label>FnF Cases Processed This Week</label><input type="text" id="f_hrops_fnf" placeholder="e.g. 20 of 166 cases cleared"></div></div><div class="wform-section"><div class="wform-section-title">Compliance & Gaps</div><div class="wform-row"><label>Compliance / Audit Activities</label><textarea id="f_hrops_compliance" placeholder="Audits handled, labour notices closed…"></textarea></div><div class="wform-row"><label>Process Gaps / Exceptions</label><textarea id="f_hrops_gaps" placeholder="ZingHR data gaps, master data issues…"></textarea></div><div class="wform-row"><label>Escalation Details</label><textarea id="f_hrops_esc_details" placeholder="Nature of escalations handled…"></textarea></div></div>';
+  if(t==='payroll'){
+    var pendingHTML='<div id="pendingTasksSection"></div>';
+    return pendingHTML+'<div class="wform-section"><div class="wform-section-title">Payroll Issues &amp; Compliance</div>'
+      +'<div class="wform-row"><label>Payroll Errors Identified <span style="font-size:10px;color:var(--red)">(creates Critical task if &gt;0)</span></label>'
+      +'<input type="number" id="f_payroll_errors" value="0"></div>'
+      +'<div class="wform-row"><label>Payroll Cycle / Month Covered</label>'
+      +'<input type="text" id="f_payroll_month" placeholder="February 2026"></div></div>'
+      +'<div class="wform-section"><div class="wform-section-title">Issues &amp; Compliance</div>'
+      +'<div class="wform-row"><label>Risks for Upcoming Payroll Cycle <span style="font-size:10px;color:var(--red)">(creates task)</span></label>'
+      +'<textarea id="f_payroll_risks" placeholder="Leave config issues, attendance not rectified…"></textarea></div>'
+      +'<div class="wform-row"><label>Pending Payroll Corrections <span style="font-size:10px;color:var(--amber)">(creates planned action)</span></label>'
+      +'<textarea id="f_payroll_pending" placeholder="Holiday not reflecting, leave mapping issues…"></textarea></div>'
+      +'<div class="wform-row"><label>Statutory Submissions Status</label>'
+      +'<textarea id="f_payroll_statutory" placeholder="Completed / In process / Pending…"></textarea></div></div>'
+      +'<div class="wform-section"><div class="wform-section-title">Statutory Risk Items this Week</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Log PF / ESIC / S&amp;E / Grievance issues raised this week.</div>'
+      +'<div id="statRiskFormList"></div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">'
+      +'<select id="srFormType" style="padding:7px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'
+      +'<option value="PF">PF</option><option value="ESIC">ESIC</option><option value="S&E">S&amp;E</option>'
+      +'<option value="Grievance">Grievance</option><option value="Labour Notice">Labour Notice</option><option value="Other">Other</option></select>'
+      +'<input type="text" id="srFormTitle" placeholder="Brief issue description…" style="flex:1;min-width:180px;padding:7px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'
+      +'<button type="button" onclick="addStatRiskEntry()" style="padding:7px 14px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:12px;font-weight:600;cursor:pointer">+ Add</button></div></div>'
+      +'<div class="wform-section"><div class="wform-section-title">Anything Else to Flag?</div>'
+      +'<div class="wform-row"><textarea id="f_anything_else" placeholder="Any other risk, gap or follow-up item…" style="min-height:54px"></textarea></div></div>';
+  }
+  if(t==='hrops'){
+    var pendingHTML='<div id="pendingTasksSection"></div>';
+    return pendingHTML+'<div class="wform-section"><div class="wform-section-title">HR Ops Numbers</div>'
+      +'<div class="wform-grid2">'
+      +'<div class="wform-row"><label>Onboardings Processed</label><input type="number" id="f_hrops_onboard" value="0"></div>'
+      +'<div class="wform-row"><label>Escalations Handled</label><input type="number" id="f_hrops_esc_count" value="0"></div></div>'
+      +'<div class="wform-row"><label>FnF Cases Processed This Week</label>'
+      +'<input type="text" id="f_hrops_fnf" placeholder="e.g. 20 of 166 cases cleared"></div></div>'
+      +'<div class="wform-section"><div class="wform-section-title">Compliance &amp; Gaps</div>'
+      +'<div class="wform-row"><label>Compliance / Audit Activities</label>'
+      +'<textarea id="f_hrops_compliance" placeholder="Audits handled, labour notices closed…"></textarea></div>'
+      +'<div class="wform-row"><label>Process Gaps / Exceptions <span style="font-size:10px;color:var(--amber)">(creates risk task)</span></label>'
+      +'<textarea id="f_hrops_gaps" placeholder="ZingHR data gaps, master data issues…"></textarea></div>'
+      +'<div class="wform-row"><label>Escalation Details <span style="font-size:10px;color:var(--red)">(creates escalation task)</span></label>'
+      +'<textarea id="f_hrops_esc_details" placeholder="Nature of escalations handled…"></textarea></div></div>'
+      +'<div class="wform-section"><div class="wform-section-title">Anything Else to Flag?</div>'
+      +'<div class="wform-row"><textarea id="f_anything_else" placeholder="Any other gap, risk or follow-up item…" style="min-height:54px"></textarea></div></div>';
+  }
   if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Upcoming Trainings (Next 2–4 Weeks)</label><textarea id="f_ld_upcoming" style="min-height:90px" placeholder="Program name, schedule, target audience…"></textarea></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>';
   if(t==='admin')return'<div class="wform-section"><div class="wform-section-title">Admin & Facilities</div><div class="wform-row"><label>Facility Issues & Resolution Details</label><textarea id="f_admin_issues" style="min-height:110px" placeholder="AC issues, power supply, internet, office setup…"></textarea></div><div class="wform-row"><label>Cost Optimisation / Savings Initiatives</label><textarea id="f_admin_savings" placeholder="Vendor negotiations, energy savings…"></textarea></div></div>';
   return'<div class="wform-section"><div style="color:var(--muted);font-size:13px">Form loading…</div></div>';
@@ -3239,13 +3322,30 @@ async function submitWeeklyForm(fnType,region){
       }));
     });
     // ── Text field tasks ────────────────────────────────────────────
+    const _fnArea = fnType==='ta'?'TA':fnType==='payroll'?'Payroll':fnType==='hrops'?'HR Ops':'HRBP';
+    // TA
     if(!_skip(_fv('f_ta_joining_plan'))) _tb.push(Object.assign({},_base,{task_type:'planned_action',function_area:'TA',severity:'Medium',title:'Join plan — '+_wk,description:_fv('f_ta_joining_plan')}));
     if(!_skip(_fv('f_ta_constraints'))) _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'TA',severity:'Medium',title:'TA constraint — '+_wk,description:_fv('f_ta_constraints')}));
+    // HRBP
     if(!_skip(_fv('f_hrbp_risks')))    _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'HRBP',severity:'High',title:'HRBP risk — '+_wk,description:_fv('f_hrbp_risks')}));
     if(!_skip(_fv('f_hrbp_issues')))   _tb.push(Object.assign({},_base,{task_type:'escalation',function_area:'HRBP',severity:'High',title:'Leadership issue — '+_wk,description:_fv('f_hrbp_issues')}));
-    const _fnArea = fnType==='ta'?'TA':fnType==='payroll'?'Payroll':fnType==='hrops'?'HR Ops':'HRBP';
+    // Payroll — errors create Critical/High tasks; risks and pending corrections create tasks
+    var _payErr = parseInt((document.getElementById('f_payroll_errors')||{}).value)||0;
+    if(_payErr > 0) _tb.push(Object.assign({},_base,{task_type:'payroll_error',function_area:'Payroll',
+      severity:_payErr>5?'Critical':'High',
+      title:_payErr+' payroll error'+(_payErr>1?'s':'')+' — '+(((document.getElementById('f_payroll_month')||{}).value)||_wk),
+      description:'Payroll errors identified: '+_payErr+'. Resolve before salary disbursement.'}));
+    if(!_skip(_fv('f_payroll_risks')))   _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'Payroll',severity:'High',title:'Payroll risk — '+_wk,description:_fv('f_payroll_risks')}));
+    if(!_skip(_fv('f_payroll_pending'))) _tb.push(Object.assign({},_base,{task_type:'planned_action',function_area:'Payroll',severity:'Medium',title:'Payroll correction — '+_wk,description:_fv('f_payroll_pending')}));
+    var _statTxt = (_fv('f_payroll_statutory')||'').toLowerCase();
+    if(_statTxt && !_statTxt.startsWith('complet') && !_skip(_fv('f_payroll_statutory')))
+      _tb.push(Object.assign({},_base,{task_type:'statutory',function_area:'Payroll',severity:'High',title:'Statutory submission pending — '+_wk,description:_fv('f_payroll_statutory')}));
+    // HR Ops — escalation details and process gaps create tasks
+    if(!_skip(_fv('f_hrops_esc_details'))) _tb.push(Object.assign({},_base,{task_type:'escalation',function_area:'HR Ops',severity:'High',title:'HR Ops escalation — '+_wk,description:_fv('f_hrops_esc_details')}));
+    if(!_skip(_fv('f_hrops_gaps')))        _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'HR Ops',severity:'Medium',title:'HR Ops gap — '+_wk,description:_fv('f_hrops_gaps')}));
+    // Common follow-up
     if(!_skip(_fv('f_anything_else'))) _tb.push(Object.assign({},_base,{task_type:'planned_action',function_area:_fnArea,severity:'Low',title:'Follow-up — '+_wk,description:_fv('f_anything_else')}));
-    // ── Rollover: carry open critical/high tasks from prior weeks ───
+        // ── Rollover: carry open critical/high tasks from prior weeks ───
     const _prior=_actionTasks.filter(function(t){
       return ['Critical','High'].includes(t.severity)
         && t.status!=='Done'&&t.status!=='Closed'&&t.status!=='Cancelled'&&t.status!=='Rolled Over'
@@ -4982,8 +5082,10 @@ function showSidebarAfterLogin(role) {
   if(submitBtn) submitBtn.style.display = '';
   if(mobSubmit) mobSubmit.style.display = '';
   if(role === 'admin' && adminGroup) adminGroup.style.display = '';
-  // Auto-scope region filters to user's own region (non-Pan India)
-  if(role === 'hrbp' && typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') {
+  // Auto-scope region filters — only for HRBP function type, not HR Ops or Payroll
+  var _fnType = (typeof _sbRole !== 'undefined' && _sbRole) ? _sbRole.function_type : '';
+  var _isRegionalHRBP = role === 'hrbp' && _fnType !== 'hrops' && _fnType !== 'payroll';
+  if(_isRegionalHRBP && typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') {
     var _r = _sbRole.region;
     if(typeof _odRegion !== 'undefined') _odRegion = _r;
     if(typeof _resRegion !== 'undefined') _resRegion = _r;
@@ -5004,7 +5106,7 @@ function showSidebarAfterLogin(role) {
     }
     // HR Ops: hide HRBP/TA specific sections
     if(fn === 'hrops' || fn === 'payroll') {
-      var hideHROps = ['HRBP Connects','Long Absenteeism','OD / WFH','Resignation & Backfill'];
+      var hideHROps = ['HRBP Connects'];  // HR Ops & Payroll see Resignation, Absenteeism, OD/WFH (Pan India)
       document.querySelectorAll('.sidebar-item').forEach(function(el) {
         var lbl = el.querySelector('.item-label');
         if(lbl && hideHROps.indexOf(lbl.textContent.trim()) >= 0) el.style.display = 'none';
@@ -5145,5 +5247,23 @@ async function sbSignOut(){await _sb.auth.signOut();document.getElementById('das
     "transfer-encoding": "chunked",
     "x-vercel-cache": "HIT",
     "x-vercel-id": "iad1:iad1::v7k5v-1774593659417-cd11ba7c1aff"
+  }
+}
+",
+  "headers": {
+    "access-control-allow-origin": "*",
+    "age": "0",
+    "cache-control": "public, max-age=0, must-revalidate",
+    "content-disposition": "inline",
+    "content-encoding": "br",
+    "content-type": "text/html; charset=utf-8",
+    "date": "Fri, 27 Mar 2026 08:03:28 GMT",
+    "etag": "W/"6221440c42a1a39b936972bb42ff5c09"",
+    "last-modified": "Fri, 27 Mar 2026 08:03:28 GMT",
+    "server": "Vercel",
+    "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "x-vercel-cache": "HIT",
+    "x-vercel-id": "iad1:iad1::zxkdg-1774598608281-1e2e81b39c17"
   }
 }
