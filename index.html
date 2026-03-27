@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1024,7 +1025,9 @@ function renderOverview(w, pw) {
   scored.sort(function(a,b){return b.score-a.score;});
   var maxScore = scored.length>0?scored[0].score:100;
 
-  var recRows = scored.slice(0,8).map(function(r,i){
+  var HRBP_REC_EXCL=['suhail','somasri','ayush','abhishek','priya paul','shambhavi'];
+  scored=scored.filter(function(r){var nl=r.name.toLowerCase();return !HRBP_REC_EXCL.some(function(h){return nl.indexOf(h)>=0;});});
+  var recRows = scored.map(function(r,i){
     var barW = Math.round(r.score/100*100);
     var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
     var scoreCol = r.score>=70?'var(--green)':r.score>=50?'var(--amber)':'var(--red)';
@@ -2270,7 +2273,8 @@ function openAbsentModal(id) {
 function renderAbsenteeism(el) {
   if (!el) el = document.getElementById('tab-absenteeism');
   if (!el) return;
-  if(typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India'&&typeof _absentFilter!=='undefined'){_absentFilter.region=_sbRole.region;}
+  var _absft=typeof _sbRole!=='undefined'&&_sbRole?(_sbRole.function_type||''):'';
+  if(typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India'&&_absft!=='hrops'&&_absft!=='payroll'&&typeof _absentFilter!=='undefined'){_absentFilter.region=_sbRole.region;}
 
   // Use Supabase data if loaded, else show loading
   if (!_absentLoaded) {
@@ -3818,7 +3822,12 @@ function renderResignation(){
   if(_resReq==='Req Raised')data=data.filter(function(r){return!!r.req_id;});
   if(_resR1==='Pending')data=data.filter(function(r){return r.r1_status==='Pending'||!r.r1_status;});
   if(_resR1==='Approved')data=data.filter(function(r){return r.r1_status==='Accepted';});
-  data.sort(function(a,b){return a.days_to_lwd-b.days_to_lwd;});
+  var tierOrder={'Platinum':0,'Gold':1,'Silver':2,'Regular':3};
+  data.sort(function(a,b){
+    var ta=tierOrder[a.tier]||3, tb=tierOrder[b.tier]||3;
+    if(ta!==tb) return ta-tb;
+    return a.days_to_lwd-b.days_to_lwd;
+  });
   var platGoldNoReq=CMS_RES_DATA.filter(function(r){return['Platinum','Gold'].includes(r.tier)&&!r.req_id;});
   var rf=['All','North','South','East','West'].map(function(v){return _filterBtn(v,_resRegion===v,"_resRegion='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
   var tf=['All','Platinum','Gold','Silver','Regular'].map(function(v){return _filterBtn(v,_resTier===v,"_resTier='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
@@ -5220,7 +5229,12 @@ async function sbBoot(user){
   }
   init();
   // Re-apply region filters AFTER weeks data loaded and init() ran
-  if(_sbRole && _sbRole.role === 'hrbp' && _sbRole.region && _sbRole.region !== 'Pan India') {
+  // Skip for HR Ops / Payroll — they have Pan India access
+  var _fnTypeSb = _sbRole ? (_sbRole.function_type||'') : '';
+  var _isRegSb  = _sbRole && _sbRole.role === 'hrbp'
+    && _fnTypeSb !== 'hrops' && _fnTypeSb !== 'payroll'
+    && _sbRole.region && _sbRole.region !== 'Pan India';
+  if(_isRegSb) {
     var _regn = _sbRole.region;
     if(typeof _odRegion !== 'undefined')    _odRegion    = _regn;
     if(typeof _resRegion !== 'undefined')   _resRegion   = _regn;
