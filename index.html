@@ -1972,7 +1972,7 @@ function render() {
   // Render tabs
   const renders = {
     'overview': renderOverview,
-    'ta': renderTA,
+    'ta': function(w,pw){ var el=document.getElementById('tab-ta'); renderTA_Commitments(el); return ''; },
     'hrbp': renderHRBP,
     'ops': function(w,pw){ renderOps(w,pw); return ''; },
     'ld': renderLD,
@@ -2149,6 +2149,7 @@ function openAbsentModal(id) {
 function renderAbsenteeism(el) {
   if (!el) el = document.getElementById('tab-absenteeism');
   if (!el) return;
+  if(typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India'&&typeof _absentFilter!=='undefined'){_absentFilter.region=_sbRole.region;}
 
   // Use Supabase data if loaded, else show loading
   if (!_absentLoaded) {
@@ -3251,6 +3252,7 @@ let _fnfStatus = 'Pending';
 let _fnfSort   = 'days_desc';
 
 function renderFnF() {
+  if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _fnfRegion = _sbRole.region; }
   const BAND_ORDER = {'1year&above':6,'180-365days':5,'90-180Days':4,'60-90days':3,'45-60days':2,'0-45days':1};
   const BAND_LABEL = {'1year&above':'1 Year+','180-365days':'180–365 Days','90-180Days':'90–180 Days','60-90days':'60–90 Days','45-60days':'45–60 Days','0-45days':'0–45 Days'};
   const BAND_COLOR = {'1year&above':'var(--red)','180-365days':'var(--red)','90-180Days':'var(--amber)','60-90days':'var(--amber)','45-60days':'var(--muted)','0-45days':'var(--muted)'};
@@ -3488,6 +3490,10 @@ function _filterBtn(label,active,onclick){
 // ── RESIGNATION & BACKFILL ────────────────────────────────────────────────
 var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
 function renderResignation(){
+  // Hard-enforce region for non-Pan India users regardless of filter state
+  if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') {
+    _resRegion = _sbRole.region;
+  }
   var S=CMS_SUMMARY;
   var data=CMS_RES_DATA.slice();
   if(_resRegion!=='All')data=data.filter(function(r){return r.region===_resRegion;});
@@ -3564,6 +3570,7 @@ function renderResignation(){
 // ── OD INTELLIGENCE ───────────────────────────────────────────────────────
 var _odRegion='All',_odTier='All',_odAuto='All',_odView='OD';
 function renderOD(){
+  if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _odRegion = _sbRole.region; }
   var S=CMS_SUMMARY;
   var WS=CMS_WFH_SUMMARY;
   var isWFH=_odView==='WFH';
@@ -3654,6 +3661,7 @@ function renderOD(){
 }
 
 function renderTAPipeline(){
+  if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _taRegion = _sbRole.region; }
   var S = TA_SUMMARY;
   var allData = TA_ACTIVE_REQS.slice();
   var data = allData.slice();
@@ -4202,159 +4210,245 @@ function renderTA_Commitments(el) {
   if (!el) el = document.getElementById('tab-ta');
   if (!el) return;
   if (!_taEscLoaded && typeof _sb !== 'undefined') {
-    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:10px">⏳</div>Loading…</div>';
+    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:10px">&#9203;</div>Loading&hellip;</div>';
     loadTAEscalations();
     return;
   }
 
-  // Get critical reqs from TA_ACTIVE_REQS — filter by region for regional TA
-  var _taUserRegion = (_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India')?_sbRole.region:null;
-  var critReqs = (TA_ACTIVE_REQS||[]).filter(function(r){
-    if(r.tat<=45) return false;
-    if(_taUserRegion) return r.region===_taUserRegion;
-    return true;
-  });
-  critReqs.sort(function(a,b){return b.tat-a.tat;});
+  var userRegion  = (_sbRole && _sbRole.region)         || 'All';
+  var userFn      = (_sbRole && _sbRole.function_type)  || '';
+  var userRole    = (_sbRole && _sbRole.role)            || '';
+  var displayName = (_sbRole && _sbRole.display_name)   || '';
+  var isPanIndia  = (userRegion === 'Pan India');
+  var isAdminView = (userRole === 'admin' || userRole === 'executive');
 
-  // Build recruiter commitment rows
-  var HRBP_EXCL = {33007318:1,11013495:1,11015992:1,11015914:1};
+  var nameParts = displayName.replace(/\s+/g,' ').trim().split(' ');
+  var firstName = (nameParts[0]||'').toLowerCase();
+  var lastName  = (nameParts[nameParts.length-1]||'').toLowerCase();
+
+  function matchesMe(raw) {
+    if (!raw || !firstName) return false;
+    var s = raw.toLowerCase();
+    return s.indexOf(firstName) >= 0 && (lastName.length < 3 || s.indexOf(lastName) >= 0);
+  }
+
+  var HRBP_EXCL  = {33007318:1, 11013495:1, 11015992:1, 11015914:1};
   var HRBP_NAMES = ['somasri','ayush ramchandra','abhishek  singh','priya  paul','shambhavi'];
-  function isHRBP(raw){
+  function isHRBP(raw) {
     var m = raw.match(/\((\d+)\)/);
-    if(m && HRBP_EXCL[m[1]]) return true;
+    if (m && HRBP_EXCL[parseInt(m[1])]) return true;
     return HRBP_NAMES.some(function(h){return raw.toLowerCase().indexOf(h)>=0;});
   }
-  function firstRecruiterName(raw) {
-    if(!raw) return 'Unassigned';
+  function firstRecName(raw) {
+    if (!raw) return 'Unassigned';
     var parts = raw.split(',');
-    for(var i=0;i<parts.length;i++){
-      if(!isHRBP(parts[i])){
-        return parts[i].replace(/\([^)]+\)/g,'').replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').trim().split(' ').slice(0,2).join(' ');
+    for (var i=0;i<parts.length;i++) {
+      if (!isHRBP(parts[i])) {
+        return parts[i].replace(/\([^)]+\)/g,'').replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'')
+                       .replace(/\s+/g,' ').trim().split(' ').slice(0,2).join(' ');
       }
     }
     return 'Unassigned';
   }
 
-  // Group critical reqs by recruiter
-  var byRec = {};
-  critReqs.forEach(function(r){
-    var recName = firstRecruiterName(r.ta_recruiter||'');
-    if(!byRec[recName]) byRec[recName] = [];
-    byRec[recName].push(r);
-  });
+  var allCrit = (TA_ACTIVE_REQS||[]).filter(function(r){return r.tat>45;});
+  var regionPool = (isPanIndia||isAdminView) ? allCrit
+    : allCrit.filter(function(r){return r.region===userRegion;});
 
-  // Commitment picker rows
-  var commitRows = critReqs.slice(0,30).map(function(r){
-    var recName = firstRecruiterName(r.ta_recruiter||'');
-    var saved = _taCommitments[r.req_id] || {};
+  var myReqs  = (isPanIndia||isAdminView) ? []
+    : regionPool.filter(function(r){return matchesMe(r.ta_recruiter||'');});
+  var regReqs = (isPanIndia||isAdminView) ? regionPool
+    : regionPool.filter(function(r){return !matchesMe(r.ta_recruiter||'');});
+
+  myReqs.sort(function(a,b){return b.tat-a.tat;});
+  regReqs.sort(function(a,b){return b.tat-a.tat;});
+
+  function buildRow(r, isMine) {
+    var saved   = _taCommitments[r.req_id]||{};
     var tierCol = r.tier==='Platinum'?'#a78bfa':r.tier==='Gold'?'#f59e0b':'transparent';
-    var tatCol = r.tat>90?'#dc2626':r.tat>60?'var(--red)':'#f97316';
-    return '<div style="display:grid;grid-template-columns:52px 150px 140px 60px 48px 130px 1fr;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;border-left:2px solid '+tierCol+'">'
-      +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--muted2)">'+esc(r.req_id)+'</div>'
-      +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((r.designation||'').substring(0,20))+'</div>'
-      +'<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((r.customer||'').substring(0,18))+'</div>'
+    var tatCol  = r.tat>90?'#dc2626':r.tat>60?'var(--red)':'#f97316';
+    var rid     = String(r.req_id).replace(/'/g,'');
+    return '<div style="display:grid;grid-template-columns:50px 150px 120px 50px 44px 110px 1fr;'
+      +'padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;'
+      +'border-left:2px solid '+tierCol+';'+(isMine?'background:rgba(96,165,250,.04)':'')+'">'
+      +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--muted2)">'+esc(String(r.req_id))+'</div>'
+      +'<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc((r.designation||'').substring(0,22))+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc((r.customer||'').substring(0,16))+'</div>'
       +'<div style="font-size:10px;color:var(--muted)">'+esc(r.region)+'</div>'
       +'<div style="font-weight:700;color:'+tatCol+'">'+r.tat+'d</div>'
-      +'<div style="font-size:11px;color:var(--accent)">'+esc(recName)+'</div>'
-      +'<div style="display:flex;gap:6px;align-items:center">'
-      +'<input type="date" value="'+(saved.committed_date||'')+'" onchange="_taCommitments[\''+r.req_id+'\']={committed_date:this.value,note:(_taCommitments[\''+r.req_id+'\']||{}).note||\'\'}" style="padding:3px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
-      +'<input type="text" value="'+(saved.note||'')+'" placeholder="Commitment note…" onchange="_taCommitments[\''+r.req_id+'\']={committed_date:(_taCommitments[\''+r.req_id+'\']||{}).committed_date||\'\'  ,note:this.value}" style="flex:1;padding:3px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
-      +'</div>'
-      +'</div>';
-  }).join('');
+      +'<div style="font-size:11px;color:'+(isMine?'var(--accent)':'var(--muted)')+';font-weight:'+(isMine?600:400)+'">'+esc(firstRecName(r.ta_recruiter||''))+'</div>'
+      +'<div style="display:flex;gap:5px;align-items:center">'
+      +'<input type="date" value="'+(saved.committed_date||'')+'" '
+        +'onchange="(_taCommitments[\''+rid+'\']=_taCommitments[\''+rid+'\']||{}).committed_date=this.value" '
+        +'style="padding:3px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
+      +'<input type="text" value="'+(saved.note||'')+'" placeholder="Commitment&hellip;" '
+        +'onchange="(_taCommitments[\''+rid+'\']=_taCommitments[\''+rid+'\']||{}).note=this.value" '
+        +'style="flex:1;padding:3px 7px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
+      +'</div></div>';
+  }
 
-  // Source mix table per recruiter from TA_SCORECARD
-  var srcRows = (TA_SCORECARD||[]).filter(function(r){return r.pipeline>0;}).map(function(r){
-    var conv = r.pipeline>0?Math.round(r.joined/r.pipeline*100):0;
-    var convCol = conv>=70?'var(--green)':conv>=50?'var(--amber)':'var(--red)';
-    var shortName = r.name.split(' ').slice(0,2).join(' ');
-    return '<div style="display:grid;grid-template-columns:140px 60px 55px 55px 55px 55px 60px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
-      +'<div style="font-weight:500;color:var(--text)">'+esc(shortName)+'</div>'
+  function tblHdr(cols) {
+    return '<div style="display:grid;grid-template-columns:'+cols+';padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+      +['Req','Designation','Account','Rgn','Age','Recruiter','Committed Date + Note'].map(function(h){
+        return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
+      }).join('')+'</div>';
+  }
+
+  var viewLabel   = isAdminView?'All India':isPanIndia?'Pan India':esc(userRegion);
+  var colSpec     = '50px 150px 120px 50px 44px 110px 1fr';
+
+  var mySection = '';
+  if (!isAdminView && !isPanIndia) {
+    if (myReqs.length > 0) {
+      mySection = '<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);margin-bottom:6px">'
+        +'&#x1F3AF; My Critical Positions &mdash; Set Your Commitments ('+myReqs.length+')</div>'
+        +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">'
+        +tblHdr(colSpec)
+        +myReqs.slice(0,30).map(function(r){return buildRow(r,true);}).join('')
+        +'</div>';
+    } else {
+      mySection = '<div style="background:rgba(96,165,250,.06);border:1px solid rgba(96,165,250,.2);border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:var(--muted)">'
+        +'&#x2139; No critical positions currently assigned to you in '+esc(userRegion)+'.</div>';
+    }
+  }
+
+  var regLabel = (isAdminView||isPanIndia)
+    ? 'All Critical Positions &mdash; Pan India ('+regReqs.length+')'
+    : 'Other Critical Positions &mdash; '+esc(userRegion)+' ('+regReqs.length+')';
+  var regSection = regReqs.length > 0
+    ? '<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--red);margin-bottom:6px">&#x1F534; '+regLabel+'</div>'
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">'
+      +tblHdr(colSpec)+regReqs.slice(0,50).map(function(r){return buildRow(r,false);}).join('')+'</div>' : '';
+
+  var escFiltered = _taEscalations.filter(function(t){
+    if(isAdminView||isPanIndia) return true;
+    return !t.region || t.region===userRegion;
+  });
+  var escCards = escFiltered.length
+    ? escFiltered.map(function(t){
+        var stC=t.status==='Open'?'var(--red)':t.status==='In Progress'?'var(--amber)':'var(--green)';
+        var svC=t.severity==='Critical'?'#dc2626':t.severity==='High'?'var(--red)':t.severity==='Medium'?'var(--amber)':'var(--muted)';
+        return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+stC+';border-radius:8px;padding:10px 14px;margin-bottom:6px">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+          +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(t.title)+'</div>'
+          +'<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(0,0,0,.2);color:'+stC+';font-weight:600">'+t.status+'</span></div>'
+          +(t.description?'<div style="font-size:11px;color:var(--muted);margin-bottom:5px">'+esc(t.description.substring(0,150))+'</div>':'')
+          +'<div style="display:flex;gap:10px;font-size:10px;color:var(--muted2)">'
+          +(t.severity?'<span style="color:'+svC+'">'+t.severity+'</span>':'')
+          +(t.assigned_to_name?'<span>&rarr; '+esc(t.assigned_to_name)+'</span>':'')
+          +(t.due_date?'<span>Due '+t.due_date+'</span>':'')
+          +'<button onclick="openTaskUpdateModal(\''+t.id+'\')" style="margin-left:auto;padding:2px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">Update</button>'
+          +'</div></div>';
+      }).join('')
+    : '<div style="padding:20px;text-align:center;color:var(--muted);background:var(--surface2);border:1px dashed var(--border);border-radius:8px;font-size:12px">No open escalations for '+viewLabel+'</div>';
+
+  // Recruiter table: for regional TA — own row first, then all India with divider
+  function buildRecRow(r, highlight) {
+    var conv=r.pipeline>0?Math.round(r.joined/r.pipeline*100):0;
+    var convC=conv>=70?'var(--green)':conv>=50?'var(--amber)':'var(--red)';
+    var sName=r.name.split(' ').slice(0,2).join(' ');
+    return '<div style="display:grid;grid-template-columns:140px 55px 50px 55px 50px 55px 55px;'
+      +'padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;'
+      +(highlight?'background:rgba(96,165,250,.06);border-left:3px solid var(--accent)':'')+'">' 
+      +'<div style="font-weight:'+(highlight?700:400)+';color:'+(highlight?'var(--accent)':'var(--text)')+'">'+esc(sName)+'</div>'
       +'<div>'+r.pipeline+'</div>'
       +'<div style="color:var(--muted)">'+r.offers+'</div>'
       +'<div style="color:'+(r.joined>0?'var(--green)':'var(--muted)')+'">'+r.joined+'</div>'
-      +'<div style="color:'+(r.mar_joined>0?'var(--green)':'var(--muted)')+'">'+r.mar_joined+'</div>'
-      +'<div style="color:'+(r.avg_fill_days>0?'var(--green)':'var(--muted2)')+'">'+( r.fill_cnt>0?r.avg_fill_days+'d':'—')+'</div>'
-      +'<div style="font-weight:700;color:'+convCol+'">'+conv+'%</div>'
-      +'</div>';
-  }).join('');
+      +'<div style="color:'+(r.mar_joined>0?'var(--green)':'var(--muted2)')+'">'+r.mar_joined+'</div>'
+      +'<div style="color:'+(r.fill_cnt>0?'var(--text)':'var(--muted2)') +'">'+(r.fill_cnt>0?r.avg_fill_days+'d':'&mdash;')+'</div>'
+      +'<div style="font-weight:700;color:'+convC+'">'+conv+'%</div></div>';
+  }
+  var allSrcRows = (TA_SCORECARD||[]).filter(function(r){return r.pipeline>0||r.active>0;});
+  var myRecRow   = allSrcRows.filter(function(r){
+    var sn=r.name.toLowerCase();
+    return sn.indexOf(firstName)>=0&&(lastName.length<3||sn.indexOf(lastName)>=0);
+  });
+  var otherRows  = allSrcRows.filter(function(r){
+    var sn=r.name.toLowerCase();
+    return !(sn.indexOf(firstName)>=0&&(lastName.length<3||sn.indexOf(lastName)>=0));
+  });
+  var srcRows = (isPanIndia||isAdminView)
+    ? allSrcRows.map(function(r){return buildRecRow(r,false);}).join('')
+    : myRecRow.map(function(r){return buildRecRow(r,true);}).join('')
+      +(myRecRow.length>0&&otherRows.length>0
+        ? '<div style="padding:5px 12px;font-size:10px;color:var(--muted2);background:var(--surface3);letter-spacing:.5px;border-bottom:1px solid var(--border)">All India &mdash; Benchmark</div>'
+        : '')
+      +otherRows.map(function(r){return buildRecRow(r,false);}).join('');
 
-  // Source channel mix
-  var srcChannelRows = (TA_SOURCE_EFF||[]).filter(function(s){return s.pipeline>0;}).map(function(s){
-    var convCol = s.pct>=70?'var(--green)':s.pct>=50?'var(--amber)':'var(--red)';
-    var total = (TA_SOURCE_EFF||[]).reduce(function(a,x){return a+x.pipeline;},0)||1;
-    var pct = Math.round(s.pipeline/total*100);
-    return '<div style="display:grid;grid-template-columns:150px 1fr 70px 55px;gap:10px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
-      +'<div style="font-weight:500;color:var(--text)">'+esc(s.source)+'</div>'
-      +'<div><div style="background:var(--surface3);border-radius:3px;height:5px"><div style="background:#60a5fa;height:100%;border-radius:3px;width:'+pct+'%"></div></div></div>'
+  // Source channel: personal breakdown + separator + all India aggregate
+  function buildChanRow(s, total, highlight) {
+    var convC=s.pct>=70?'var(--green)':s.pct>=50?'var(--amber)':'var(--red)';
+    var pct=Math.round(s.pipeline/total*100);
+    return '<div style="display:grid;grid-template-columns:140px 1fr 60px 50px;gap:10px;'
+      +'padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;'
+      +(highlight?'background:rgba(96,165,250,.06);border-left:3px solid var(--accent)':'')+'">' 
+      +'<div style="font-weight:'+(highlight?600:400)+';color:'+(highlight?'var(--accent)':'var(--text)')+'">'+esc(s.source)+'</div>'
+      +'<div><div style="background:var(--surface3);border-radius:3px;height:5px">'
+        +'<div style="background:'+(highlight?'var(--accent)':'#60a5fa')+';height:100%;border-radius:3px;width:'+pct+'%"></div></div></div>'
       +'<div style="font-size:10px;color:var(--muted2);text-align:right">'+s.joined+'/'+s.pipeline+'</div>'
-      +'<div style="font-weight:700;color:'+convCol+'">'+s.pct+'%</div>'
-      +'</div>';
-  }).join('');
+      +'<div style="font-weight:700;color:'+convC+'">'+s.pct+'%</div></div>';
+  }
+  // Derive personal source breakdown from myReqs+regionPool
+  var myReqsPool = (isPanIndia||isAdminView)
+    ? (TA_ACTIVE_REQS||[])
+    : (TA_ACTIVE_REQS||[]).filter(function(r){return matchesMe(r.ta_recruiter||'');});
+  var mySrcMap = {};
+  myReqsPool.forEach(function(r){
+    var src = r.source||r.top_source||'Unknown';
+    if(!mySrcMap[src]) mySrcMap[src]={source:src,pipeline:0,joined:0};
+    mySrcMap[src].pipeline++;
+  });
+  var mySrcEff = Object.values(mySrcMap)
+    .filter(function(s){return s.pipeline>0;})
+    .sort(function(a,b){return b.pipeline-a.pipeline;});
+  mySrcEff.forEach(function(s){
+    var allInd = (TA_SOURCE_EFF||[]).find(function(x){return x.source===s.source;});
+    s.pct = s.pipeline>0 ? (allInd?allInd.pct:0) : 0;
+    s.joined = allInd?allInd.joined:0;
+  });
+  var allSrcEff = (TA_SOURCE_EFF||[]).filter(function(s){return s.pipeline>0;});
+  var allSrcTotal = allSrcEff.reduce(function(a,x){return a+x.pipeline;},0)||1;
+  var mySrcTotal  = mySrcEff.reduce(function(a,x){return a+x.pipeline;},0)||1;
+  var srcChanRows = (isPanIndia||isAdminView)
+    ? allSrcEff.map(function(s){return buildChanRow(s,allSrcTotal,false);}).join('')
+    : mySrcEff.map(function(s){return buildChanRow(s,mySrcTotal,true);}).join('')
+      +(mySrcEff.length>0
+        ? '<div style="padding:5px 12px;font-size:10px;color:var(--muted2);background:var(--surface3);letter-spacing:.5px;border-bottom:1px solid var(--border)">All India &mdash; Benchmark</div>'
+        : '')
+      +allSrcEff.map(function(s){return buildChanRow(s,allSrcTotal,false);}).join('');
 
-  // Escalations from action_tasks
-  var escCards = _taEscalations.length
-    ? _taEscalations.map(function(t){
-      var stCol = t.status==='Open'?'var(--red)':t.status==='In Progress'?'var(--amber)':'var(--green)';
-      var sevCol = t.severity==='Critical'?'#dc2626':t.severity==='High'?'var(--red)':t.severity==='Medium'?'var(--amber)':'var(--muted)';
-      return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+stCol+';border-radius:8px;padding:12px 14px;margin-bottom:7px">'
-        +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:5px">'
-        +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(t.title)+'</div>'
-        +'<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(0,0,0,.2);color:'+stCol+';font-weight:600">'+t.status+'</span>'
-        +'</div>'
-        +(t.description?'<div style="font-size:11px;color:var(--muted);margin-bottom:6px">'+esc(t.description.substring(0,150))+'</div>':'')
-        +'<div style="display:flex;gap:10px;font-size:10px;color:var(--muted2)">'
-        +(t.severity?'<span style="color:'+sevCol+'">'+t.severity+'</span>':'')
-        +(t.assigned_to_name?'<span>→ '+esc(t.assigned_to_name)+'</span>':'')
-        +(t.due_date?'<span>Due '+t.due_date+'</span>':'')
-        +'<button onclick="openTaskUpdateModal(\''+t.id+'\')" style="margin-left:auto;padding:2px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">Update</button>'
-        +'</div></div>';
-    }).join('')
-    : '<div style="padding:24px;text-align:center;color:var(--muted);background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open TA escalations</div>';
-
-  function colHdr(labels, cols) {
+  function srcHdr(labels,cols){
     return '<div style="display:grid;grid-template-columns:'+cols+';padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-      +labels.map(function(l){return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+l+'</div>';}).join('')
+      +labels.map(function(h){return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';}).join('')
       +'</div>';
   }
 
-  el.innerHTML = '<div style="padding:20px 28px;max-width:1280px">'
+  el.innerHTML='<div style="padding:20px 28px;max-width:1280px">'
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">'
     +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">TA Intelligence</div>'
-    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">Commitments, Escalations & Source Mix</div></div>'
-    +'<button onclick="openNewTaskModal(\'escalation\')" style="padding:7px 16px;border:1px solid #a78bfa;border-radius:8px;background:none;color:#a78bfa;font-size:12px;cursor:pointer;font-weight:600">+ New Escalation</button>'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">Commitments, Escalations &amp; Source Mix</div></div>'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+    +'<span style="font-size:11px;color:var(--muted)">Scope: <strong style="color:var(--accent)">'+viewLabel+'</strong></span>'
+    +'<button onclick="openNewTaskModal(\'escalation\')" style="padding:6px 14px;border:1px solid #a78bfa;border-radius:8px;background:none;color:#a78bfa;font-size:12px;cursor:pointer;font-weight:600">+ New Escalation</button>'
+    +'</div></div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+    +(!isAdminView&&!isPanIndia&&myReqs.length>0?'<div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:8px;padding:8px 14px;font-size:11px"><span style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:var(--accent)">'+myReqs.length+'</span> <span style="color:var(--muted)">assigned to me</span></div>':'')
+    +'<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:8px 14px;font-size:11px"><span style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:var(--red)">'+regionPool.length+'</span> <span style="color:var(--muted)">critical open ('+viewLabel+')</span></div>'
+    +'<div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);border-radius:8px;padding:8px 14px;font-size:11px"><span style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:#a78bfa">'+escFiltered.length+'</span> <span style="color:var(--muted)">open escalations</span></div>'
     +'</div>'
-
-    // Section 1: Critical Position Commitments
-    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">🔴 Critical Positions — Recruiter Commitments (>45 days open)</div>'
-    +'<div style="background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:8px 14px;margin-bottom:8px;font-size:11px;color:var(--amber)">Set committed closure dates for critical positions. These are tracked weekly. Left border: purple=Platinum, amber=Gold.</div>'
-    +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:18px">'
-    +colHdr(['Req','Designation','Account','Region','Age','Recruiter','Committed Date + Note'],'52px 150px 140px 60px 48px 130px 1fr')
-    +(commitRows||'<div style="padding:32px;text-align:center;color:var(--muted)">No critical positions</div>')
-    +'</div>'
-
-    // Section 2: Open Escalations
-    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:#a78bfa;margin-bottom:8px">🔺 TA Escalations & Support Required</div>'
+    +mySection+regSection
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:#a78bfa;margin-bottom:8px">&#x1F53A; Open Escalations &mdash; '+viewLabel+'</div>'
     +'<div style="margin-bottom:18px">'+escCards+'</div>'
-
-    // Section 3: Recruiter Source Mix
-    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);margin-bottom:8px">📊 Recruiter Performance — Source Attribution</div>'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent);margin-bottom:6px">'+(!isAdminView&&!isPanIndia?'&#x1F4CA; My Performance vs All India (benchmark)':'&#x1F4CA; Recruiter Performance &mdash; All India')+'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:0">'
-
-    // Left: recruiter pipeline table
     +'<div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
-    +colHdr(['Recruiter','Sourced','Offers','Joined','MTD','FillSpd','Conv'],'140px 60px 55px 55px 55px 55px 60px')
-    +srcRows
-    +'</div></div>'
-
-    // Right: source channel mix
+    +srcHdr(['Recruiter','Sourced','Offers','Joined','MTD','Fill Spd','Conv'],'140px 55px 50px 55px 50px 55px 55px')
+    +srcRows+'</div></div>'
     +'<div><div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
-    +colHdr(['Channel','Pipeline Share','Joined/Total','Conv%'],'150px 1fr 70px 55px')
-    +srcChannelRows
-    +'</div></div>'
+    +srcHdr(['Channel','Pipeline Share','Joined/Total','Conv%'],'150px 1fr 60px 50px')
+    +srcChanRows+'</div></div>'
     +'</div>'
-
-    +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Commitments are session-only unless saved to Action Centre. Critical = >45 days since req raised in ZingHR.</div>'
+    +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Your rows highlighted in blue. Source mix is all-India for benchmarking. Commitments session-only unless saved to Action Centre.</div>'
     +'</div>';
 }
 
@@ -4652,6 +4746,16 @@ async function sbBoot(user){
     hr.appendChild(rb);
   }
   init();
+  // Re-apply region filters AFTER weeks data loaded and init() ran
+  if(_sbRole && _sbRole.role === 'hrbp' && _sbRole.region && _sbRole.region !== 'Pan India') {
+    var _regn = _sbRole.region;
+    if(typeof _odRegion !== 'undefined')    _odRegion    = _regn;
+    if(typeof _resRegion !== 'undefined')   _resRegion   = _regn;
+    if(typeof _fnfRegion !== 'undefined')   _fnfRegion   = _regn;
+    if(typeof _taRegion !== 'undefined')    _taRegion    = _regn;
+    if(typeof _absentFilter !== 'undefined') _absentFilter.region = _regn;
+    render(); // re-render all tabs with correct region filters
+  }
 }
 
 async function sbSignOut(){await _sb.auth.signOut();document.getElementById('dashApp').style.display='none';document.getElementById('authOverlay').style.display='flex';_sbUser=null;_sbRole=null;WEEKS_DATA={};WEEK_ORDER=[];const so=document.getElementById('sbSignOutBtn');if(so)so.remove();}
