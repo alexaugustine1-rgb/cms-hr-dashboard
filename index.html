@@ -1,6 +1,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2674,20 +2675,26 @@ function renderActionCentre(el) {
     return;
   }
 
+  const FA_ORDER = ['HR Ops','TA','Payroll','HRBP','L&D','Admin','General'];
+  const FA_COLOR = {'HR Ops':'#60a5fa','TA':'#34d399','Payroll':'#f59e0b','HRBP':'#a78bfa','L&D':'#fb923c','Admin':'#94a3b8','General':'#94a3b8'};
+
   const open = _actionTasks.filter(t => t.status === 'Open' || t.status === 'In Progress');
-  const planned = open.filter(t => t.task_type === 'planned_action');
+  const planned = open.filter(t => t.task_type === 'planned_action' || t.task_type === 'next_week_plan');
   const risks = open.filter(t => t.task_type === 'risk');
   const escalations = open.filter(t => t.task_type === 'escalation');
   const overdue = open.filter(t => t.due_date && new Date(t.due_date) < new Date());
-  const done = _actionTasks.filter(t => t.status === 'Done').slice(0, 5);
+  const done = _actionTasks.filter(t => t.status === 'Done').slice(0, 6);
   const rolledOver = _actionTasks.filter(t => t.rollover_count > 0 && t.status !== 'Done' && t.status !== 'Closed');
+
+  const isAdmin = typeof _sbRole !== 'undefined' && (_sbRole.role === 'admin' || _sbRole.role === 'executive');
 
   function taskCard(t) {
     const st = TASK_STATUS_STYLE[t.status] || { col: 'var(--muted)', bg: 'rgba(100,116,139,.1)' };
     const isOverdue = t.due_date && new Date(t.due_date) < new Date() && t.status !== 'Done' && t.status !== 'Closed';
     const sevStyle = SEVERITY_STYLE[t.severity] || '';
     const rollBadge = t.rollover_count > 0 ? `<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(148,163,184,.15);color:#94a3b8">↩${t.rollover_count}x</span>` : '';
-    return `<div style="background:var(--surface2);border:1px solid ${isOverdue?'rgba(248,113,113,.4)':' var(--border)'};border-radius:8px;padding:12px 14px;margin-bottom:8px${isOverdue?';box-shadow:0 0 0 1px rgba(248,113,113,.2)':''}">
+    const faColor = FA_COLOR[t.function_area] || '#94a3b8';
+    return `<div style="background:var(--surface2);border:1px solid ${isOverdue?'rgba(248,113,113,.4)':'var(--border)'};border-left:3px solid ${faColor};border-radius:8px;padding:12px 14px;margin-bottom:8px${isOverdue?';box-shadow:0 0 0 1px rgba(248,113,113,.2)':''}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
         <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.4">${esc(t.title)}</div>
         <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
@@ -2697,7 +2704,6 @@ function renderActionCentre(el) {
       </div>
       ${t.description?`<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${esc(t.description.substring(0,120))}${t.description.length>120?'…':''}</div>`:''}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:10px;padding:1px 7px;border-radius:4px;background:rgba(96,165,250,.12);color:#60a5fa">${t.function_area||'—'}</span>
         ${t.severity?`<span style="font-size:10px;${sevStyle}">${t.severity}</span>`:''}
         ${t.due_date?`<span style="font-size:10px;color:${isOverdue?'var(--red)':'var(--muted2)'}">Due ${t.due_date}</span>`:''}
         ${t.assigned_to_name?`<span style="font-size:10px;color:#a78bfa">→ ${esc(t.assigned_to_name)}</span>`:''}
@@ -2707,7 +2713,34 @@ function renderActionCentre(el) {
     </div>`;
   }
 
-  const isAdmin = typeof _sbRole !== 'undefined' && (_sbRole.role === 'admin' || _sbRole.role === 'executive');
+  // Group tasks by function_area, sorted by FA_ORDER then severity
+  function groupByFA(tasks) {
+    const sevOrd = {Critical:0,High:1,Medium:2,Low:3};
+    const groups = {};
+    tasks.forEach(t => {
+      const fa = t.function_area || 'General';
+      if (!groups[fa]) groups[fa] = [];
+      groups[fa].push(t);
+    });
+    // Sort tasks within each group by severity
+    Object.keys(groups).forEach(fa => {
+      groups[fa].sort((a,b) => (sevOrd[a.severity]??3) - (sevOrd[b.severity]??3));
+    });
+    return groups;
+  }
+
+  function renderGroupedColumn(tasks, emptyMsg) {
+    if (!tasks.length) return `<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">${emptyMsg}</div>`;
+    const groups = groupByFA(tasks);
+    const orderedFAs = [...FA_ORDER.filter(f => groups[f]), ...Object.keys(groups).filter(f => !FA_ORDER.includes(f))];
+    return orderedFAs.map(fa => {
+      const color = FA_COLOR[fa] || '#94a3b8';
+      return `<div style="margin-bottom:12px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${color};padding:4px 8px;background:${color}18;border-radius:4px;margin-bottom:6px;display:inline-block">${esc(fa)} · ${groups[fa].length}</div>
+        ${groups[fa].map(taskCard).join('')}
+      </div>`;
+    }).join('');
+  }
 
   el.innerHTML = `<div style="padding:24px 32px;max-width:1280px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
@@ -2723,7 +2756,7 @@ function renderActionCentre(el) {
     </div>
 
     <!-- Summary strip -->
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px">
       ${[['Open Tasks',open.length,'var(--accent)'],['Overdue',overdue.length,'var(--red)'],['Risks Open',risks.length,'var(--amber)'],['Escalations',escalations.length,'#a78bfa'],['Rolled Over',rolledOver.length,'#94a3b8']].map(([l,v,c])=>`
       <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:12px;text-align:center">
         <div style="font-family:Bebas_Neue,sans-serif;font-size:30px;color:${c};line-height:1">${v}</div>
@@ -2731,40 +2764,36 @@ function renderActionCentre(el) {
       </div>`).join('')}
     </div>
 
-    <!-- Three columns -->
+    <!-- Three columns grouped by function area -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start">
 
-      <!-- Planned Actions -->
       <div>
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:8px">
           📋 Planned Actions <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span>
         </div>
-        ${overdue.filter(t=>t.task_type==='planned_action').length>0?
-          `<div style="font-size:10px;color:var(--red);margin-bottom:6px">⚠ ${overdue.filter(t=>t.task_type==='planned_action').length} overdue</div>`:''}
-        ${planned.length ? planned.map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open planned actions</div>'}
+        ${overdue.filter(t=>t.task_type==='planned_action'||t.task_type==='next_week_plan').length>0?
+          `<div style="font-size:10px;color:var(--red);margin-bottom:8px">⚠ ${overdue.filter(t=>t.task_type==='planned_action'||t.task_type==='next_week_plan').length} overdue</div>`:''}
+        ${renderGroupedColumn(planned,'No open planned actions')}
       </div>
 
-      <!-- Risks -->
       <div>
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:8px">
           ⚠ Risks <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(251,191,36,.12);color:var(--amber)">${risks.length}</span>
         </div>
         ${risks.filter(t=>t.severity==='Critical'||t.severity==='High').length>0?
-          `<div style="font-size:10px;color:var(--red);margin-bottom:6px">🔴 ${risks.filter(t=>t.severity==='Critical'||t.severity==='High').length} high/critical</div>`:''}
-        ${risks.length ? risks.sort((a,b)=>{const o={Critical:0,High:1,Medium:2,Low:3};return (o[a.severity]??3)-(o[b.severity]??3);}).map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open risks</div>'}
+          `<div style="font-size:10px;color:var(--red);margin-bottom:8px">🔴 ${risks.filter(t=>t.severity==='Critical'||t.severity==='High').length} high/critical</div>`:''}
+        ${renderGroupedColumn(risks,'No open risks')}
       </div>
 
-      <!-- Escalations (admin-assigned) -->
       <div>
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:8px">
           🔺 Escalations <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${escalations.length}</span>
           ${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin assigns)</span>':''}
         </div>
-        ${escalations.length ? escalations.map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open escalations</div>'}
+        ${renderGroupedColumn(escalations,'No open escalations')}
       </div>
     </div>
 
-    <!-- Recently Done -->
     ${done.length?`<div style="margin-top:20px">
       <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:10px">✓ Recently Completed</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${done.map(taskCard).join('')}</div>
@@ -4058,6 +4087,8 @@ async function submitWeeklyForm(fnType,region){
       }));
     }
     if(_tb.length>0){
+      // Dedup: delete existing tasks this user created for this week before re-inserting
+      await _sb.from('action_tasks').delete().eq('week_key',_wk).eq('created_by',_sbUser.id);
       await _sb.from('action_tasks').insert(_tb);
       _caseEntries=[];if(typeof renderCaseEntries==='function')renderCaseEntries();
       _actionEntries=[];if(typeof renderActionEntries==='function')renderActionEntries();
