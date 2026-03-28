@@ -4847,7 +4847,6 @@ function renderTAPipeline(){
   }).join('');
 
   return'<div style="padding:20px 28px;max-width:1280px">'
-    +_wkWeeklyHTML
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">'
     +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Talent Acquisition Intelligence</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">TA Pipeline &amp; Recruiter Performance</div></div>'
@@ -5763,8 +5762,54 @@ function renderTA_Commitments(el) {
       +'</table></div>';
   }
 
+
+  // ── Weekly Submission from ta_detail ─────────────────────────────────
+  var _wkD  = WEEKS_DATA[currentWeek] || {};
+  var _wkTd = _wkD.ta_detail || [];
+  var _wkLb = _wkD.label || currentWeek;
+  var _wkHtml = '';
+  if(_wkTd.length > 0) {
+    var _myFn2 = ((_sbRole&&_sbRole.display_name)||'').toLowerCase().split(' ')[0];
+    var _tRows2 = _wkTd.map(function(r) {
+      var _m2 = _myFn2 && (r.name||'').toLowerCase().indexOf(_myFn2) >= 0;
+      var _nxt2 = (r.next_week||'').trim();
+      if(/^\d+$/.test(_nxt2)) _nxt2 = _nxt2 + ' expected';
+      return '<tr style="border-bottom:1px solid rgba(42,61,82,.25);background:'+(_m2?'rgba(96,165,250,.07)':'transparent')+'">'
+        +'<td style="padding:7px 10px;font-size:12px;color:var(--text);font-weight:'+(_m2?'600':'400')+'">'+esc(r.name||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(r.region||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;text-align:center">'+(r.opened||0)+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--green);text-align:center">'+(r.closed||0)+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--amber);text-align:center">'+(r.offers||0)+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc((_nxt2||'—').substring(0,50))+'</td>'
+        +'</tr>';
+    }).join('');
+    var _tO2  = _wkTd.reduce(function(s,r){return s+(r.opened||0);},0);
+    var _tC2  = _wkTd.reduce(function(s,r){return s+(r.closed||0);},0);
+    var _tOf2 = _wkTd.reduce(function(s,r){return s+(r.offers||0);},0);
+    _wkHtml = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px">'
+      +'<div style="padding:10px 14px;background:var(--surface3);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
+      +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)">Weekly Submission — '+esc(_wkLb)+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">'+_wkTd.length+' recruiter'+(_wkTd.length!==1?'s':'')+' submitted</div>'
+      +'</div>'
+      +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+      +'<thead><tr style="border-bottom:1px solid var(--border)">'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Recruiter</th>'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Region</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Opened</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--green);font-weight:600;text-transform:uppercase">Closed</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--amber);font-weight:600;text-transform:uppercase">Offers</th>'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Joining Plan</th>'
+      +'</tr></thead><tbody>'+_tRows2+'</tbody>'
+      +'<tfoot><tr style="border-top:2px solid var(--border);background:var(--surface3)">'
+      +'<td colspan="2" style="padding:7px 10px;font-size:11px;font-weight:600;color:var(--muted)">TOTAL</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;text-align:center">'+_tO2+'</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--green);text-align:center">'+_tC2+'</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--amber);text-align:center">'+_tOf2+'</td>'
+      +'<td></td></tr></tfoot></table></div></div>';
+  }
+
   el.innerHTML='<div style="padding:20px 28px;max-width:1280px">'
-    +_wkWeeklyHTML
+    +_wkHtml
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">'
     +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">TA Intelligence</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">Commitments, Escalations &amp; Source Mix</div></div>'
@@ -5816,6 +5861,8 @@ async function loadStatutoryRisks() {
   } catch(e) {
     console.error('[StatRisk]', e);
     _statRisksLoaded = true;
+    var _oEl2=document.getElementById('tab-ops');
+    if(_oEl2) renderOps(null,null,_oEl2);
   }
 }
 
