@@ -2,6 +2,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -750,12 +751,12 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 </div>
 <style>
 /* Gallery */
-.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:16px}
+.gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:16px}
 .photo-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .15s,border-color .15s}
 .photo-card:hover{transform:translateY(-2px);border-color:var(--accent)}
-.photo-card img{width:100%;height:160px;object-fit:cover;display:block;background:var(--surface3)}
-.photo-card-body{padding:10px 12px}
-.photo-card-caption{font-size:12px;color:var(--text);line-height:1.4;margin-bottom:6px}
+.photo-card img{width:100%;height:110px;object-fit:cover;display:block;background:var(--surface3)}
+.photo-card-body{padding:7px 10px}
+.photo-card-caption{font-size:11px;color:var(--text);line-height:1.3;margin-bottom:4px}
 .photo-card-meta{display:flex;align-items:center;justify-content:space-between;font-size:10px;color:var(--muted2)}
 .photo-card-hrbp{font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
 .photo-event-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;letter-spacing:.5px;text-transform:uppercase}
@@ -1886,13 +1887,13 @@ function renderLD(w, pw) {
       </div>
       <div class="kpi-card amber animate d4">
         <div class="kpi-icon">🚧</div><div class="kpi-label">Capability Gaps Raised</div>
-        <div class="kpi-value">${w.ld_gaps.length}</div>
-        <div class="kpi-wow ${w.ld_gaps.length>0?'warn':'neutral'}">${w.ld_gaps.length>0?'Needs attention':'None flagged'}</div>
+        <div class="kpi-value">${(w.ld_gaps||[]).length}</div>
+        <div class="kpi-wow ${(w.ld_gaps||[]).length>0?'warn':'neutral'}">${(w.ld_gaps||[]).length>0?'Needs attention':'None flagged'}</div>
       </div>
       <div class="kpi-card red animate d5">
         <div class="kpi-icon">⚠️</div><div class="kpi-label">L&D Risks / Dependencies</div>
-        <div class="kpi-value">${w.ld_risks.length}</div>
-        <div class="kpi-wow ${w.ld_risks.length>0?'down':'neutral'}">${w.ld_risks.length>0?'Follow up needed':'Clear'}</div>
+        <div class="kpi-value">${(w.ld_risks||[]).length}</div>
+        <div class="kpi-wow ${(w.ld_risks||[]).length>0?'down':'neutral'}">${(w.ld_risks||[]).length>0?'Follow up needed':'Clear'}</div>
       </div>
     </div>
 
@@ -1915,14 +1916,14 @@ function renderLD(w, pw) {
       </div>
     </div>
 
-    ${(w.ld_gaps.length > 0 || w.ld_risks.length > 0) ? `
+    ${((w.ld_gaps||[]).length > 0 || (w.ld_risks||[]).length > 0) ? `
     <div class="section-label">Gaps & Risks</div>
     <div class="card">
       <div class="card-header"><div class="card-title">🚧 L&D Gaps & Dependencies</div><span class="card-badge amber">Action Needed</span></div>
       <div class="card-body">
         <div class="risk-list">
-          ${w.ld_gaps.map(g=>`<div class="risk-item high"><span class="risk-tag">Capability Gap</span><span class="risk-detail">${esc(trim(g,350))}</span></div>`).join('')}
-          ${w.ld_risks.map(r=>`<div class="risk-item medium"><span class="risk-tag">L&D Risk</span><span class="risk-detail">${esc(trim(r,350))}</span></div>`).join('')}
+          ${(w.ld_gaps||[]).map(g=>`<div class="risk-item high"><span class="risk-tag">Capability Gap</span><span class="risk-detail">${esc(trim(g,350))}</span></div>`).join('')}
+          ${(w.ld_risks||[]).map(r=>`<div class="risk-item medium"><span class="risk-tag">L&D Risk</span><span class="risk-detail">${esc(trim(r,350))}</span></div>`).join('')}
         </div>
       </div>
     </div>` : ''}`;
@@ -2231,6 +2232,7 @@ var _absentFilter = { region: 'All', tier: 'All', status: 'All' };
 
 const ABSENT_STATUSES = [
   { val: 'Uncontacted',              col: '#f87171', bg: 'rgba(248,113,113,.15)' },
+  { val: 'Contacted',                col: '#60a5fa', bg: 'rgba(96,165,250,.15)' },
   { val: 'Under Investigation',      col: '#fbbf24', bg: 'rgba(251,191,36,.15)' },
   { val: 'Missed Punch',             col: '#60a5fa', bg: 'rgba(96,165,250,.15)' },
   { val: 'OD Not Regularised',       col: '#60a5fa', bg: 'rgba(96,165,250,.15)' },
@@ -2255,7 +2257,6 @@ async function loadAbsentCases() {
     const { data, error } = await _sb
       .from('absent_cases')
       .select('*')
-      .not('status', 'in', '("Resolved — Returned","Resolved — Resigned")')
       .order('consecutive_absent', { ascending: false });
     if (error) throw error;
     _absentCases = data || [];
@@ -2373,7 +2374,10 @@ function renderAbsenteeism(el) {
     return;
   }
 
+  const _showResolved = _absentFilter.showResolved === true;
   let data = _absentCases.slice();
+  // By default hide resolved cases; show only when toggle is on
+  if (!_showResolved) data = data.filter(r => r.status !== 'Resolved — Returned' && r.status !== 'Resolved — Resigned');
   if (_absentFilter.region !== 'All') data = data.filter(r => r.region === _absentFilter.region);
   if (_absentFilter.tier !== 'All') data = data.filter(r => r.account_tier === _absentFilter.tier);
   if (_absentFilter.status !== 'All') data = data.filter(r => r.status === _absentFilter.status);
@@ -2399,7 +2403,9 @@ function renderAbsenteeism(el) {
   }
   const rf = ['All','North','South','East','West'].map(v=>fbtn(v,_absentFilter.region===v,'region',v)).join('');
   const tf = ['All','Platinum','Gold','Regular'].map(v=>fbtn(v,_absentFilter.tier===v,'tier',v)).join('');
-  const sf = ['All','Uncontacted','Under Investigation','Warning Letter Issued','Absconding — eSep Initiated'].map(v=>fbtn(v,_absentFilter.status===v,'status',v)).join('');
+  const _resolvedCount = _absentCases.filter(r => r.status === 'Resolved — Returned' || r.status === 'Resolved — Resigned').length;
+  const sf = ['All','Uncontacted','Contacted','Under Investigation','Warning Letter Issued','Absconding — eSep Initiated'].map(v=>fbtn(v,_absentFilter.status===v,'status',v)).join('');
+  const showResolvedBtn = `<button onclick="_absentFilter.showResolved=!(_absentFilter.showResolved||false);renderAbsenteeism()" style="padding:4px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid ${(_absentFilter.showResolved?'var(--green)':'var(--border)')};background:${(_absentFilter.showResolved?'rgba(74,222,128,.12)':'var(--surface3)')};color:${(_absentFilter.showResolved?'var(--green)':'var(--muted)')};margin-left:6px">${_absentFilter.showResolved?'✓ ':''} Resolved (${_resolvedCount})</button>`;
 
   // Rows
   const rows = data.map(c => {
@@ -2407,7 +2413,8 @@ function renderAbsenteeism(el) {
     const tierColor = c.account_tier==='Platinum'?'#a78bfa':c.account_tier==='Gold'?'#f59e0b':'transparent';
     const dayColor = c.consecutive_absent>=30?'#dc2626':c.consecutive_absent>=21?'var(--red)':c.consecutive_absent>=14?'#f97316':'var(--amber)';
     const isAdmin = typeof _sbRole !== 'undefined' && (_sbRole.role === 'admin' || _sbRole.role === 'executive');
-    return `<div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.25);font-size:11px;align-items:center;border-left:2px solid ${tierColor}">
+    const _isResolved = c.status === 'Resolved — Returned' || c.status === 'Resolved — Resigned';
+    return `<div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.25);font-size:11px;align-items:center;border-left:2px solid ${tierColor};opacity:${_isResolved?'0.45':'1'}">
       <div>
         <div style="font-weight:500;color:var(--text)">${esc(c.emp_name.split(' ').slice(0,2).join(' '))}</div>
         <div style="font-size:10px;color:var(--muted2)">${esc(c.emp_code)}</div>
@@ -2444,7 +2451,7 @@ function renderAbsenteeism(el) {
       <span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>
       <span style="font-size:11px;color:var(--muted)">Tier:</span>${tf}
       <span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>
-      <span style="font-size:11px;color:var(--muted)">Status:</span>${sf}
+      <span style="font-size:11px;color:var(--muted)">Status:</span>${sf}${showResolvedBtn}
     </div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">
       <div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px;padding:7px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">
@@ -4634,9 +4641,7 @@ function renderResignation(){
         +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-top:4px">'+a[0]+'</div>'
         +'<div style="font-size:10px;color:var(--muted2);margin-top:3px">'+a[3]+'</div></div>';
     }).join('')+'</div>'
-    +(platGoldNoReq.length?'<div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.3);border-radius:10px;padding:14px;margin-bottom:16px">'
-      +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px">&#9888; '+platGoldNoReq.length+' Platinum/Gold Employees &#x2014; No Hire Request Raised</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px">'+pgCards+'</div></div>':'')
+    
     +'<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'
     +'<span style="font-size:11px;color:var(--muted)">Region:</span>'+rf
     +'<span style="width:1px;height:18px;background:var(--border);margin:0 4px"></span>'
