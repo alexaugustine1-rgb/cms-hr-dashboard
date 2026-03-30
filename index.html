@@ -2540,6 +2540,36 @@ async function updateTask(id, updates) {
   }
 }
 
+async function quickStatusUpdate(id, newStatus) {
+  const t = _actionTasks.find(x => x.id === id);
+  if (!t || t.status === newStatus) return;
+  const oldStatus = t.status;
+  // Optimistic update
+  t.status = newStatus;
+  renderActionCentre();
+  try {
+    await updateTask(id, { status: newStatus, updated_at: new Date().toISOString() });
+    // Log to audit
+    try {
+      await _sb.from('audit_log').insert([{
+        event_type: 'task_status_change',
+        user_id: _sbUser?.id,
+        user_email: _sbUser?.email,
+        user_role: _sbRole?.role,
+        entity_type: 'action_task',
+        entity_id: id,
+        old_value: oldStatus,
+        new_value: newStatus
+      }]);
+    } catch(e) { /* audit failure is non-blocking */ }
+  } catch(e) {
+    // Rollback on error
+    t.status = oldStatus;
+    renderActionCentre();
+    console.error('[quickStatusUpdate]', e.message);
+  }
+}
+
 async function rollOverTasks(weekKey) {
   // Find all Open/In Progress tasks from previous weeks and create carry-forwards
   const toBringForward = _actionTasks.filter(t =>
@@ -2674,7 +2704,26 @@ function openTaskUpdateModal(id) {
         </div>
         <div>
           <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Reassign To</label>
-          <select id="tuAssign" style="width:100%;padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">${[''].concat(TEAM_MEMBERS.map(m=>m.name)).map(n=>`<option value="${esc(n)}" ${n===(t.assigned_to_name||'')?'selected':''}>${esc(n||'— Keep current —')}</option>`).join('')}</select>
+          <select id="tuAssign" style="width:100%;padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">${(()=>{
+          const FN_GROUPS={'ta':'TA','hrbp':'HRBP','hrops':'HR Ops','payroll':'Payroll','ld':'L&D','facilities':'Facilities','admin':'Admin','executive':'Leadership'};
+          const grouped={};
+          TEAM_MEMBERS.forEach(m=>{
+            const g=FN_GROUPS[m.function_type||'']||'Other';
+            if(!grouped[g])grouped[g]=[];
+            grouped[g].push(m);
+          });
+          const GRP_ORDER=['Leadership','HR Ops','HRBP','TA','Payroll','L&D','Facilities','Other'];
+          let opts=`<option value="">— Keep current —</option>`;
+          GRP_ORDER.filter(g=>grouped[g]).forEach(g=>{
+            opts+=`<optgroup label="${g}">`;
+            grouped[g].forEach(m=>{
+              const sel=m.name===(t.assigned_to_name||'')?'selected':'';
+              opts+=`<option value="${esc(m.name)}" ${sel}>${esc(m.name)}</option>`;
+            });
+            opts+=`</optgroup>`;
+          });
+          return opts;
+        })()}</select>
         </div>
       </div>
       <div style="margin-bottom:16px">
@@ -2785,7 +2834,14 @@ function renderActionCentre(el) {
         ${t.severity?`<span style="font-size:10px;${sevStyle}">${t.severity}</span>`:''}
         ${t.due_date?`<span style="font-size:10px;color:${isOD?'var(--red)':'var(--muted2)'}">Due ${t.due_date}</span>`:''}
         ${t.assigned_to_name?`<span style="font-size:10px;color:#a78bfa">→ ${esc(t.assigned_to_name)}</span>`:''}
-        <button onclick="openTaskUpdateModal('${t.id}')" style="margin-left:auto;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">Update</button>
+        <button onclick="openTaskUpdateModal('${t.id}')" style="margin-left:auto;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">✎ Update</button>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:7px;padding-top:7px;border-top:1px solid rgba(42,61,82,.4)">
+        ${['Open','In Progress','Done','Closed'].map(s=>{
+          const isAct=t.status===s;
+          const sc={'Open':'#f87171','In Progress':'#fbbf24','Done':'#4ade80','Closed':'#94a3b8'}[s]||'var(--muted)';
+          return `<button onclick="quickStatusUpdate('${t.id}','${s}')" style="flex:1;padding:3px 0;border:1px solid ${isAct?sc:'var(--border)'};border-radius:5px;background:${isAct?sc+'22':'transparent'};color:${isAct?sc:'var(--muted)'};font-size:9px;font-weight:${isAct?'700':'400'};cursor:pointer">${s}</button>`;
+        }).join('')}
       </div>
     </div>`;
   }
@@ -2857,13 +2913,39 @@ function renderActionCentre(el) {
         </div>`:''}
       <div style="margin-left:auto;font-size:10px;color:var(--muted2)">${open.length} task${open.length!==1?'s':''} shown</div>
     </div>
+    ${((_acF.fa!=='All'||_acF.sev!=='All'||_acF.lead!=='All'||_acF.region!=='All')&&open.length>0)?`
+    <div>
+      ${(()=>{
+        const g={};
+        open.slice().sort((a,b)=>{
+          const so={Critical:0,High:1,Medium:2,Low:3};
+          const sd=(so[a.severity]??3)-(so[b.severity]??3);
+          if(sd!==0)return sd;
+          if(a.due_date&&b.due_date)return a.due_date.localeCompare(b.due_date);
+          if(a.due_date)return -1;
+          if(b.due_date)return 1;
+          return 0;
+        }).forEach(t=>{const fa=t.function_area||'General';if(!g[fa])g[fa]=[];g[fa].push(t);});
+        const fas=[...FA_ORDER.filter(f=>g[f]),...Object.keys(g).filter(f=>!FA_ORDER.includes(f))];
+        return fas.map(fa=>{
+          const col=FA_COLOR[fa]||'#94a3b8';
+          return `<div style="margin-bottom:16px">
+            <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${col};padding:5px 10px;background:${col}18;border-radius:6px;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+              ${fa} <span style="font-size:10px;padding:1px 7px;border-radius:20px;background:${col}25;color:${col}">${g[fa].length}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:8px">${g[fa].map(taskCard).join('')}</div>
+          </div>`;
+        }).join('');
+      })()}
+    </div>`
+    :
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:start">
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px">📋 Planned <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span></div>${renderGrouped(planned,'No open planned actions')}</div>
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f59e0b;margin-bottom:10px;display:flex;align-items:center;gap:6px">📅 Next Week <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b">${nextWeek.length}</span></div>${renderGrouped(nextWeek,'No next week plans')}</div>
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:6px">🤝 HRBP Cases <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${hrbpCases.length}</span></div>${renderGrouped(hrbpCases,'No HRBP cases')}</div>
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:6px">⚠ Risks <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(251,191,36,.12);color:var(--amber)">${risks.length}</span></div>${renderGrouped(risks,'No open risks')}</div>
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f87171;margin-bottom:10px;display:flex;align-items:center;gap:6px">🔺 Escalations <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(248,113,113,.12);color:#f87171">${escalations.length}</span>${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin)</span>':''}</div>${renderGrouped(escalations,'No open escalations')}</div>
-    </div>
+    </div>}
     ${done.length?`<div style="margin-top:20px"><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:10px">✓ Recently Completed</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${done.map(taskCard).join('')}</div></div>`:''}
   </div>`;
 }
