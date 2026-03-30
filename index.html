@@ -616,6 +616,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <button class="sidebar-item" id="snav-fnf" onclick="snavClick('fnf',this)">
         <span class="item-icon">⚖️</span><span class="item-label">FnF Tracker</span>
       </button>
+      <button class="sidebar-item" id="snav-ate" onclick="snavClick('ate',this)">
+        <span class="item-icon">🎓</span><span class="item-label">ATE Tracker</span>
+      </button>
       <button class="sidebar-item" id="snav-ld" onclick="snavClick('ld',this)">
         <span class="item-icon">📚</span><span class="item-label">L&amp;D</span>
       </button>
@@ -720,6 +723,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   
   
   <div id="tab-fnf" class="tab-content"></div>
+  <div id="tab-ate" class="tab-content"></div>
   <div id="tab-admin" class="tab-content"></div>
   <div id="tab-gallery" class="tab-content"></div>
 </div>
@@ -2675,26 +2679,20 @@ function renderActionCentre(el) {
     return;
   }
 
-  const FA_ORDER = ['HR Ops','TA','Payroll','HRBP','L&D','Admin','General'];
-  const FA_COLOR = {'HR Ops':'#60a5fa','TA':'#34d399','Payroll':'#f59e0b','HRBP':'#a78bfa','L&D':'#fb923c','Admin':'#94a3b8','General':'#94a3b8'};
-
   const open = _actionTasks.filter(t => t.status === 'Open' || t.status === 'In Progress');
-  const planned = open.filter(t => t.task_type === 'planned_action' || t.task_type === 'next_week_plan');
+  const planned = open.filter(t => t.task_type === 'planned_action');
   const risks = open.filter(t => t.task_type === 'risk');
   const escalations = open.filter(t => t.task_type === 'escalation');
   const overdue = open.filter(t => t.due_date && new Date(t.due_date) < new Date());
-  const done = _actionTasks.filter(t => t.status === 'Done').slice(0, 6);
+  const done = _actionTasks.filter(t => t.status === 'Done').slice(0, 5);
   const rolledOver = _actionTasks.filter(t => t.rollover_count > 0 && t.status !== 'Done' && t.status !== 'Closed');
-
-  const isAdmin = typeof _sbRole !== 'undefined' && (_sbRole.role === 'admin' || _sbRole.role === 'executive');
 
   function taskCard(t) {
     const st = TASK_STATUS_STYLE[t.status] || { col: 'var(--muted)', bg: 'rgba(100,116,139,.1)' };
     const isOverdue = t.due_date && new Date(t.due_date) < new Date() && t.status !== 'Done' && t.status !== 'Closed';
     const sevStyle = SEVERITY_STYLE[t.severity] || '';
     const rollBadge = t.rollover_count > 0 ? `<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(148,163,184,.15);color:#94a3b8">↩${t.rollover_count}x</span>` : '';
-    const faColor = FA_COLOR[t.function_area] || '#94a3b8';
-    return `<div style="background:var(--surface2);border:1px solid ${isOverdue?'rgba(248,113,113,.4)':'var(--border)'};border-left:3px solid ${faColor};border-radius:8px;padding:12px 14px;margin-bottom:8px${isOverdue?';box-shadow:0 0 0 1px rgba(248,113,113,.2)':''}">
+    return `<div style="background:var(--surface2);border:1px solid ${isOverdue?'rgba(248,113,113,.4)':' var(--border)'};border-radius:8px;padding:12px 14px;margin-bottom:8px${isOverdue?';box-shadow:0 0 0 1px rgba(248,113,113,.2)':''}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
         <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.4">${esc(t.title)}</div>
         <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
@@ -2704,6 +2702,7 @@ function renderActionCentre(el) {
       </div>
       ${t.description?`<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${esc(t.description.substring(0,120))}${t.description.length>120?'…':''}</div>`:''}
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:10px;padding:1px 7px;border-radius:4px;background:rgba(96,165,250,.12);color:#60a5fa">${t.function_area||'—'}</span>
         ${t.severity?`<span style="font-size:10px;${sevStyle}">${t.severity}</span>`:''}
         ${t.due_date?`<span style="font-size:10px;color:${isOverdue?'var(--red)':'var(--muted2)'}">Due ${t.due_date}</span>`:''}
         ${t.assigned_to_name?`<span style="font-size:10px;color:#a78bfa">→ ${esc(t.assigned_to_name)}</span>`:''}
@@ -2713,34 +2712,7 @@ function renderActionCentre(el) {
     </div>`;
   }
 
-  // Group tasks by function_area, sorted by FA_ORDER then severity
-  function groupByFA(tasks) {
-    const sevOrd = {Critical:0,High:1,Medium:2,Low:3};
-    const groups = {};
-    tasks.forEach(t => {
-      const fa = t.function_area || 'General';
-      if (!groups[fa]) groups[fa] = [];
-      groups[fa].push(t);
-    });
-    // Sort tasks within each group by severity
-    Object.keys(groups).forEach(fa => {
-      groups[fa].sort((a,b) => (sevOrd[a.severity]??3) - (sevOrd[b.severity]??3));
-    });
-    return groups;
-  }
-
-  function renderGroupedColumn(tasks, emptyMsg) {
-    if (!tasks.length) return `<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">${emptyMsg}</div>`;
-    const groups = groupByFA(tasks);
-    const orderedFAs = [...FA_ORDER.filter(f => groups[f]), ...Object.keys(groups).filter(f => !FA_ORDER.includes(f))];
-    return orderedFAs.map(fa => {
-      const color = FA_COLOR[fa] || '#94a3b8';
-      return `<div style="margin-bottom:12px">
-        <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${color};padding:4px 8px;background:${color}18;border-radius:4px;margin-bottom:6px;display:inline-block">${esc(fa)} · ${groups[fa].length}</div>
-        ${groups[fa].map(taskCard).join('')}
-      </div>`;
-    }).join('');
-  }
+  const isAdmin = typeof _sbRole !== 'undefined' && (_sbRole.role === 'admin' || _sbRole.role === 'executive');
 
   el.innerHTML = `<div style="padding:24px 32px;max-width:1280px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
@@ -2756,7 +2728,7 @@ function renderActionCentre(el) {
     </div>
 
     <!-- Summary strip -->
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
       ${[['Open Tasks',open.length,'var(--accent)'],['Overdue',overdue.length,'var(--red)'],['Risks Open',risks.length,'var(--amber)'],['Escalations',escalations.length,'#a78bfa'],['Rolled Over',rolledOver.length,'#94a3b8']].map(([l,v,c])=>`
       <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:12px;text-align:center">
         <div style="font-family:Bebas_Neue,sans-serif;font-size:30px;color:${c};line-height:1">${v}</div>
@@ -2764,36 +2736,40 @@ function renderActionCentre(el) {
       </div>`).join('')}
     </div>
 
-    <!-- Three columns grouped by function area -->
+    <!-- Three columns -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start">
 
+      <!-- Planned Actions -->
       <div>
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:8px">
           📋 Planned Actions <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span>
         </div>
-        ${overdue.filter(t=>t.task_type==='planned_action'||t.task_type==='next_week_plan').length>0?
-          `<div style="font-size:10px;color:var(--red);margin-bottom:8px">⚠ ${overdue.filter(t=>t.task_type==='planned_action'||t.task_type==='next_week_plan').length} overdue</div>`:''}
-        ${renderGroupedColumn(planned,'No open planned actions')}
+        ${overdue.filter(t=>t.task_type==='planned_action').length>0?
+          `<div style="font-size:10px;color:var(--red);margin-bottom:6px">⚠ ${overdue.filter(t=>t.task_type==='planned_action').length} overdue</div>`:''}
+        ${planned.length ? planned.map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open planned actions</div>'}
       </div>
 
+      <!-- Risks -->
       <div>
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:8px">
           ⚠ Risks <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(251,191,36,.12);color:var(--amber)">${risks.length}</span>
         </div>
         ${risks.filter(t=>t.severity==='Critical'||t.severity==='High').length>0?
-          `<div style="font-size:10px;color:var(--red);margin-bottom:8px">🔴 ${risks.filter(t=>t.severity==='Critical'||t.severity==='High').length} high/critical</div>`:''}
-        ${renderGroupedColumn(risks,'No open risks')}
+          `<div style="font-size:10px;color:var(--red);margin-bottom:6px">🔴 ${risks.filter(t=>t.severity==='Critical'||t.severity==='High').length} high/critical</div>`:''}
+        ${risks.length ? risks.sort((a,b)=>{const o={Critical:0,High:1,Medium:2,Low:3};return (o[a.severity]??3)-(o[b.severity]??3);}).map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open risks</div>'}
       </div>
 
+      <!-- Escalations (admin-assigned) -->
       <div>
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:8px">
           🔺 Escalations <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${escalations.length}</span>
           ${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin assigns)</span>':''}
         </div>
-        ${renderGroupedColumn(escalations,'No open escalations')}
+        ${escalations.length ? escalations.map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open escalations</div>'}
       </div>
     </div>
 
+    <!-- Recently Done -->
     ${done.length?`<div style="margin-top:20px">
       <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:10px">✓ Recently Completed</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${done.map(taskCard).join('')}</div>
@@ -2920,6 +2896,7 @@ async function handleUploadFile(file) {
   else if(name.includes('with_ctc')||name.includes('ctc_master')||name.includes('ctc')) fileType='ctc';
   else if(name.includes('candidate_transactional')||name.includes('cmsitn')||name.includes('candidate')) fileType='ta';
   else if(name.includes('sper_employee')||name.includes('super_employee')||name.includes('employee_master')||name.includes('emp_master')) fileType='master';
+  else if(name.includes('super')||name.includes('employee master')||name.includes('emp master')) fileType='super_emp';
   else if(name.includes('e-sep')||name.includes('esep')||name.includes('e_sep')||name.includes('separation')) fileType='esep';
   if(!fileType){log('Filename not recognised — trying as Weekly HR Report','info');fileType='weekly';}
   log('Detected: '+fileType.toUpperCase(),'ok');
@@ -2933,10 +2910,11 @@ async function handleUploadFile(file) {
       else if(fileType==='master') await processMaster(wb);
       else if(fileType==='ctc') await processCtc(wb);
       else if(fileType==='ta'||fileType==='candidate') await processCandidate(wb);
+      else if(fileType==='super_emp') await processEmployeeMaster(wb);
       else if(fileType==='esep') await processEsep(wb);
       else if(fileType==='req_tat') await processReqTAT(wb);
       else if(fileType==='fnf') log('✓ FnF file detected. FnF data is embedded in the dashboard. Re-upload via Upload tab when you have a new FnF export.','ok');
-      else{log('File type not recognised. Supported: Weekly HR Report, Employee Master, CTC Master, Candidate Transactional, eSep Transaction Details.','info');}
+      else{log('File type not recognised. Supported: Weekly HR Report, Super Employee Master, CTC Master, Candidate Transactional, eSep Transaction Details.','info');}
     }catch(err){log('Parse error: '+err.message,'err');console.error(err);}
   };
   reader.readAsArrayBuffer(file);
@@ -4087,8 +4065,6 @@ async function submitWeeklyForm(fnType,region){
       }));
     }
     if(_tb.length>0){
-      // Dedup: delete existing tasks this user created for this week before re-inserting
-      await _sb.from('action_tasks').delete().eq('week_key',_wk).eq('created_by',_sbUser.id);
       await _sb.from('action_tasks').insert(_tb);
       _caseEntries=[];if(typeof renderCaseEntries==='function')renderCaseEntries();
       _actionEntries=[];if(typeof renderActionEntries==='function')renderActionEntries();
@@ -6031,6 +6007,7 @@ function snavClick(id, el) {
   if(id==='ta' && typeof _sbUser !== 'undefined' && _sbUser && !_taEscLoaded) { setTimeout(loadTAEscalations, 100); }
   if(id==='ops' && typeof _sbUser !== 'undefined' && _sbUser && !_statRisksLoaded) { setTimeout(loadStatutoryRisks, 100); }
   if(id==='absenteeism' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadAbsentCases, 100); }
+  if(id==='ate' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadATECases, 100); }
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(renderActionCentre, 50); }
 }
 
@@ -6215,6 +6192,366 @@ async function sbSignOut(){await _sb.auth.signOut();document.getElementById('das
   if(session?.user)await sbBoot(session.user);
   ['sbEmail','sbPwd'].forEach(id=>{const el=document.getElementById(id);if(!el)return;el.addEventListener('keydown',e=>{if(e.key==='Enter'){id==='sbEmail'?document.getElementById('sbPwd').focus():sbLogin();}});el.addEventListener('focus',()=>{el.style.borderColor='#60a5fa';});el.addEventListener('blur',()=>{el.style.borderColor='#2a3d52';});});
 })();
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// ATE TRACKER
+// ══════════════════════════════════════════════════════════════════════════
+var _ateCases  = [];
+var _ateLoaded = false;
+
+var ATE_STATUS = ['Active','Conversion Initiated','Converted to FTE','Separated'];
+var ATE_STATUS_STYLE = {
+  'Active':               {col:'#34d399', bg:'rgba(52,211,153,.12)'},
+  'Conversion Initiated': {col:'#f59e0b', bg:'rgba(245,158,11,.12)'},
+  'Converted to FTE':     {col:'#60a5fa', bg:'rgba(96,165,250,.12)'},
+  'Separated':            {col:'#94a3b8', bg:'rgba(148,163,184,.12)'}
+};
+
+async function loadATECases() {
+  const el = document.getElementById('tab-ate');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:10px">⏳</div>Loading ATE data…</div>';
+  try {
+    const { data, error } = await _sb
+      .from('ate_tracker')
+      .select('*')
+      .order('training_end_date', { ascending: true });
+    if (error) throw error;
+    _ateCases  = data || [];
+    _ateLoaded = true;
+    renderATETab(el);
+  } catch(e) {
+    console.error('[ATE]', e);
+    _ateLoaded = true;
+    if (el) el.innerHTML = '<div style="padding:40px;color:var(--red);text-align:center">Error loading ATE data: ' + esc(e.message) + '</div>';
+  }
+}
+
+function ateAlert(row) {
+  if (row.status === 'Converted to FTE' || row.status === 'Separated') return 'closed';
+  if (!row.training_end_date) return 'active';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const end   = new Date(row.training_end_date);
+  const diff  = Math.floor((end - today) / 86400000);
+  if (diff < 0)  return 'overdue';
+  if (diff <= 30) return 'due30';
+  return 'active';
+}
+
+function ateDaysLabel(row) {
+  if (!row.training_end_date) return '—';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff  = Math.floor((new Date(row.training_end_date) - today) / 86400000);
+  if (diff < 0)  return Math.abs(diff) + 'd overdue';
+  if (diff === 0) return 'Ends today';
+  return diff + ' days left';
+}
+
+function renderATETab(el) {
+  if (!el) el = document.getElementById('tab-ate');
+  if (!el) return;
+  if (!_ateLoaded) { loadATECases(); return; }
+
+  var role    = _sbRole ? _sbRole.role : '';
+  var fnType  = _sbRole ? (_sbRole.function_type||'') : '';
+  var region  = _sbRole ? (_sbRole.region||'All')     : 'All';
+  var isAdmin = role === 'admin' || role === 'executive';
+  var isPanIndia = isAdmin || region === 'Pan India' || fnType === 'hrops' || fnType === 'payroll';
+
+  // Filter by region for HRBP
+  var rows = _ateCases.filter(function(r) {
+    if (isPanIndia) return true;
+    return r.region === region;
+  });
+
+  // Filter state (driven by filter bar)
+  var _ateFilterStatus = el.getAttribute('data-filter-status') || 'All';
+  var _ateFilterAlert  = el.getAttribute('data-filter-alert')  || 'All';
+  var _ateFilterRegion = el.getAttribute('data-filter-region') || (isPanIndia ? 'All' : region);
+
+  if (_ateFilterRegion !== 'All') rows = rows.filter(function(r){ return r.region === _ateFilterRegion; });
+  if (_ateFilterStatus !== 'All') rows = rows.filter(function(r){ return r.status === _ateFilterStatus; });
+  if (_ateFilterAlert  === 'Overdue')  rows = rows.filter(function(r){ return ateAlert(r) === 'overdue'; });
+  if (_ateFilterAlert  === 'Due ≤30d') rows = rows.filter(function(r){ return ateAlert(r) === 'due30'; });
+  if (_ateFilterAlert  === 'Active')   rows = rows.filter(function(r){ return ateAlert(r) === 'active'; });
+  if (_ateFilterAlert  === 'Closed')   rows = rows.filter(function(r){ return ateAlert(r) === 'closed'; });
+
+  // Summary counts (from full region-filtered set before status/alert filter)
+  var base = _ateCases.filter(function(r){ return isPanIndia ? true : r.region === region; });
+  var cntTotal    = base.length;
+  var cntOverdue  = base.filter(function(r){ return ateAlert(r)==='overdue'; }).length;
+  var cntDue30    = base.filter(function(r){ return ateAlert(r)==='due30'; }).length;
+  var cntInitiated= base.filter(function(r){ return r.status==='Conversion Initiated'; }).length;
+  var cntConverted= base.filter(function(r){
+    if (r.status !== 'Converted to FTE' || !r.updated_at) return false;
+    var d = new Date(r.updated_at);
+    var n = new Date();
+    return d.getFullYear()===n.getFullYear() && d.getMonth()===n.getMonth();
+  }).length;
+
+  function alertBadge(a) {
+    var map = {
+      overdue: '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(248,113,113,.15);color:#f87171;font-weight:600">🔴 Overdue</span>',
+      due30:   '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(245,158,11,.15);color:#f59e0b;font-weight:600">🟡 Due ≤30d</span>',
+      active:  '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(52,211,153,.1);color:#34d399;font-weight:600">🟢 Active</span>',
+      closed:  '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(148,163,184,.1);color:#94a3b8">⚫ Closed</span>',
+    };
+    return map[a] || '';
+  }
+
+  function tierBadge(t) {
+    var c = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Bronze:'#b45309',Regular:'#64748b'}[t] || '#64748b';
+    return t ? '<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:'+c+'22;color:'+c+';font-weight:600;margin-left:4px">'+esc(t)+'</span>' : '';
+  }
+
+  function subsidyBadge(row) {
+    if (ateAlert(row) !== 'overdue') return '';
+    return '<span style="font-size:9px;padding:1px 7px;border-radius:4px;background:rgba(248,113,113,.18);color:#f87171;font-weight:700;margin-left:4px">⚠ Subsidy Risk</span>';
+  }
+
+  var tableRows = rows.map(function(r, i) {
+    var alert = ateAlert(r);
+    var st    = ATE_STATUS_STYLE[r.status] || ATE_STATUS_STYLE['Active'];
+    var daysLbl = ateDaysLabel(r);
+    var rowBg = alert==='overdue' ? 'rgba(248,113,113,.05)' : alert==='due30' ? 'rgba(245,158,11,.04)' : 'transparent';
+    var uniqueId = 'ate_' + (r.emp_code||i).replace(/[^a-z0-9]/gi,'_');
+
+    var statusOpts = ATE_STATUS.map(function(s){
+      return '<option value="'+s+'"'+(r.status===s?' selected':'')+'>'+s+'</option>';
+    }).join('');
+
+    return '<tr style="border-bottom:1px solid var(--border);background:'+rowBg+'" id="aterow_'+uniqueId+'">'
+      +'<td style="padding:8px 10px;font-size:12px;font-weight:600;color:var(--text);min-width:120px">'+esc(r.name||'—')+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+esc(r.emp_code||'—')+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:var(--text);min-width:110px">'+esc(r.account||'—')+tierBadge(r.account_tier)+subsidyBadge(r)+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:var(--muted)">'+esc(r.region||'—')+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+((r.doj||'—').substring(0,10))+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+((r.training_end_date||'—').substring(0,10))+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;font-weight:600;color:'+(alert==='overdue'?'var(--red)':alert==='due30'?'var(--amber)':'var(--muted)')+'">'+esc(daysLbl)+'</td>'
+      +'<td style="padding:8px 10px">'+alertBadge(alert)+'</td>'
+      +'<td style="padding:8px 10px;min-width:160px">'
+        +'<select id="atesel_'+uniqueId+'" style="width:100%;padding:4px 7px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
+        +statusOpts+'</select>'
+      +'</td>'
+      +'<td style="padding:8px 10px;min-width:180px">'
+        +'<input id="atenote_'+uniqueId+'" type="text" value="'+esc(r.action_notes||'')+'" placeholder="Add notes…" '
+        +'style="width:100%;padding:4px 7px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
+      +'</td>'
+      +'<td style="padding:8px 10px;font-size:10px;color:var(--muted2);white-space:nowrap">'
+        +(r.updated_by ? esc(r.updated_by.split('.')[0]) + '<br>' : '')
+        +(r.action_date ? esc(r.action_date.substring(0,10)) : '—')
+      +'</td>'
+      +'<td style="padding:8px 10px">'
+        +'<button onclick="saveATEUpdate(\''+r.id+'\',\''+uniqueId+'\')" '
+        +'style="padding:4px 12px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap">Save</button>'
+      +'</td>'
+      +'</tr>';
+  }).join('');
+
+  var emptyRow = rows.length === 0
+    ? '<tr><td colspan="12" style="padding:40px;text-align:center;color:var(--muted)">No records matching current filters</td></tr>'
+    : '';
+
+  var regionOpts = ['All','North','South','East','West'].map(function(r){
+    return '<option value="'+r+'"'+(_ateFilterRegion===r?' selected':'')+'>'+r+'</option>';
+  }).join('');
+  var statusOpts2 = ['All'].concat(ATE_STATUS).map(function(s){
+    return '<option value="'+s+'"'+(_ateFilterStatus===s?' selected':'')+'>'+s+'</option>';
+  }).join('');
+  var alertOpts = ['All','Overdue','Due ≤30d','Active','Closed'].map(function(a){
+    return '<option value="'+a+'"'+(_ateFilterAlert===a?' selected':'')+'>'+a+'</option>';
+  }).join('');
+
+  var filterBar = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">'
+    +(isPanIndia ? '<select onchange="ateFilter(this,\'region\')" style="padding:5px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+regionOpts+'</select>' : '')
+    +'<select onchange="ateFilter(this,\'status\')" style="padding:5px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+statusOpts2+'</select>'
+    +'<select onchange="ateFilter(this,\'alert\')" style="padding:5px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+alertOpts+'</select>'
+    +'<span style="font-size:11px;color:var(--muted)">'+rows.length+' records shown</span>'
+    +'</div>';
+
+  el.innerHTML = '<div style="padding:24px 32px;max-width:1280px">'
+    // Header
+    +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">'
+    +'<div>'
+    +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">HR Operations</div>'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">ATE Tracker</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Apprentice Training Employees — Training period: 12 months from DOJ. Govt subsidy: ₹4,500/month.</div>'
+    +'</div>'
+    +'</div>'
+    // Summary strip
+    +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">'
+    +[['Total ATEs',cntTotal,'var(--accent)'],['Overdue',cntOverdue,'var(--red)'],['Due ≤30 Days',cntDue30,'var(--amber)'],['Conversion Initiated',cntInitiated,'#a78bfa'],['Converted This Month',cntConverted,'var(--green)']].map(function(arr){
+      return '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+arr[2]+';border-radius:8px;padding:12px;text-align:center">'
+        +'<div style="font-family:Bebas_Neue,sans-serif;font-size:30px;color:'+arr[2]+';line-height:1">'+arr[1]+'</div>'
+        +'<div style="font-family:DM Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:3px">'+arr[0]+'</div>'
+        +'</div>';
+    }).join('')
+    +'</div>'
+    // Filters
+    +filterBar
+    // Table
+    +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+    +'<div style="overflow-x:auto">'
+    +'<table style="width:100%;border-collapse:collapse;min-width:900px">'
+    +'<thead><tr style="border-bottom:2px solid var(--border);background:var(--surface3)">'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Name</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Emp Code</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Account</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Region</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">DOJ</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Trg End</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Days Left</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Alert</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Status</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Action Notes</th>'
+    +'<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Last Updated</th>'
+    +'<th style="padding:8px 10px"></th>'
+    +'</tr></thead>'
+    +'<tbody>'+tableRows+emptyRow+'</tbody>'
+    +'</table>'
+    +'</div></div>'
+    +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Rows sorted by Training End Date (earliest first). Status updates save directly to database.</div>'
+    +'</div>';
+}
+
+function ateFilter(sel, type) {
+  var el = document.getElementById('tab-ate');
+  if (!el) return;
+  if (type === 'region') el.setAttribute('data-filter-region', sel.value);
+  if (type === 'status') el.setAttribute('data-filter-status', sel.value);
+  if (type === 'alert')  el.setAttribute('data-filter-alert',  sel.value);
+  renderATETab(el);
+}
+
+async function saveATEUpdate(id, uniqueId) {
+  var selEl  = document.getElementById('atesel_'  + uniqueId);
+  var noteEl = document.getElementById('atenote_' + uniqueId);
+  if (!selEl || !noteEl) return;
+  var newStatus = selEl.value;
+  var newNotes  = noteEl.value.trim();
+  var displayName = (_sbRole && _sbRole.display_name) || (_sbUser && _sbUser.email) || 'Unknown';
+
+  var btn = selEl.closest('tr') ? selEl.closest('tr').querySelector('button') : null;
+  if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
+
+  var { error } = await _sb.from('ate_tracker').update({
+    status:       newStatus,
+    action_notes: newNotes,
+    action_date:  new Date().toISOString().substring(0,10),
+    updated_by:   displayName,
+    updated_by_id: _sbUser ? _sbUser.id : null,
+    updated_at:   new Date().toISOString()
+  }).eq('id', id);
+
+  if (error) {
+    if (btn) { btn.textContent = 'Error'; btn.style.background = 'var(--red)'; }
+    console.error('[ATE save]', error);
+    return;
+  }
+  // Update local cache
+  var idx = _ateCases.findIndex(function(r){ return r.id === id; });
+  if (idx >= 0) {
+    _ateCases[idx].status       = newStatus;
+    _ateCases[idx].action_notes = newNotes;
+    _ateCases[idx].action_date  = new Date().toISOString().substring(0,10);
+    _ateCases[idx].updated_by   = displayName;
+  }
+  if (btn) { btn.textContent = 'Saved ✓'; btn.style.background = 'var(--green)'; }
+  setTimeout(function(){ renderATETab(document.getElementById('tab-ate')); }, 800);
+}
+
+// ── ATE Upload Parser (called from processEmployeeMaster) ─────────────────
+async function processEmployeeMaster(wb) {
+  var logEl = document.getElementById('uploadLog');
+  function log(msg, type) {
+    if (!logEl) return;
+    var c = type==='ok'?'var(--green)':type==='err'?'var(--red)':'var(--muted)';
+    logEl.innerHTML += '<div style="color:'+c+';font-size:12px;margin-bottom:3px">' + esc(String(msg)) + '</div>';
+  }
+  log('Reading Super Employee Master…');
+  try {
+    var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
+    log('Rows read: ' + rows.length);
+
+    var ateRows = rows.filter(function(r){
+      var g = String(r['Grade']||r['grade']||'').trim().toUpperCase();
+      return g === 'ATE';
+    });
+    log('ATE rows found: ' + ateRows.length);
+    if (!ateRows.length) { log('No ATE rows found — check Grade column', 'err'); return; }
+
+    function parseDate(v) {
+      if (!v) return null;
+      if (v instanceof Date) return v.toISOString().substring(0,10);
+      var s = String(v).trim();
+      var m = s.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{2,4})$/);
+      if (m) {
+        var yr = m[3].length===2 ? '20'+m[3] : m[3];
+        return yr+'-'+m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0');
+      }
+      try { return new Date(s).toISOString().substring(0,10); } catch(e){ return null; }
+    }
+
+    function addDays(dateStr, days) {
+      if (!dateStr) return null;
+      var d = new Date(dateStr);
+      d.setDate(d.getDate() + days);
+      return d.toISOString().substring(0,10);
+    }
+
+    function getTier(custName) {
+      if (!custName) return 'Regular';
+      var cu = custName.toUpperCase().trim();
+      if (typeof CUSTOMER_TIER_MAP !== 'undefined') {
+        if (CUSTOMER_TIER_MAP[cu]) return CUSTOMER_TIER_MAP[cu];
+        var keys = Object.keys(CUSTOMER_TIER_MAP);
+        for (var i=0; i<keys.length; i++) {
+          var k = keys[i];
+          if (k.length > 5 && (cu.indexOf(k) >= 0 || k.indexOf(cu) >= 0)) return CUSTOMER_TIER_MAP[k];
+        }
+      }
+      return 'Regular';
+    }
+
+    var upsertRows = ateRows.map(function(r) {
+      var doj  = parseDate(r['DOJ'] || r['Date_Of_Joining'] || r['Date of Joining'] || '');
+      var cust = String(r['CustomerName'] || r['Customer Name'] || r['CustomerNameRoleandLocation'] || '').split('-')[0].trim();
+      var tier = getTier(cust);
+      return {
+        emp_code:          String(r['Employee Code']||r['EmployeeCode']||'').trim(),
+        name:              String(r['Employee Name']||r['EmployeeName']||'').trim(),
+        account:           cust,
+        account_tier:      tier,
+        region:            String(r['Region']||'').trim(),
+        doj:               doj,
+        training_end_date: addDays(doj, 365),
+      };
+    }).filter(function(r){ return r.emp_code && r.name; });
+
+    log('Valid ATE records to upsert: ' + upsertRows.length);
+
+    // Upsert in batches of 50 — preserve status + action_notes
+    var BATCH = 50;
+    var errors = 0;
+    for (var b=0; b<upsertRows.length; b+=BATCH) {
+      var batch = upsertRows.slice(b, b+BATCH);
+      var { error } = await _sb.from('ate_tracker')
+        .upsert(batch, { onConflict: 'emp_code', ignoreDuplicates: false });
+      if (error) { log('Batch error: ' + error.message, 'err'); errors++; }
+    }
+    if (!errors) {
+      log('ATE Tracker updated: ' + upsertRows.length + ' records ✓', 'ok');
+      _ateLoaded = false; // force reload next time tab is opened
+    } else {
+      log('Completed with ' + errors + ' batch error(s)', 'err');
+    }
+  } catch(e) {
+    log('Error processing file: ' + e.message, 'err');
+    console.error('[ATE upload]', e);
+  }
+}
+// ══════════════════════════════════════════════════════════════════════════
 
 </script>
 
