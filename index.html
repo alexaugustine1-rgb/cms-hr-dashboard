@@ -4,6 +4,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2738,7 +2739,15 @@ function renderActionCentre(el) {
     return true;
   });
   // Build lead list scoped to visible tasks
-  const _visibleTasks=_actionTasks.filter(t=>(t.status==='Open'||t.status==='In Progress')&&(!_visFns||_visFns.includes(t.function_area||'General')));
+  const _visibleTasks=_actionTasks.filter(t=>{
+    if(t.status!=='Open'&&t.status!=='In Progress')return false;
+    if(_visFns&&!_visFns.includes(t.function_area||'General'))return false;
+    if(_isScoped&&myRegion&&myRegion!=='Pan India'&&t.function_area==='HRBP'){
+      const tr=(t.region||'').toLowerCase();
+      if(tr&&tr!==myRegion.toLowerCase())return false;
+    }
+    return true;
+  });
   const _allLeads=[...new Set(_visibleTasks.map(t=>t.assigned_to_name||'').filter(Boolean))].sort();
   const _allRegions=[...new Set(_visibleTasks.map(t=>t.region||'').filter(Boolean))].sort();
   const planned=open.filter(t=>t.task_type==='planned_action');
@@ -2746,7 +2755,15 @@ function renderActionCentre(el) {
   const hrbpCases=open.filter(t=>['er_case','absenteeism','retention'].includes(t.task_type));
   const risks=open.filter(t=>['risk','payroll_error','statutory'].includes(t.task_type));
   const escalations=open.filter(t=>t.task_type==='escalation');
-  const allOpen=_actionTasks.filter(t=>t.status==='Open'||t.status==='In Progress');
+  const allOpen=_actionTasks.filter(t=>{
+    if(t.status!=='Open'&&t.status!=='In Progress')return false;
+    if(_isScoped&&!_visFns.includes(t.function_area||'General'))return false;
+    if(_isScoped&&myRegion&&myRegion!=='Pan India'&&t.function_area==='HRBP'){
+      const tr=(t.region||'').toLowerCase();
+      if(tr&&tr!==myRegion.toLowerCase())return false;
+    }
+    return true;
+  });
   const overdue=allOpen.filter(t=>t.due_date&&new Date(t.due_date)<new Date());
   const rolledOver=_actionTasks.filter(t=>t.rollover_count>0&&t.status!=='Done'&&t.status!=='Closed');
   const done=_actionTasks.filter(t=>t.status==='Done').slice(0,6);
