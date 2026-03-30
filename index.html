@@ -5505,7 +5505,7 @@ async function loadHRBPVisitAlerts() {
   try {
     const {data: visits, error} = await _sb
       .from('hrbp_site_visits')
-      .select('account_name, visit_date, hrbp_name, tier')
+      .select('account_name, visit_date, submitter_name, account_tier, region')
       .order('visit_date', {ascending: false});
     
     const el = document.getElementById('platGoldPanel');
@@ -5516,7 +5516,7 @@ async function loadHRBPVisitAlerts() {
     (visits || []).forEach(function(v) {
       const acc = (v.account_name || '').toUpperCase();
       if (!lastVisit[acc] || v.visit_date > lastVisit[acc].date) {
-        lastVisit[acc] = {date: v.visit_date, hrbp: v.hrbp_name};
+        lastVisit[acc] = {date: v.visit_date, hrbp: v.submitter_name};
       }
     });
     
