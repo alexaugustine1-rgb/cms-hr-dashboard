@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2848,7 +2849,8 @@ function hcToggle(id){var f=document.getElementById(id+'_full');var b=document.g
 function init() {
   const wKeys = WEEK_ORDER.filter(k => WEEKS_DATA[k]);
   if(!wKeys.length){ const first=document.getElementById('tab-overview'); if(first){first.classList.add('active');first.innerHTML='<div style="padding:60px 36px;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">📭</div><div style="font-size:15px;font-weight:500;margin-bottom:8px">No data yet</div><div style="font-size:13px">Run the SQL insert script or upload a weekly report</div></div>';} return; }
-  const latestKey = wKeys[wKeys.length - 1];
+  // Pick the most recent week that has actual submissions — skip empty placeholder weeks
+  const latestKey = [...wKeys].reverse().find(k => (WEEKS_DATA[k].total_respondents || 0) > 0) || wKeys[wKeys.length - 1];
   currentWeek = latestKey;
   const container = document.getElementById('weekBtns');
   if (container) {
@@ -6283,6 +6285,26 @@ async function sbBoot(user){
     hr.appendChild(rb);
   }
   init();
+  // If init() landed on an empty placeholder week (e.g. W16 with no submissions yet),
+  // snap currentWeek back to the last week that has real data
+  if (WEEKS_DATA[currentWeek] && !(WEEKS_DATA[currentWeek].total_respondents > 0)) {
+    const realWeek = WEEK_ORDER.slice().reverse().find(k => (WEEKS_DATA[k]?.total_respondents || 0) > 0);
+    if (realWeek && realWeek !== currentWeek) {
+      currentWeek = realWeek;
+      // Update active state on week buttons
+      document.querySelectorAll('.week-btn').forEach(function(b) { b.classList.remove('active'); });
+      var _activeBtn = document.getElementById('wbtn-' + realWeek);
+      if (!_activeBtn) {
+        // Button created by init() uses textContent not id — find by content match
+        document.querySelectorAll('.week-btn').forEach(function(b) {
+          if ((b.textContent || '').indexOf(realWeek) >= 0) b.classList.add('active');
+        });
+      } else {
+        _activeBtn.classList.add('active');
+      }
+      render();
+    }
+  }
   // Re-apply region filters AFTER weeks data loaded and init() ran
   // Skip for HR Ops / Payroll — they have Pan India access
   var _fnTypeSb = _sbRole ? (_sbRole.function_type||'') : '';
