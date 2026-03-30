@@ -3,6 +3,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2475,7 +2476,7 @@ var _pendingTasks = []; // open tasks from prior weeks shown at top of form
 var _taskFilter = { type: 'all', status: 'open' };
 
 const TASK_TYPES = { planned_action: '📋 Planned', risk: '⚠ Risk', escalation: '🔺 Escalation' };
-const FUNCTION_AREAS = ['HRBP','TA','HR Ops','Payroll','Admin','Facilities','L&D','Other'];
+const FUNCTION_AREAS = ['HRBP','TA','HR Ops','Payroll','Facilities','L&D','Other'];
 const TASK_STATUSES = ['Open','In Progress','Done','Rolled Over','Closed','Cancelled'];
 
 const TASK_STATUS_STYLE = {
@@ -2699,17 +2700,47 @@ function renderActionCentre(el) {
     }
     return;
   }
-  const FA_ORDER=['HR Ops','TA','Payroll','HRBP','L&D','Admin','General'];
-  const FA_COLOR={'HR Ops':'#60a5fa','TA':'#34d399','Payroll':'#f59e0b','HRBP':'#a78bfa','L&D':'#fb923c','Admin':'#94a3b8','General':'#94a3b8'};
+  const FA_ORDER=['HR Ops','TA','Payroll','HRBP','L&D','Facilities','General'];
+  const FA_COLOR={'HR Ops':'#60a5fa','TA':'#34d399','Payroll':'#f59e0b','HRBP':'#a78bfa','L&D':'#fb923c','Facilities':'#94a3b8','General':'#94a3b8'};
   const SEV_ORD={Critical:0,High:1,Medium:2,Low:3};
-  const isAdmin=typeof _sbRole!=='undefined'&&(_sbRole.role==='admin'||_sbRole.role==='executive');
+  const role=typeof _sbRole!=='undefined'&&_sbRole?(_sbRole.role||'viewer'):'';
+  const isAdmin=role==='admin';
+  const isCXO=role==='executive';
   const myName=(typeof _sbRole!=='undefined'&&_sbRole&&(_sbRole.display_name||''))||'';
-  const filterMine=el.getAttribute('data-filter-mine')==='1'&&!isAdmin;
+  const myRegion=(typeof _sbRole!=='undefined'&&_sbRole&&(_sbRole.region||''))||'';
+  // visible_functions from DB: null = unrestricted, array = scoped
+  const _visFns=(typeof _sbRole!=='undefined'&&_sbRole&&Array.isArray(_sbRole.visible_functions))?_sbRole.visible_functions:null;
+  const _isScoped=!!_visFns; // true for everyone except admin and executive
+  // Persist filter state on the element between re-renders
+  if(!el._acFilter) el._acFilter={fa:'All',sev:'All',lead:'All',region:'All'};
+  const _acF=el._acFilter;
+  // Admin: can toggle 'filtered' mode (scoped to a function for review sessions)
+  const adminFiltered=isAdmin&&el.getAttribute('data-admin-filter')==='1';
   const open=_actionTasks.filter(t=>{
     if(t.status!=='Open'&&t.status!=='In Progress')return false;
-    if(filterMine){const an=(t.assigned_to_name||'').toLowerCase();const cn=(t.created_by_name||'').toLowerCase();const me=myName.toLowerCase().split('.')[0];return an.indexOf(me)>=0||cn.indexOf(me)>=0;}
+    // Scope by visible_functions (DB-driven) — applies to all non-admin/non-CXO
+    if(_isScoped&&!_visFns.includes(t.function_area||'General'))return false;
+    // HRBPs: further scope to own region
+    if(_isScoped&&myRegion&&myRegion!=='Pan India'&&(t.function_area==='HRBP')){
+      const tr=(t.region||'').toLowerCase();
+      if(tr&&tr!==myRegion.toLowerCase())return false;
+    }
+    // Admin in review mode: scope to selected function via UI filter
+    if(adminFiltered&&_acF.fa!=='All'&&(t.function_area||'General')!==_acF.fa)return false;
+    // UI filters (available to admin/CXO only — others already scoped by DB)
+    if((isAdmin||isCXO)&&_acF.fa!=='All'&&(t.function_area||'General')!==_acF.fa)return false;
+    if((isAdmin||isCXO)&&_acF.sev!=='All'&&(t.severity||'')!==_acF.sev)return false;
+    if((isAdmin||isCXO)&&_acF.lead!=='All'){const an=(t.assigned_to_name||'').toLowerCase();if(an.indexOf(_acF.lead.toLowerCase())<0)return false;}
+    // Scoped users: lead and region filters within their allowed area
+    if(_isScoped&&_acF.lead!=='All'){const an=(t.assigned_to_name||'').toLowerCase();if(an.indexOf(_acF.lead.toLowerCase())<0)return false;}
+    if(_isScoped&&_acF.region!=='All'){const tr=(t.region||'').toLowerCase();if(tr&&tr!==_acF.region.toLowerCase())return false;}
+    if(_isScoped&&_acF.sev!=='All'&&(t.severity||'')!==_acF.sev)return false;
     return true;
   });
+  // Build lead list scoped to visible tasks
+  const _visibleTasks=_actionTasks.filter(t=>(t.status==='Open'||t.status==='In Progress')&&(!_visFns||_visFns.includes(t.function_area||'General')));
+  const _allLeads=[...new Set(_visibleTasks.map(t=>t.assigned_to_name||'').filter(Boolean))].sort();
+  const _allRegions=[...new Set(_visibleTasks.map(t=>t.region||'').filter(Boolean))].sort();
   const planned=open.filter(t=>t.task_type==='planned_action');
   const nextWeek=open.filter(t=>t.task_type==='next_week_plan');
   const hrbpCases=open.filter(t=>['er_case','absenteeism','retention'].includes(t.task_type));
@@ -2758,7 +2789,11 @@ function renderActionCentre(el) {
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Team Intelligence</div><div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">Action Centre</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        ${!isAdmin?`<div style="display:flex;background:var(--surface3);border:1px solid var(--border);border-radius:8px;overflow:hidden"><button onclick="document.getElementById('tab-actioncentre').setAttribute('data-filter-mine','1');renderActionCentre()" style="padding:6px 14px;border:none;background:${filterMine?'var(--accent)':'transparent'};color:${filterMine?'#fff':'var(--muted)'};font-size:11px;cursor:pointer;font-weight:600">My Tasks</button><button onclick="document.getElementById('tab-actioncentre').setAttribute('data-filter-mine','0');renderActionCentre()" style="padding:6px 14px;border:none;background:${!filterMine?'var(--accent)':'transparent'};color:${!filterMine?'#fff':'var(--muted)'};font-size:11px;cursor:pointer;font-weight:600">All Tasks</button></div>`:''}
+        ${isAdmin?`<div style="display:flex;background:var(--surface3);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <button onclick="document.getElementById('tab-actioncentre').setAttribute('data-admin-filter','0');document.getElementById('tab-actioncentre')._acFilter={fa:'All',sev:'All',lead:'All',region:'All'};renderActionCentre()" style="padding:6px 14px;border:none;background:${!adminFiltered?'var(--accent)':'transparent'};color:${!adminFiltered?'#fff':'var(--muted)'};font-size:11px;cursor:pointer;font-weight:600">All Tasks</button>
+          <button onclick="document.getElementById('tab-actioncentre').setAttribute('data-admin-filter','1');renderActionCentre()" style="padding:6px 14px;border:none;background:${adminFiltered?'#a78bfa':'transparent'};color:${adminFiltered?'#fff':'var(--muted)'};font-size:11px;cursor:pointer;font-weight:600">Review Mode</button>
+        </div>`:''}
+        ${_isScoped?`<div style="padding:4px 10px;border-radius:6px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);font-size:10px;color:var(--accent);font-weight:600">${_visFns.join(' · ')}</div>`:''}
         <button onclick="openNewTaskModal('planned_action')" style="padding:7px 14px;border:1px solid var(--accent);border-radius:8px;background:none;color:var(--accent);font-size:11px;cursor:pointer;font-weight:600">+ Planned Action</button>
         <button onclick="openNewTaskModal('risk')" style="padding:7px 14px;border:1px solid var(--amber);border-radius:8px;background:none;color:var(--amber);font-size:11px;cursor:pointer;font-weight:600">+ Risk</button>
         ${isAdmin?`<button onclick="openNewTaskModal('escalation')" style="padding:7px 14px;border:1px solid #a78bfa;border-radius:8px;background:none;color:#a78bfa;font-size:11px;cursor:pointer;font-weight:600">+ Escalation</button>`:''}
@@ -2766,6 +2801,44 @@ function renderActionCentre(el) {
     </div>
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px">
       ${[['Open',allOpen.length,'var(--accent)'],['Overdue',overdue.length,'var(--red)'],['Risks',risks.length,'var(--amber)'],['Escalations',escalations.length,'#a78bfa'],['Rolled Over',rolledOver.length,'#94a3b8']].map(([l,v,c])=>`<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:10px;text-align:center"><div style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:${c};line-height:1">${v}</div><div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted);margin-top:2px">${l}</div></div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+      <span style="font-family:DM_Mono,monospace;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);margin-right:4px">Filter</span>
+      ${(isAdmin||isCXO)?`<div style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:10px;color:var(--muted)">Function</span>
+        <select onchange="document.getElementById('tab-actioncentre')._acFilter.fa=this.value;renderActionCentre()" style="background:var(--surface3);border:1px solid ${_acF.fa!=='All'?'var(--accent)':'var(--border)'};border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px;cursor:pointer">
+          ${['All',...FA_ORDER.filter(f=>f!=='General')].map(f=>`<option value="${f}" ${_acF.fa===f?'selected':''} style="background:var(--surface2)">${f}</option>`).join('')}
+        </select>
+      </div><div style="width:1px;height:18px;background:var(--border)"></div>`:''}
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:10px;color:var(--muted)">Criticality</span>
+        <select onchange="document.getElementById('tab-actioncentre')._acFilter.sev=this.value;renderActionCentre()" style="background:var(--surface3);border:1px solid ${_acF.sev!=='All'?'var(--red)':'var(--border)'};border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px;cursor:pointer">
+          ${['All','Critical','High','Medium','Low'].map(s=>`<option value="${s}" ${_acF.sev===s?'selected':''} style="background:var(--surface2)">${s}</option>`).join('')}
+        </select>
+      </div>
+      <div style="width:1px;height:18px;background:var(--border)"></div>
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:10px;color:var(--muted)">Lead</span>
+        <select onchange="document.getElementById('tab-actioncentre')._acFilter.lead=this.value;renderActionCentre()" style="background:var(--surface3);border:1px solid ${_acF.lead!=='All'?'#a78bfa':'var(--border)'};border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px;cursor:pointer">
+          ${['All',..._allLeads].map(l=>`<option value="${l}" ${_acF.lead===l?'selected':''} style="background:var(--surface2)">${l}</option>`).join('')}
+        </select>
+      </div>
+      ${_allRegions.length>1?`<div style="width:1px;height:18px;background:var(--border)"></div>
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="font-size:10px;color:var(--muted)">Region</span>
+        <select onchange="document.getElementById('tab-actioncentre')._acFilter.region=this.value;renderActionCentre()" style="background:var(--surface3);border:1px solid ${_acF.region!=='All'?'#2dd4bf':'var(--border)'};border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px;cursor:pointer">
+          ${['All',..._allRegions].map(r=>`<option value="${r}" ${_acF.region===r?'selected':''} style="background:var(--surface2)">${r}</option>`).join('')}
+        </select>
+      </div>`:''}
+      ${(_acF.fa!=='All'||_acF.sev!=='All'||_acF.lead!=='All'||_acF.region!=='All')?`<div style="width:1px;height:18px;background:var(--border)"></div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+          ${_acF.fa!=='All'?`<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(96,165,250,.15);color:var(--accent)">${_acF.fa} ×</span>`:''}
+          ${_acF.sev!=='All'?`<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(248,113,113,.15);color:var(--red)">${_acF.sev} ×</span>`:''}
+          ${_acF.lead!=='All'?`<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(167,139,250,.15);color:#a78bfa">${_acF.lead} ×</span>`:''}
+          ${_acF.region!=='All'?`<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(45,212,191,.15);color:#2dd4bf">${_acF.region} ×</span>`:''}
+          <button onclick="document.getElementById('tab-actioncentre')._acFilter={fa:'All',sev:'All',lead:'All',region:'All'};renderActionCentre()" style="padding:2px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted);font-size:10px;cursor:pointer">Clear</button>
+        </div>`:''}
+      <div style="margin-left:auto;font-size:10px;color:var(--muted2)">${open.length} task${open.length!==1?'s':''} shown</div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:start">
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px">📋 Planned <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span></div>${renderGrouped(planned,'No open planned actions')}</div>
@@ -3755,7 +3828,7 @@ function renderActionEntries(){
 }
 
 function buildActionsSection(){
-  var groups=['CXO','Admin','HR Ops','Payroll','HRBP','TA','L&D'];
+  var groups=['CXO','Facilities','HR Ops','Payroll','HRBP','TA','L&D'];
   var selfId=(_sbUser&&_sbUser.id)||'';
   var opts='<option value="">— Self (me) —</option>';
   groups.forEach(function(g){
@@ -4025,7 +4098,7 @@ async function submitWeeklyForm(fnType,region){
     });
     // ── Actions & Escalations entries ──────────────────────────────
     (_actionEntries||[]).forEach(function(ae){
-      var fnArea=fnType==='ta'?'TA':fnType==='payroll'?'Payroll':fnType==='hrops'?'HR Ops':fnType==='ld'?'L&D':fnType==='admin'?'Admin':'HRBP';
+      var fnArea=fnType==='ta'?'TA':fnType==='payroll'?'Payroll':fnType==='hrops'?'HR Ops':fnType==='ld'?'L&D':fnType==='admin'?'Facilities':fnType==='facilities'?'Facilities':'HRBP';
       var task=Object.assign({},_base,{
         task_type:ae.type||'next_week_plan',
         function_area:fnArea,
@@ -4952,8 +5025,7 @@ var _visitEntries=[];
 function filterVisitDropdown(val){
   var dd=document.getElementById('visitDropdown');
   if(!dd)return;
-  var userRegion=(_sbRole&&_sbRole.region)||'';
-  var pool=getCustsByRegion(userRegion);
+  var pool=getCustsByRegion('All');
   var vl=(val||'').toLowerCase();
   var matches=vl.length>0?pool.filter(function(c){return c.n.toLowerCase().indexOf(vl)>=0;}).slice(0,15):pool.slice(0,15);
   if(!matches.length){dd.style.display='none';return;}
@@ -6157,7 +6229,7 @@ async function sbLogin(){
 
 async function sbBoot(user){
   _sbUser=user;
-  const{data:profile}=await _sb.from('user_profiles').select('role,region,function_type,tab_scope,display_name').eq('id',user.id).single();
+  const{data:profile}=await _sb.from('user_profiles').select('role,region,function_type,tab_scope,display_name,visible_functions').eq('id',user.id).single();
   _sbRole=profile||{role:'viewer',region:null};
   // Load TEAM_MEMBERS from user_profiles — replaces hardcoded array
   try {
