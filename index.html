@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1295,8 +1296,8 @@ function renderOps(w, pw, elArg) {
         +'<div style="font-size:13px;font-weight:600;color:var(--red)">'+payErrors+' payroll error'+(payErrors!==1?'s':'')
         +(payMonth?' — '+esc(payMonth):'')+' — Must resolve before disbursement.</div></div>'
     : '';
-  var hropsGaps=((week&&week.hrops_gaps)||[]).filter(function(r){var s=String(r||'').trim().toLowerCase();return r&&r.trim()&&!['na','nil','none','no gaps'].includes(s);});
-  var hropsEsc=((week&&week.hrops_esc_texts)||[]).filter(function(r){var s=String(r||'').trim().toLowerCase();return r&&r.trim()&&!['na','nil','none'].includes(s);});
+  var hropsGaps=((week&&week.hrops_gaps)||[]).map(function(r){return String(r||'');}).filter(function(r){var s=r.trim().toLowerCase();return r.trim()&&!['na','nil','none','no gaps'].includes(s);});
+  var hropsEsc=((week&&week.hrops_esc_texts)||[]).map(function(r){return String(r||'');}).filter(function(r){var s=r.trim().toLowerCase();return r.trim()&&!['na','nil','none'].includes(s);});
   var payErrors=(week&&week.payroll_errors)||0;
   var payMonth=(week&&week.payroll_month)||'';
   var hropsGapsHTML=hropsGaps.map(function(g){
@@ -1518,6 +1519,8 @@ function buildRisks(w) {
 }
 
 function renderRisks(w, pw) {
+  console.log("[renderRisks] w=",w?.week_key,"buildRisks=",buildRisks(w).length,"risks");
+
   if(!w){return "";} // null guard
 
   const risks = buildRisks(w);
@@ -1729,8 +1732,12 @@ function renderHRBP(w, pw) {
         <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">${erBadge}${issueBadge}<span style="font-size:9px;padding:2px 8px;border-radius:10px;background:${rCol}18;color:${rCol};font-weight:600">${esc(region)}</span></div>
       </div>
       <div style="padding:10px 13px">
-        ${firstLine?`<div style="font-size:11px;color:var(--muted);margin-bottom:6px;font-style:italic">${esc(firstLine)}${hasMore?'…':''}</div>`:''}
-        ${hasMore?`<div id="${cardId}_full" style="display:none;margin-bottom:6px">${bulletHTML}</div><button onclick="hcToggle('${cardId}')" id="${cardId}_btn" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0">▼ More details</button>`:`<div>${bulletHTML}</div>`}
+        ${hasMore
+          ? `<div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-style:italic">${esc(firstLine)}…</div>
+             <div id="${cardId}_full" style="display:none;margin-bottom:6px">${bulletHTML}</div>
+             <button onclick="hcToggle('${cardId}')" id="${cardId}_btn" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0">▼ More details</button>`
+          : `<div style="font-size:11px;color:var(--muted)">${bulletHTML||esc(text)}</div>`
+        }
       </div>
     </div>`;
   }
@@ -2207,6 +2214,8 @@ function toggleConnectExpand(id) {
 function render() {
   const w = WEEKS_DATA[currentWeek];
   if (!w) { console.warn('[render] No week data for key:', currentWeek, '| Keys in WEEKS_DATA:', Object.keys(WEEKS_DATA)); return; }
+  // Diagnostic: log what W contains for ops/ld tabs
+  console.log('[render] w.week_key=',w.week_key,'hrops_gaps=',(w.hrops_gaps||[]).length,'ld_details=',(w.ld_details||[]).length,'ld_sessions=',w.ld_sessions);
   const wKeys = (window.WEEK_ORDER_LIVE || WEEK_ORDER).filter(k => WEEKS_DATA[k]);
   const prevKey = wKeys[wKeys.indexOf(currentWeek) - 1] || wKeys[0];
   const pw = WEEKS_DATA[prevKey] || w;
@@ -3573,10 +3582,14 @@ function getCurrentWeekLabel() {
 async function renderSubmitTab(mc){
   if(!mc)mc=document.getElementById('tab-submit');
   mc.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>';
-  const{data:profile}=await _sb.from('user_profiles').select('role,region,function_type,display_name').eq('id',_sbUser.id).single();
-  const fnType=profile?.function_type||detectFunction(profile?.role)||'hrbp';
-  const region=profile?.region||'';
-  const displayName=profile?.display_name||_sbUser.email?.split('@')[0]||'User';
+  // Use already-loaded _sbRole instead of re-querying Supabase
+  const profile = _sbRole || {};
+  const _rawFnType = profile.function_type || detectFunction(profile.role) || 'hrbp';
+  // Map facility/admin variants to 'admin' for form rendering
+  const _fnTypeMap = {facilities:'admin', facility:'admin', 'admin & facilities':'admin'};
+  const fnType = _fnTypeMap[_rawFnType] || (FUNCTION_TYPES[_rawFnType] ? _rawFnType : 'hrbp');
+  const region = profile.region || '';
+  const displayName = profile.display_name || _sbUser?.email?.split('@')[0] || 'User';
   const roleLabel={'admin':'CXO','executive':'CXO','hrbp':'Lead'}[profile?.role]||(profile?.role||'').toUpperCase();
   if(profile?.role==='admin'||profile?.role==='executive'){await renderSubmissionTracker(mc,displayName,roleLabel);return;}
   // Always include current real-world week even if not in DB yet
