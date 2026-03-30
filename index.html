@@ -3,6 +3,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1270,6 +1271,34 @@ function renderOps(w, pw, elArg) {
     loadStatutoryRisks(); // async — tab renders immediately, patches when ready
   }
   var week = w || (WEEK_ORDER&&WEEK_ORDER.length?WEEKS_DATA[WEEK_ORDER[WEEK_ORDER.length-1]]:{label:'&mdash;',payroll_risks:[],payroll_errors:0,payroll_month:''});
+  // ── HR Ops weekly submission data ────────────────────────────────
+  var hropsGaps = ((week&&week.hrops_gaps)||[]).filter(function(r){
+    var s=String(r||'').trim().toLowerCase();
+    return r&&r.trim()&&!['na','nil','none','no gaps'].includes(s);
+  });
+  var hropsEsc = ((week&&week.hrops_esc_texts)||[]).filter(function(r){
+    var s=String(r||'').trim().toLowerCase();
+    return r&&r.trim()&&!['na','nil','none'].includes(s);
+  });
+  var payErrors = (week&&week.payroll_errors)||0;
+  var payMonth  = (week&&week.payroll_month)||'';
+  var hropsGapsHTML = hropsGaps.length
+    ? hropsGaps.map(function(g){
+        return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:8px;padding:10px 14px;margin-bottom:8px">'
+          +'<div style="font-size:11px;color:var(--text);line-height:1.5">'+esc(g)+'</div></div>';
+      }).join('')
+    : '<div style="font-size:12px;color:var(--muted);padding:10px 0">No process gaps logged this week.</div>';
+  var hropsEscHTML = hropsEsc.length
+    ? hropsEsc.map(function(e){
+        return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid #a78bfa;border-radius:8px;padding:10px 14px;margin-bottom:8px">'
+          +'<div style="font-size:11px;color:var(--text);line-height:1.5">'+esc(e)+'</div></div>';
+      }).join('')
+    : '<div style="font-size:12px;color:var(--muted);padding:10px 0">No escalations logged this week.</div>';
+  var payErrBanner = payErrors>0
+    ? '<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px">'
+        +'<div style="font-size:13px;font-weight:600;color:var(--red)">'+payErrors+' payroll error'+(payErrors!==1?'s':'')
+        +(payMonth?' — '+esc(payMonth):'')+' — Must resolve before disbursement.</div></div>'
+    : '';
   var payRisks = ((week&&week.payroll_risks)||[]).filter(function(r){return r&&r.trim()&&!['na','nil','none'].includes(r.toLowerCase().trim());});
   var payRiskHTML = payRisks.length
     ? payRisks.map(function(r){return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:7px;font-size:12px;color:var(--text)">&starf; '+esc(r)+'</div>';}).join('')
@@ -1350,11 +1379,21 @@ function renderOps(w, pw, elArg) {
   }
 
   el.innerHTML='<div style="padding:20px 28px;max-width:1280px">'
-    +_wkWeeklyHTML
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">'
     +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">HR Ops Intelligence</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">HR Ops, Payroll &amp; Statutory Risk</div></div>'
     +'<button onclick="openStatRiskModal()" style="padding:7px 16px;border:1px solid var(--red);border-radius:8px;background:none;color:var(--red);font-size:12px;cursor:pointer;font-weight:600">+ New Risk</button></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">'
+    +'<div>'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--amber);margin-bottom:8px">⚠ Process Gaps</div>'
+    +hropsGapsHTML
+    +'</div>'
+    +'<div>'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:#a78bfa;margin-bottom:8px">🔺 Escalations</div>'
+    +hropsEscHTML
+    +'</div>'
+    +'</div>'
+    +payErrBanner
     +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">Payroll Escalations &mdash; '+esc((week&&week.label)||'Latest Week')+'</div>'
     +payRiskHTML
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0 16px">'
@@ -1467,90 +1506,55 @@ function buildRisks(w) {
 
 function renderRisks(w, pw) {
   const risks = buildRisks(w);
-  if (!risks.length) {
-    return '<div style="padding:40px;text-align:center;color:var(--muted)">No risks identified this week.</div>';
-  }
-
+  if (!risks.length) return '<div style="padding:40px;text-align:center;color:var(--muted)">No risks identified this week.</div>';
   const FA_ORDER_R = ['TA','Payroll','HR Ops','HRBP','Platinum','FnF','Resignation','General'];
   const FA_COLOR_R = {'TA':'#34d399','Payroll':'#f59e0b','HR Ops':'#60a5fa','HRBP':'#a78bfa','Platinum':'#8b5cf6','FnF':'#fb923c','Resignation':'#f87171','General':'#94a3b8'};
-  const SEV_ORDER  = {'critical':0,'high':1,'medium':2,'low':3};
-
-  // Group by tag (function area)
+  const SEV_S = {critical:'background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.3)',high:'background:rgba(251,146,60,.15);color:#fb923c;border:1px solid rgba(251,146,60,.3)',medium:'background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid rgba(251,191,36,.3)',low:'background:rgba(148,163,184,.15);color:#94a3b8;border:1px solid rgba(148,163,184,.3)'};
   const groups = {};
-  risks.forEach(r => {
-    const fa = r.tag || 'General';
-    if (!groups[fa]) groups[fa] = [];
-    groups[fa].push(r);
-  });
-  // Sort within group by severity
-  Object.keys(groups).forEach(fa => {
-    groups[fa].sort((a,b) => (SEV_ORDER[a.level]??3)-(SEV_ORDER[b.level]??3));
-  });
-  const orderedFAs = [...FA_ORDER_R.filter(f=>groups[f]), ...Object.keys(groups).filter(f=>!FA_ORDER_R.includes(f))];
-
-  const SEV_STYLE = {
-    critical: 'background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.3)',
-    high:     'background:rgba(251,146,60,.15);color:#fb923c;border:1px solid rgba(251,146,60,.3)',
-    medium:   'background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid rgba(251,191,36,.3)',
-    low:      'background:rgba(148,163,184,.15);color:#94a3b8;border:1px solid rgba(148,163,184,.3)',
-  };
-
-  function riskCard(r, idx) {
-    const cardId = 'risk_card_'+idx;
-    const sev = SEV_STYLE[r.level] || SEV_STYLE.medium;
-    const faCol = FA_COLOR_R[r.tag] || '#94a3b8';
-    return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${faCol};border-radius:8px;padding:11px 14px;margin-bottom:8px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+  risks.forEach(r=>{const fa=r.tag||'General';if(!groups[fa])groups[fa]=[];groups[fa].push(r);});
+  const SEV_O = {critical:0,high:1,medium:2,low:3};
+  Object.keys(groups).forEach(fa=>groups[fa].sort((a,b)=>(SEV_O[a.level]??3)-(SEV_O[b.level]??3)));
+  const orderedFAs=[...FA_ORDER_R.filter(f=>groups[f]),...Object.keys(groups).filter(f=>!FA_ORDER_R.includes(f))];
+  function rCard(r,uid) {
+    const sev=SEV_S[r.level]||SEV_S.medium; const col=FA_COLOR_R[r.tag]||'#94a3b8';
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${col};border-radius:8px;padding:11px 14px;margin-bottom:8px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px">
         <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.4">${esc(r.title)}</div>
         <span style="font-size:9px;padding:2px 8px;border-radius:10px;${sev};font-weight:700;white-space:nowrap;flex-shrink:0">${(r.level||'').toUpperCase()}</span>
       </div>
       ${r.detail ? `
-        <div id="${cardId}_short" style="font-size:11px;color:var(--muted);margin-bottom:5px">${esc(r.detail.substring(0,100))}${r.detail.length>100?'<span id="'+cardId+'_dots">… <button onclick="riskExpand(\''+cardId+'\')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0">▼ More</button></span>':''}</div>
-        ${r.detail.length>100?`<div id="${cardId}_full" style="display:none;font-size:11px;color:var(--muted);margin-bottom:5px">${esc(r.detail)}<button onclick="riskCollapse('${cardId}')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0;margin-left:6px">▲ Less</button></div>`:''}
-      ` : ''}
+        <div id="rs_${uid}" style="font-size:11px;color:var(--muted);margin-bottom:4px">${esc(r.detail.substring(0,100))}${r.detail.length>100?`<button onclick="rsExp('rs_${uid}','rf_${uid}')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0 4px">▼ More</button>`:''}</div>
+        ${r.detail.length>100?`<div id="rf_${uid}" style="display:none;font-size:11px;color:var(--muted);margin-bottom:4px">${esc(r.detail)}<button onclick="rsCol('rs_${uid}','rf_${uid}')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0 4px">▲ Less</button></div>`:''}
+      `:''}
       <div style="font-size:10px;color:var(--muted2)">Owner: ${esc(r.owner||'—')}</div>
     </div>`;
   }
-
-  const grouped = orderedFAs.map(fa => {
-    const color = FA_COLOR_R[fa] || '#94a3b8';
-    const items = groups[fa];
-    const hasCritHigh = items.some(r => r.level==='critical'||r.level==='high');
+  const grouped=orderedFAs.map(fa=>{const col=FA_COLOR_R[fa]||'#94a3b8'; const items=groups[fa];
     return `<div style="margin-bottom:16px">
-      <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 10px;background:${color}18;border-radius:5px;margin-bottom:8px">
-        <span style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${color}">${esc(fa)}</span>
-        <span style="font-size:10px;color:${color}">${items.length}</span>
-        ${hasCritHigh?`<span style="font-size:9px;color:var(--red)">🔴</span>`:''}
+      <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 10px;background:${col}18;border-radius:5px;margin-bottom:8px">
+        <span style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${col}">${esc(fa)}</span>
+        <span style="font-size:10px;color:${col}">${items.length}</span>
+        ${items.some(r=>r.level==='critical'||r.level==='high')?'<span style="font-size:9px;color:var(--red)">🔴</span>':''}
       </div>
-      ${items.map((r,i)=>riskCard(r,fa.replace(/\s/g,'')+'_'+i)).join('')}
+      ${items.map((r,i)=>rCard(r,fa.replace(/[^a-z0-9]/gi,'')+'_'+i)).join('')}
     </div>`;
   }).join('');
-
-  const totCrit = risks.filter(r=>r.level==='critical').length;
-  const totHigh = risks.filter(r=>r.level==='high').length;
-
+  const totC=risks.filter(r=>r.level==='critical').length, totH=risks.filter(r=>r.level==='high').length;
   return `<div style="padding:24px 32px;max-width:900px">
     <div style="margin-bottom:16px">
       <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Team Intelligence</div>
       <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">Risks & Actions</div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:8px;padding:10px 18px;text-align:center">
-        <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--red)">${totCrit}</div>
-        <div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted)">Critical</div>
-      </div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:8px;padding:10px 18px;text-align:center">
-        <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--amber)">${totHigh}</div>
-        <div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted)">High</div>
-      </div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--accent);border-radius:8px;padding:10px 18px;text-align:center">
-        <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--accent)">${risks.length}</div>
-        <div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted)">Total</div>
-      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:8px;padding:10px 18px;text-align:center"><div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--red)">${totC}</div><div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted)">Critical</div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:8px;padding:10px 18px;text-align:center"><div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--amber)">${totH}</div><div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted)">High</div></div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--accent);border-radius:8px;padding:10px 18px;text-align:center"><div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--accent)">${risks.length}</div><div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted)">Total</div></div>
     </div>
     ${grouped}
   </div>`;
 }
+function rsExp(sid,fid){var s=document.getElementById(sid);var f=document.getElementById(fid);if(s)s.style.display='none';if(f)f.style.display='block';}
+function rsCol(sid,fid){var s=document.getElementById(sid);var f=document.getElementById(fid);if(s)s.style.display='';if(f)f.style.display='none';}
 
 function riskExpand(id) {
   var s=document.getElementById(id+'_short'); var f=document.getElementById(id+'_full');
@@ -1716,7 +1720,7 @@ function renderHRBP(w, pw) {
     const regionColors = {North:'#60a5fa',South:'#34d399',East:'#f59e0b',West:'#a78bfa','Pan India':'#94a3b8'};
     const rCol    = regionColors[region] || '#94a3b8';
     const firstLine = text.split(/\n/)[0].trim().substring(0,90);
-    const hasMore   = text.split(/\n/).filter(l=>l.trim()).length > 1;
+    const hasMore   = text.split(/\n/).filter(l=>l.trim()).length > 1 || text.length > 150;
     const bullets   = text.split(/\n/).map(l=>l.trim().replace(/^[•\-\*]\s*/,'')).filter(l=>l.length>4);
     const bulletHTML= bullets.map(b=>`<div style="display:flex;gap:6px;margin-bottom:3px"><span style="color:var(--accent);flex-shrink:0">·</span><span style="font-size:11px;color:var(--muted)">${esc(b.substring(0,120))}</span></div>`).join('');
     const erBadge   = erCases&&erCases.toLowerCase()!=='na'&&erCases.toLowerCase()!=='nil'
@@ -2649,10 +2653,7 @@ function openNewTaskModal(prefillType) {
         <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Description</label>
         <textarea id="ntDesc" placeholder="Context, background, what action is needed…" style="width:100%;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;min-height:80px;resize:vertical;box-sizing:border-box"></textarea>
       </div>
-      ${isAdmin ? `<div style="margin-bottom:12px;padding:10px 14px;background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.25);border-radius:8px">
-        <label style="font-size:10px;font-weight:600;color:#a78bfa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Assign To (Admin only — for escalations)</label>
-        <input type="text" id="ntAssign" placeholder="Team member name…" style="width:100%;padding:7px 10px;background:var(--surface3);border:1px solid rgba(167,139,250,.3);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box">
-      </div>` : ''}
+      <div style="margin-bottom:12px"><label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Assign To</label><select id="ntAssign" style="width:100%;padding:7px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">${(function(){var _me=typeof _sbRole!=="undefined"&&_sbRole?(_sbRole.display_name||""):"";return [""].concat(TEAM_MEMBERS.map(function(m){return m.name;})).map(function(n){return "<option value=\""+esc(n)+"\" "+(n===_me?"selected":"")+">"+esc(n||"— Assign to self —")+"</option>";}).join("");})()}</select></div>
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button onclick="document.getElementById('taskModal').remove()" style="padding:8px 20px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--muted);cursor:pointer;font-size:13px">Cancel</button>
         <button onclick="submitNewTask()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:13px;font-weight:600">Create Task</button>
@@ -2704,9 +2705,15 @@ function openTaskUpdateModal(id) {
         <div>Created: <strong>${(t.created_at||'').substring(0,10)}</strong></div>
         <div>Rollover count: <strong>${t.rollover_count||0}</strong></div>
       </div>
-      <div style="margin-bottom:10px">
-        <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Status</label>
-        <select id="tuStatus" style="width:100%;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px">${stOpts}</select>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Status</label>
+          <select id="tuStatus" style="width:100%;padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">${stOpts}</select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Reassign To</label>
+          <select id="tuAssign" style="width:100%;padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">${[''].concat(TEAM_MEMBERS.map(m=>m.name)).map(n=>`<option value="${esc(n)}" ${n===(t.assigned_to_name||'')?'selected':''}>${esc(n||'— Keep current —')}</option>`).join('')}</select>
+        </div>
       </div>
       <div style="margin-bottom:16px">
         <label style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Update note</label>
@@ -2714,7 +2721,7 @@ function openTaskUpdateModal(id) {
       </div>
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button onclick="document.getElementById('taskUpdateModal').remove()" style="padding:8px 20px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--muted);cursor:pointer;font-size:13px">Cancel</button>
-        <button onclick="updateTask('${id}',{status:document.getElementById('tuStatus').value,status_note:document.getElementById('tuNote').value});document.getElementById('taskUpdateModal').remove()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:13px;font-weight:600">Update</button>
+        <button onclick="(function(){var _st=document.getElementById('tuStatus').value;var _nt=document.getElementById('tuNote').value;var _ra=document.getElementById('tuAssign').value;var _upd={status:_st,status_note:_nt};if(_ra)_upd.assigned_to_name=_ra;updateTask('${id}',_upd);document.getElementById('taskUpdateModal').remove();})()"  style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);cursor:pointer;font-size:13px;font-weight:600">Update</button>
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -2723,7 +2730,6 @@ function openTaskUpdateModal(id) {
 function renderActionCentre(el) {
   if (!el) el = document.getElementById('tab-actioncentre');
   if (!el) return;
-
   if (!_tasksLoaded) {
     if (typeof _sbUser !== 'undefined' && _sbUser) {
       el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">⏳</div>Loading tasks…</div>';
@@ -2738,34 +2744,67 @@ function renderActionCentre(el) {
   const FA_COLOR = {'HR Ops':'#60a5fa','TA':'#34d399','Payroll':'#f59e0b','HRBP':'#a78bfa','L&D':'#fb923c','Admin':'#94a3b8','General':'#94a3b8'};
   const SEV_ORD  = {Critical:0,High:1,Medium:2,Low:3};
 
-  const open       = _actionTasks.filter(t => t.status==='Open'||t.status==='In Progress');
+  // My Tasks toggle
+  const myEmail = _sbUser ? (_sbUser.email||'') : '';
+  const myName  = (_sbRole&&_sbRole.display_name)||myEmail.split('@')[0]||'';
+  const isAdmin = typeof _sbRole !== 'undefined' && (_sbRole.role==='admin'||_sbRole.role==='executive');
+  const filterMine = el.getAttribute('data-filter-mine') === '1' && !isAdmin;
+
+  const open = _actionTasks.filter(t => {
+    if (t.status !== 'Open' && t.status !== 'In Progress') return false;
+    if (filterMine) {
+      const an = (t.assigned_to_name||'').toLowerCase();
+      const cn = (t.created_by_name||'').toLowerCase();
+      const me = myName.toLowerCase().split('.')[0];
+      return an.indexOf(me) >= 0 || cn.indexOf(me) >= 0 ||
+             (myEmail && (t.assigned_to === _sbUser.id || t.created_by === _sbUser.id));
+    }
+    return true;
+  });
+
   const planned    = open.filter(t => t.task_type==='planned_action');
   const nextWeek   = open.filter(t => t.task_type==='next_week_plan');
-  const risks      = open.filter(t => t.task_type==='risk');
+  const hrbpCases  = open.filter(t => ['er_case','absenteeism','retention'].includes(t.task_type));
+  const risks      = open.filter(t => ['risk','payroll_error','statutory'].includes(t.task_type));
   const escalations= open.filter(t => t.task_type==='escalation');
   const overdue    = open.filter(t => t.due_date && new Date(t.due_date) < new Date());
   const done       = _actionTasks.filter(t => t.status==='Done').slice(0,6);
   const rolledOver = _actionTasks.filter(t => t.rollover_count>0 && t.status!=='Done' && t.status!=='Closed');
-  const isAdmin    = typeof _sbRole !== 'undefined' && (_sbRole.role==='admin'||_sbRole.role==='executive');
+  const allOpen    = _actionTasks.filter(t => t.status==='Open'||t.status==='In Progress');
 
   function taskCard(t) {
     const st = TASK_STATUS_STYLE[t.status] || {col:'var(--muted)',bg:'rgba(100,116,139,.1)'};
-    const isOverdue = t.due_date && new Date(t.due_date)<new Date() && t.status!=='Done' && t.status!=='Closed';
-    const sevStyle  = SEVERITY_STYLE[t.severity] || '';
-    const rollBadge = t.rollover_count>0 ? `<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(148,163,184,.15);color:#94a3b8">↩${t.rollover_count}x</span>` : '';
-    const faColor   = FA_COLOR[t.function_area] || '#94a3b8';
-    const cardId    = 'tc_'+t.id.replace(/-/g,'').substring(0,12);
-    const hasMore   = t.description && t.description.length > 0;
-    return `<div style="background:var(--surface2);border:1px solid ${isOverdue?'rgba(248,113,113,.4)':'var(--border)'};border-left:3px solid ${faColor};border-radius:8px;padding:11px 13px;margin-bottom:8px${isOverdue?';box-shadow:0 0 0 1px rgba(248,113,113,.15)':''}">
+    const isOD = t.due_date && new Date(t.due_date)<new Date() && t.status!=='Done' && t.status!=='Closed';
+    const sevStyle = SEVERITY_STYLE[t.severity] || '';
+    const rollBadge = t.rollover_count>0
+      ? `<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(148,163,184,.15);color:#94a3b8">↩${t.rollover_count}x</span>` : '';
+    const faColor = FA_COLOR[t.function_area]||'#94a3b8';
+    const cid = 'tc_'+t.id.replace(/-/g,'').substring(0,12);
+    const desc = t.description||'';
+    const descHTML = desc
+      ? `<div id="${cid}_s" style="font-size:11px;color:var(--muted);margin-bottom:4px;line-height:1.4">
+           ${esc(desc.substring(0,100))}${desc.length>100
+             ?`<button onclick="acExpand('${cid}')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0 4px">▼ More</button>`
+             :''}
+         </div>
+         ${desc.length>100
+           ?`<div id="${cid}_f" style="display:none;font-size:11px;color:var(--muted);margin-bottom:4px;line-height:1.4">
+               ${esc(desc)}<button onclick="acCollapse('${cid}')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0 4px">▲ Less</button>
+             </div>`
+           :''}`
+      : '';
+    return `<div style="background:var(--surface2);border:1px solid ${isOD?'rgba(248,113,113,.4)':'var(--border)'};border-left:3px solid ${faColor};border-radius:8px;padding:11px 13px;margin-bottom:8px${isOD?';box-shadow:0 0 0 1px rgba(248,113,113,.15)':''}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px">
         <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.4">${esc(t.title)}</div>
-        <div style="display:flex;gap:4px;align-items:center;flex-shrink:0">${rollBadge}<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${st.bg};color:${st.col};font-weight:600;white-space:nowrap">${t.status}</span></div>
+        <div style="display:flex;gap:4px;align-items:center;flex-shrink:0">
+          ${rollBadge}
+          <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${st.bg};color:${st.col};font-weight:600;white-space:nowrap">${t.status}</span>
+        </div>
       </div>
-      ${hasMore?`<div id="${cardId}_short" style="font-size:11px;color:var(--muted);margin-bottom:5px">${esc(t.description.substring(0,100))}${t.description.length>100?`<button onclick="acExpand('${cardId}')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0 4px">▼ More</button>`:''}</div>
-      ${t.description.length>100?`<div id="${cardId}_full" style="display:none;font-size:11px;color:var(--muted);margin-bottom:5px">${esc(t.description)}<button onclick="acCollapse('${cardId}')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0 4px">▲ Less</button></div>`:''}`:'' }
+      ${descHTML}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         ${t.severity?`<span style="font-size:10px;${sevStyle}">${t.severity}</span>`:''}
-        ${t.due_date?`<span style="font-size:10px;color:${isOverdue?'var(--red)':'var(--muted2)'}">Due ${t.due_date}</span>`:''}
+        ${t.due_date?`<span style="font-size:10px;color:${isOD?'var(--red)':'var(--muted2)'}">Due ${t.due_date}</span>`:''}
         ${t.assigned_to_name?`<span style="font-size:10px;color:#a78bfa">→ ${esc(t.assigned_to_name)}</span>`:''}
         <button onclick="openTaskUpdateModal('${t.id}')" style="margin-left:auto;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">Update</button>
       </div>
@@ -2773,14 +2812,10 @@ function renderActionCentre(el) {
   }
 
   function groupByFA(tasks) {
-    const groups = {};
-    tasks.forEach(t => {
-      const fa = t.function_area||'General';
-      if (!groups[fa]) groups[fa]=[];
-      groups[fa].push(t);
-    });
-    Object.keys(groups).forEach(fa => groups[fa].sort((a,b)=>(SEV_ORD[a.severity]??3)-(SEV_ORD[b.severity]??3)));
-    return groups;
+    const g = {};
+    tasks.forEach(t => { const fa=t.function_area||'General'; if(!g[fa])g[fa]=[]; g[fa].push(t); });
+    Object.keys(g).forEach(fa => g[fa].sort((a,b)=>(SEV_ORD[a.severity]??3)-(SEV_ORD[b.severity]??3)));
+    return g;
   }
 
   function renderGrouped(tasks, empty) {
@@ -2796,13 +2831,18 @@ function renderActionCentre(el) {
     }).join('');
   }
 
-  el.innerHTML = `<div style="padding:24px 32px;max-width:1400px">
+  el.innerHTML = `<div style="padding:24px 32px;max-width:1500px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div>
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Team Intelligence</div>
         <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">Action Centre</div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        ${!isAdmin
+          ? `<div style="display:flex;background:var(--surface3);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+               <button onclick="document.getElementById('tab-actioncentre').setAttribute('data-filter-mine','1');renderActionCentre()" style="padding:6px 14px;border:none;background:${filterMine?'var(--accent)':'transparent'};color:${filterMine?'#fff':'var(--muted)'};font-size:11px;cursor:pointer;font-weight:600">My Tasks</button>
+               <button onclick="document.getElementById('tab-actioncentre').setAttribute('data-filter-mine','0');renderActionCentre()" style="padding:6px 14px;border:none;background:${!filterMine?'var(--accent)':'transparent'};color:${!filterMine?'#fff':'var(--muted)'};font-size:11px;cursor:pointer;font-weight:600">All Tasks</button>
+             </div>` : ''}
         <button onclick="openNewTaskModal('planned_action')" style="padding:7px 14px;border:1px solid var(--accent);border-radius:8px;background:none;color:var(--accent);font-size:11px;cursor:pointer;font-weight:600">+ Planned Action</button>
         <button onclick="openNewTaskModal('risk')" style="padding:7px 14px;border:1px solid var(--amber);border-radius:8px;background:none;color:var(--amber);font-size:11px;cursor:pointer;font-weight:600">+ Risk</button>
         ${isAdmin?`<button onclick="openNewTaskModal('escalation')" style="padding:7px 14px;border:1px solid #a78bfa;border-radius:8px;background:none;color:#a78bfa;font-size:11px;cursor:pointer;font-weight:600">+ Escalation</button>`:''}
@@ -2810,14 +2850,14 @@ function renderActionCentre(el) {
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px">
-      ${[['Open',open.length,'var(--accent)'],['Overdue',overdue.length,'var(--red)'],['Risks',risks.length,'var(--amber)'],['Escalations',escalations.length,'#a78bfa'],['Rolled Over',rolledOver.length,'#94a3b8']].map(([l,v,c])=>`
-      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:10px;text-align:center">
-        <div style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:${c};line-height:1">${v}</div>
-        <div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted);margin-top:2px">${l}</div>
-      </div>`).join('')}
+      ${[['Open',allOpen.length,'var(--accent)'],['Overdue',overdue.length,'var(--red)'],['Risks',risks.length,'var(--amber)'],['Escalations',escalations.length,'#a78bfa'],['Rolled Over',rolledOver.length,'#94a3b8']].map(([l,v,c])=>`
+        <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:10px;text-align:center">
+          <div style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:${c};line-height:1">${v}</div>
+          <div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted);margin-top:2px">${l}</div>
+        </div>`).join('')}
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:start">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:start">
       <div>
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px">
           📋 Planned <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span>
@@ -2831,15 +2871,21 @@ function renderActionCentre(el) {
         ${renderGrouped(nextWeek,'No next week plans')}
       </div>
       <div>
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          🤝 HRBP Cases <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${hrbpCases.length}</span>
+        </div>
+        ${renderGrouped(hrbpCases,'No HRBP cases')}
+      </div>
+      <div>
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:6px">
           ⚠ Risks <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(251,191,36,.12);color:var(--amber)">${risks.length}</span>
         </div>
         ${renderGrouped(risks,'No open risks')}
       </div>
       <div>
-        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:6px">
-          🔺 Escalations <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${escalations.length}</span>
-          ${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin)</span>':''}
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f87171;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          🔺 Escalations <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(248,113,113,.12);color:#f87171">${escalations.length}</span>
+          ${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin assigns)</span>':''}
         </div>
         ${renderGrouped(escalations,'No open escalations')}
       </div>
@@ -3626,7 +3672,14 @@ async function renderSubmitTab(mc){
   const statusHTML=_existingSub?'<span class="wform-status-badge wsb-submitted">✓ Submitted · '+(_existingSub.updated_at||'').substring(0,10)+'</span>':'<span class="wform-status-badge wsb-none">Not submitted yet</span>';
   mc.innerHTML='<div class="wform-wrap"><div class="wform-header"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report</div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">'+fn.icon+' '+fn.label+'</div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">'+displayName+(region?' · '+region:'')+'</span>'+statusHTML+'</div></div><div style="margin-bottom:20px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div><div class="wform-week-select">'+availWeeks.map(k=>'<button class="wform-week-btn'+(k===_formWeekKey?' active':'')+'" onclick="selectFormWeek(\''+k+'\')">'+( WEEK_NAMES[k]||k)+' · '+(WEEKS_DATA[k]?.label||'')+'</button>').join('')+'</div></div>'+buildFunctionSections(fnType)+'<div class="wform-section"><div class="wform-section-title">📸 Photos</div><div class="wform-row"><label>Upload photos (site visits, R&R, town halls, training)</label><div class="wform-photo-zone" id="formPhotoZone" ondragover="event.preventDefault();this.classList.add(\'drag\')" ondragleave="this.classList.remove(\'drag\')" ondrop="formPhotoDrop(event)"><input type="file" accept="image/*" multiple onchange="formPhotoAdd(this.files)"><div style="font-size:20px;margin-bottom:6px">📷</div><div style="font-size:13px;color:var(--muted)">Drop photos or click to browse</div></div><div class="wform-photo-preview" id="formPhotoPreview"></div></div></div><div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button class="wform-submit-btn" id="formSubmitBtn" onclick="submitWeeklyForm(\''+fnType+'\',\''+region+'\')">'+(_existingSub?'Update Submission':'Submit Report')+'</button>'+(_existingSub?'<span style="font-size:12px;color:var(--muted)">You can update until the week closes</span>':'')+'</div><div id="formSubmitStatus" style="margin-top:12px"></div></div>';
   setVisit(_visitYes);
-  if(_existingSub)populateForm(_existingSub);
+  if(_existingSub){
+    populateForm(_existingSub);
+    var _sl=document.querySelector('#snav-submit .item-label');
+    if(_sl)_sl.textContent='✏ Edit Submission';
+  } else {
+    var _sl2=document.querySelector('#snav-submit .item-label');
+    if(_sl2)_sl2.textContent='Submit Weekly Report';
+  }
   // Render structured entry lists
   if(typeof renderVisitEntries==='function') renderVisitEntries();
   if(typeof renderCaseEntries==='function')renderCaseEntries();
