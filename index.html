@@ -2939,13 +2939,13 @@ function renderActionCentre(el) {
       })()}
     </div>`
     :
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:start">
+    `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:start">
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px">📋 Planned <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span></div>${renderGrouped(planned,'No open planned actions')}</div>
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f59e0b;margin-bottom:10px;display:flex;align-items:center;gap:6px">📅 Next Week <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b">${nextWeek.length}</span></div>${renderGrouped(nextWeek,'No next week plans')}</div>
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:6px">🤝 HRBP Cases <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${hrbpCases.length}</span></div>${renderGrouped(hrbpCases,'No HRBP cases')}</div>
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:6px">⚠ Risks <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(251,191,36,.12);color:var(--amber)">${risks.length}</span></div>${renderGrouped(risks,'No open risks')}</div>
       <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f87171;margin-bottom:10px;display:flex;align-items:center;gap:6px">🔺 Escalations <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(248,113,113,.12);color:#f87171">${escalations.length}</span>${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin)</span>':''}</div>${renderGrouped(escalations,'No open escalations')}</div>
-    </div>}
+    </div>`}
     ${done.length?`<div style="margin-top:20px"><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:10px">✓ Recently Completed</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${done.map(taskCard).join('')}</div></div>`:''}
   </div>`;
 }
