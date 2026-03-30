@@ -1,6 +1,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1298,23 +1299,6 @@ function renderOps(w, pw, elArg) {
         +'<div style="font-size:13px;font-weight:600;color:var(--red)">'+payErrors+' payroll error'+(payErrors!==1?'s':'')
         +(payMonth?' — '+esc(payMonth):'')+' — Must resolve before disbursement.</div></div>'
     : '';
-  var hropsGaps=((week&&week.hrops_gaps)||[]).map(function(r){return String(r||'');}).filter(function(r){var s=r.trim().toLowerCase();return r.trim()&&!['na','nil','none','no gaps'].includes(s);});
-  var hropsEsc=((week&&week.hrops_esc_texts)||[]).map(function(r){return String(r||'');}).filter(function(r){var s=r.trim().toLowerCase();return r.trim()&&!['na','nil','none'].includes(s);});
-  var payErrors=(week&&week.payroll_errors)||0;
-  var payMonth=(week&&week.payroll_month)||'';
-  var hropsGapsHTML=hropsGaps.map(function(g){
-    return'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:8px;padding:10px 14px;margin-bottom:8px">'
-      +'<div style="font-size:11px;color:var(--text);line-height:1.5">'+esc(g)+'</div></div>';}).join('')
-    ||'<div style="font-size:12px;color:var(--muted);padding:10px 0">No process gaps logged this week.</div>';
-  var hropsEscHTML=hropsEsc.map(function(e){
-    return'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid #a78bfa;border-radius:8px;padding:10px 14px;margin-bottom:8px">'
-      +'<div style="font-size:11px;color:var(--text);line-height:1.5">'+esc(e)+'</div></div>';}).join('')
-    ||'<div style="font-size:12px;color:var(--muted);padding:10px 0">No escalations logged this week.</div>';
-  var payErrBanner=payErrors>0
-    ?'<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px">'
-      +'<div style="font-size:13px;font-weight:600;color:var(--red)">'+payErrors+' payroll error'+(payErrors!==1?'s':'')
-      +(payMonth?' — '+esc(payMonth):'')+' — Must resolve before disbursement.</div></div>'
-    :'';
   var payRisks=((week&&week.payroll_risks)||[]).filter(function(r){return r&&r.trim()&&!['na','nil','none'].includes(r.toLowerCase().trim());});
   var payRiskHTML = payRisks.length
     ? payRisks.map(function(r){return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:7px;font-size:12px;color:var(--text)">&starf; '+esc(r)+'</div>';}).join('')
