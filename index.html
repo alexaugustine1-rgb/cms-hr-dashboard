@@ -2,6 +2,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1042,7 +1043,7 @@ function renderOverview(w, pw) {
   scored.sort(function(a,b){return b.score-a.score;});
   var maxScore = scored.length>0?scored[0].score:100;
 
-  var HRBP_REC_EXCL=['suhail','somasri','ayush','abhishek','priya paul','shambhavi'];
+  var HRBP_REC_EXCL=['suhail','ayush ramchandra'];
   scored=scored.filter(function(r){var nl=r.name.toLowerCase();return !HRBP_REC_EXCL.some(function(h){return nl.indexOf(h)>=0;});});
   var recRows = scored.map(function(r,i){
     var barW = Math.round(r.score/100*100);
@@ -1266,9 +1267,7 @@ function renderOps(w, pw, elArg) {
   var el = elArg || document.getElementById('tab-ops');
   if (!el) return;
   if (!_statRisksLoaded && typeof _sb !== 'undefined') {
-    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:10px">&#9203;</div>Loading&hellip;</div>';
-    loadStatutoryRisks();
-    return;
+    loadStatutoryRisks(); // async — tab renders immediately, patches when ready
   }
   var week = w || (WEEK_ORDER&&WEEK_ORDER.length?WEEKS_DATA[WEEK_ORDER[WEEK_ORDER.length-1]]:{label:'&mdash;',payroll_risks:[],payroll_errors:0,payroll_month:''});
   var payRisks = ((week&&week.payroll_risks)||[]).filter(function(r){return r&&r.trim()&&!['na','nil','none'].includes(r.toLowerCase().trim());});
@@ -1468,74 +1467,98 @@ function buildRisks(w) {
 
 function renderRisks(w, pw) {
   const risks = buildRisks(w);
-  const critical = risks.filter(r=>r.level==='critical');
-  const high = risks.filter(r=>r.level==='high');
-  const medium = risks.filter(r=>r.level==='medium');
+  if (!risks.length) {
+    return '<div style="padding:40px;text-align:center;color:var(--muted)">No risks identified this week.</div>';
+  }
 
-  const allRiskItems = risks.map((r,i) => `
-    <div class="risk-item ${r.level}">
-      <span class="risk-tag">${esc(r.tag)} · Priority ${i+1}</span>
-      <span class="risk-title">${esc(r.title)}</span>
-      <span class="risk-detail">${esc(r.detail)}</span>
-      <div class="risk-meta"><span class="risk-owner">Owner: ${esc(r.owner)}</span></div>
-    </div>`).join('');
+  const FA_ORDER_R = ['TA','Payroll','HR Ops','HRBP','Platinum','FnF','Resignation','General'];
+  const FA_COLOR_R = {'TA':'#34d399','Payroll':'#f59e0b','HR Ops':'#60a5fa','HRBP':'#a78bfa','Platinum':'#8b5cf6','FnF':'#fb923c','Resignation':'#f87171','General':'#94a3b8'};
+  const SEV_ORDER  = {'critical':0,'high':1,'medium':2,'low':3};
 
-  // Action items for leadership
-  const leadershipActions = [
-    ...w.hrbp_issues.filter(i=>i&&i.length>15&&!['nil','no','none','na'].includes(i.toLowerCase().trim())).map(i=>({text:i,icon:'🔴'})),
-    ...w.payroll_risks.filter(r=>r&&r.length>10).map(r=>({text:r,icon:'🟡'})),
-  ];
+  // Group by tag (function area)
+  const groups = {};
+  risks.forEach(r => {
+    const fa = r.tag || 'General';
+    if (!groups[fa]) groups[fa] = [];
+    groups[fa].push(r);
+  });
+  // Sort within group by severity
+  Object.keys(groups).forEach(fa => {
+    groups[fa].sort((a,b) => (SEV_ORDER[a.level]??3)-(SEV_ORDER[b.level]??3));
+  });
+  const orderedFAs = [...FA_ORDER_R.filter(f=>groups[f]), ...Object.keys(groups).filter(f=>!FA_ORDER_R.includes(f))];
 
-  const teamActions = [
-    ...w.ta_constraints.filter(c=>c&&c.length>15&&!['na','none','nil'].includes(c.toLowerCase().trim())).map(c=>({text:'TA: '+c,icon:'📋'})),
-    ...w.hrops_gaps.filter(g=>g&&g.length>10).map(g=>({text:'HR Ops: '+g,icon:'📋'})),
-    ...w.ld_gaps.filter(g=>g&&g.length>10).map(g=>({text:'L&D: '+g,icon:'📋'})),
-  ];
+  const SEV_STYLE = {
+    critical: 'background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.3)',
+    high:     'background:rgba(251,146,60,.15);color:#fb923c;border:1px solid rgba(251,146,60,.3)',
+    medium:   'background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid rgba(251,191,36,.3)',
+    low:      'background:rgba(148,163,184,.15);color:#94a3b8;border:1px solid rgba(148,163,184,.3)',
+  };
 
-  return `
-    <div class="section-label">Risk Summary · ${esc(w.label)}</div>
-    <div class="three-col" style="margin-bottom:18px">
-      <div class="p-stat" style="border-color:var(--red);background:rgba(244,63,94,.07)">
-        <div class="p-stat-label">Critical Risks</div>
-        <div class="p-stat-val" style="color:var(--red)">${critical.length}</div>
-        <div class="p-stat-sub">Leadership decision required</div>
+  function riskCard(r, idx) {
+    const cardId = 'risk_card_'+idx;
+    const sev = SEV_STYLE[r.level] || SEV_STYLE.medium;
+    const faCol = FA_COLOR_R[r.tag] || '#94a3b8';
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${faCol};border-radius:8px;padding:11px 14px;margin-bottom:8px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+        <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.4">${esc(r.title)}</div>
+        <span style="font-size:9px;padding:2px 8px;border-radius:10px;${sev};font-weight:700;white-space:nowrap;flex-shrink:0">${(r.level||'').toUpperCase()}</span>
       </div>
-      <div class="p-stat" style="border-color:var(--amber);background:rgba(245,158,11,.07)">
-        <div class="p-stat-label">High Risks</div>
-        <div class="p-stat-val" style="color:var(--amber)">${high.length}</div>
-        <div class="p-stat-sub">Escalating if not addressed</div>
-      </div>
-      <div class="p-stat" style="border-color:var(--accent);background:rgba(59,158,255,.05)">
-        <div class="p-stat-label">Medium Risks</div>
-        <div class="p-stat-val" style="color:var(--accent)">${medium.length}</div>
-        <div class="p-stat-sub">Monitor weekly</div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-bottom:18px">
-      <div class="card-header">
-        <div class="card-title">🚨 Full Risk Register — ${esc(w.label)}</div>
-        <span class="card-badge red">${risks.length} total</span>
-      </div>
-      <div class="card-body">
-        <div class="risk-list">${allRiskItems || '<div class="empty-state">No significant risks flagged this week.</div>'}</div>
-      </div>
-    </div>
-
-    <div class="two-col">
-      <div class="card">
-        <div class="card-header"><div class="card-title">👔 Leadership Action Required</div><span class="card-badge red">Non-Delegatable</span></div>
-        <div class="card-body">
-          ${leadershipActions.length > 0 ? leadershipActions.map(a=>`<div class="flag-row"><div class="flag-icon">${a.icon}</div><div class="flag-text">${esc(a.text.substring(0,350))}</div></div>`).join('') : '<div class="empty-state">No escalations to leadership this week.</div>'}
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><div class="card-title">⚙️ Team Ownership — This Week</div><span class="card-badge amber">In-Flight</span></div>
-        <div class="card-body">
-          ${teamActions.length > 0 ? teamActions.map(a=>`<div class="flag-row"><div class="flag-icon">${a.icon}</div><div class="flag-text">${esc(a.text.substring(0,350))}</div></div>`).join('') : '<div class="empty-state">No active action items this week.</div>'}
-        </div>
-      </div>
+      ${r.detail ? `
+        <div id="${cardId}_short" style="font-size:11px;color:var(--muted);margin-bottom:5px">${esc(r.detail.substring(0,100))}${r.detail.length>100?'<span id="'+cardId+'_dots">… <button onclick="riskExpand(\''+cardId+'\')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0">▼ More</button></span>':''}</div>
+        ${r.detail.length>100?`<div id="${cardId}_full" style="display:none;font-size:11px;color:var(--muted);margin-bottom:5px">${esc(r.detail)}<button onclick="riskCollapse('${cardId}')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0;margin-left:6px">▲ Less</button></div>`:''}
+      ` : ''}
+      <div style="font-size:10px;color:var(--muted2)">Owner: ${esc(r.owner||'—')}</div>
     </div>`;
+  }
+
+  const grouped = orderedFAs.map(fa => {
+    const color = FA_COLOR_R[fa] || '#94a3b8';
+    const items = groups[fa];
+    const hasCritHigh = items.some(r => r.level==='critical'||r.level==='high');
+    return `<div style="margin-bottom:16px">
+      <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 10px;background:${color}18;border-radius:5px;margin-bottom:8px">
+        <span style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${color}">${esc(fa)}</span>
+        <span style="font-size:10px;color:${color}">${items.length}</span>
+        ${hasCritHigh?`<span style="font-size:9px;color:var(--red)">🔴</span>`:''}
+      </div>
+      ${items.map((r,i)=>riskCard(r,fa.replace(/\s/g,'')+'_'+i)).join('')}
+    </div>`;
+  }).join('');
+
+  const totCrit = risks.filter(r=>r.level==='critical').length;
+  const totHigh = risks.filter(r=>r.level==='high').length;
+
+  return `<div style="padding:24px 32px;max-width:900px">
+    <div style="margin-bottom:16px">
+      <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Team Intelligence</div>
+      <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">Risks & Actions</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:8px;padding:10px 18px;text-align:center">
+        <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--red)">${totCrit}</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted)">Critical</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--amber);border-radius:8px;padding:10px 18px;text-align:center">
+        <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--amber)">${totHigh}</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted)">High</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--accent);border-radius:8px;padding:10px 18px;text-align:center">
+        <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--accent)">${risks.length}</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted)">Total</div>
+      </div>
+    </div>
+    ${grouped}
+  </div>`;
+}
+
+function riskExpand(id) {
+  var s=document.getElementById(id+'_short'); var f=document.getElementById(id+'_full');
+  if(s){s.style.display='none';} if(f){f.style.display='block';}
+}
+function riskCollapse(id) {
+  var s=document.getElementById(id+'_short'); var f=document.getElementById(id+'_full');
+  if(s){s.style.display='';} if(f){f.style.display='none';}
 }
 
 
@@ -1681,8 +1704,40 @@ function renderHRBP(w, pw) {
     </div>`;
   }
 
-  const connectItems = w.hrbp_connects.map(parseConnects).join('')
-    || '<div class="empty-state">No connects logged.</div>';
+
+  // ── Compact 2-col connect card builder ──────────────────────────────
+  function buildConnectCard(c, idx) {
+    const nm      = (c.name||'').replace(/\s+for\s+\w+/i,'').trim();
+    const region  = c.region || getHRBPRegion(nm);
+    const text    = c.detail || c.activities || '';
+    const issues  = (c.issues||'').trim();
+    const erCases = (c.er_cases||'').trim();
+    const cardId  = 'hc_'+idx;
+    const regionColors = {North:'#60a5fa',South:'#34d399',East:'#f59e0b',West:'#a78bfa','Pan India':'#94a3b8'};
+    const rCol    = regionColors[region] || '#94a3b8';
+    const firstLine = text.split(/\n/)[0].trim().substring(0,90);
+    const hasMore   = text.split(/\n/).filter(l=>l.trim()).length > 1;
+    const bullets   = text.split(/\n/).map(l=>l.trim().replace(/^[•\-\*]\s*/,'')).filter(l=>l.length>4);
+    const bulletHTML= bullets.map(b=>`<div style="display:flex;gap:6px;margin-bottom:3px"><span style="color:var(--accent);flex-shrink:0">·</span><span style="font-size:11px;color:var(--muted)">${esc(b.substring(0,120))}</span></div>`).join('');
+    const erBadge   = erCases&&erCases.toLowerCase()!=='na'&&erCases.toLowerCase()!=='nil'
+      ? `<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(248,113,113,.12);color:#f87171;font-weight:600">ER: ${esc(erCases.substring(0,30))}</span>` : '';
+    const issueBadge= issues&&issues.toLowerCase()!=='na'&&issues.trim()!==''
+      ? `<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(251,191,36,.12);color:#fbbf24;font-weight:600">⚠ Issue</span>` : '';
+    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      <div style="padding:10px 13px;border-bottom:1px solid var(--border);background:var(--surface3);display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:12px;font-weight:700;color:var(--text)">${esc(nm)}</div>
+        <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">${erBadge}${issueBadge}<span style="font-size:9px;padding:2px 8px;border-radius:10px;background:${rCol}18;color:${rCol};font-weight:600">${esc(region)}</span></div>
+      </div>
+      <div style="padding:10px 13px">
+        ${firstLine?`<div style="font-size:11px;color:var(--muted);margin-bottom:6px;font-style:italic">${esc(firstLine)}${hasMore?'…':''}</div>`:''}
+        ${hasMore?`<div id="${cardId}_full" style="display:none;margin-bottom:6px">${bulletHTML}</div><button onclick="hcToggle('${cardId}')" id="${cardId}_btn" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0">▼ More details</button>`:`<div>${bulletHTML}</div>`}
+      </div>
+    </div>`;
+  }
+  const _allConnects = w.hrbp_connects || [];
+  const connectItems = _allConnects.length
+    ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${_allConnects.map((c,i)=>buildConnectCard(c,i)).join('')}</div>`
+    : '<div class="empty-state">No site visits logged this week.</div>';
 
   // Count actual site visits (multi-site submissions count each site)
   const actualVisits = w.hrbp_connects.reduce((total, c) => {
@@ -2671,7 +2726,7 @@ function renderActionCentre(el) {
 
   if (!_tasksLoaded) {
     if (typeof _sbUser !== 'undefined' && _sbUser) {
-      el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">⏳</div>Loading tasks from Supabase…</div>';
+      el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">⏳</div>Loading tasks…</div>';
       loadActionTasks();
     } else {
       el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:10px">🔒</div>Sign in to access the Action Centre</div>';
@@ -2679,103 +2734,133 @@ function renderActionCentre(el) {
     return;
   }
 
-  const open = _actionTasks.filter(t => t.status === 'Open' || t.status === 'In Progress');
-  const planned = open.filter(t => t.task_type === 'planned_action');
-  const risks = open.filter(t => t.task_type === 'risk');
-  const escalations = open.filter(t => t.task_type === 'escalation');
-  const overdue = open.filter(t => t.due_date && new Date(t.due_date) < new Date());
-  const done = _actionTasks.filter(t => t.status === 'Done').slice(0, 5);
-  const rolledOver = _actionTasks.filter(t => t.rollover_count > 0 && t.status !== 'Done' && t.status !== 'Closed');
+  const FA_ORDER = ['HR Ops','TA','Payroll','HRBP','L&D','Admin','General'];
+  const FA_COLOR = {'HR Ops':'#60a5fa','TA':'#34d399','Payroll':'#f59e0b','HRBP':'#a78bfa','L&D':'#fb923c','Admin':'#94a3b8','General':'#94a3b8'};
+  const SEV_ORD  = {Critical:0,High:1,Medium:2,Low:3};
+
+  const open       = _actionTasks.filter(t => t.status==='Open'||t.status==='In Progress');
+  const planned    = open.filter(t => t.task_type==='planned_action');
+  const nextWeek   = open.filter(t => t.task_type==='next_week_plan');
+  const risks      = open.filter(t => t.task_type==='risk');
+  const escalations= open.filter(t => t.task_type==='escalation');
+  const overdue    = open.filter(t => t.due_date && new Date(t.due_date) < new Date());
+  const done       = _actionTasks.filter(t => t.status==='Done').slice(0,6);
+  const rolledOver = _actionTasks.filter(t => t.rollover_count>0 && t.status!=='Done' && t.status!=='Closed');
+  const isAdmin    = typeof _sbRole !== 'undefined' && (_sbRole.role==='admin'||_sbRole.role==='executive');
 
   function taskCard(t) {
-    const st = TASK_STATUS_STYLE[t.status] || { col: 'var(--muted)', bg: 'rgba(100,116,139,.1)' };
-    const isOverdue = t.due_date && new Date(t.due_date) < new Date() && t.status !== 'Done' && t.status !== 'Closed';
-    const sevStyle = SEVERITY_STYLE[t.severity] || '';
-    const rollBadge = t.rollover_count > 0 ? `<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(148,163,184,.15);color:#94a3b8">↩${t.rollover_count}x</span>` : '';
-    return `<div style="background:var(--surface2);border:1px solid ${isOverdue?'rgba(248,113,113,.4)':' var(--border)'};border-radius:8px;padding:12px 14px;margin-bottom:8px${isOverdue?';box-shadow:0 0 0 1px rgba(248,113,113,.2)':''}">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px">
+    const st = TASK_STATUS_STYLE[t.status] || {col:'var(--muted)',bg:'rgba(100,116,139,.1)'};
+    const isOverdue = t.due_date && new Date(t.due_date)<new Date() && t.status!=='Done' && t.status!=='Closed';
+    const sevStyle  = SEVERITY_STYLE[t.severity] || '';
+    const rollBadge = t.rollover_count>0 ? `<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(148,163,184,.15);color:#94a3b8">↩${t.rollover_count}x</span>` : '';
+    const faColor   = FA_COLOR[t.function_area] || '#94a3b8';
+    const cardId    = 'tc_'+t.id.replace(/-/g,'').substring(0,12);
+    const hasMore   = t.description && t.description.length > 0;
+    return `<div style="background:var(--surface2);border:1px solid ${isOverdue?'rgba(248,113,113,.4)':'var(--border)'};border-left:3px solid ${faColor};border-radius:8px;padding:11px 13px;margin-bottom:8px${isOverdue?';box-shadow:0 0 0 1px rgba(248,113,113,.15)':''}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px">
         <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.4">${esc(t.title)}</div>
-        <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
-          ${rollBadge}
-          <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${st.bg};color:${st.col};font-weight:600;white-space:nowrap">${t.status}</span>
-        </div>
+        <div style="display:flex;gap:4px;align-items:center;flex-shrink:0">${rollBadge}<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${st.bg};color:${st.col};font-weight:600;white-space:nowrap">${t.status}</span></div>
       </div>
-      ${t.description?`<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${esc(t.description.substring(0,120))}${t.description.length>120?'…':''}</div>`:''}
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:10px;padding:1px 7px;border-radius:4px;background:rgba(96,165,250,.12);color:#60a5fa">${t.function_area||'—'}</span>
+      ${hasMore?`<div id="${cardId}_short" style="font-size:11px;color:var(--muted);margin-bottom:5px">${esc(t.description.substring(0,100))}${t.description.length>100?`<button onclick="acExpand('${cardId}')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0 4px">▼ More</button>`:''}</div>
+      ${t.description.length>100?`<div id="${cardId}_full" style="display:none;font-size:11px;color:var(--muted);margin-bottom:5px">${esc(t.description)}<button onclick="acCollapse('${cardId}')" style="background:none;border:none;color:var(--accent);font-size:10px;cursor:pointer;padding:0 4px">▲ Less</button></div>`:''}`:'' }
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         ${t.severity?`<span style="font-size:10px;${sevStyle}">${t.severity}</span>`:''}
         ${t.due_date?`<span style="font-size:10px;color:${isOverdue?'var(--red)':'var(--muted2)'}">Due ${t.due_date}</span>`:''}
         ${t.assigned_to_name?`<span style="font-size:10px;color:#a78bfa">→ ${esc(t.assigned_to_name)}</span>`:''}
-        ${t.status_note?`<span style="font-size:10px;color:var(--muted2);font-style:italic">${esc(t.status_note.substring(0,50))}</span>`:''}
         <button onclick="openTaskUpdateModal('${t.id}')" style="margin-left:auto;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">Update</button>
       </div>
     </div>`;
   }
 
-  const isAdmin = typeof _sbRole !== 'undefined' && (_sbRole.role === 'admin' || _sbRole.role === 'executive');
+  function groupByFA(tasks) {
+    const groups = {};
+    tasks.forEach(t => {
+      const fa = t.function_area||'General';
+      if (!groups[fa]) groups[fa]=[];
+      groups[fa].push(t);
+    });
+    Object.keys(groups).forEach(fa => groups[fa].sort((a,b)=>(SEV_ORD[a.severity]??3)-(SEV_ORD[b.severity]??3)));
+    return groups;
+  }
 
-  el.innerHTML = `<div style="padding:24px 32px;max-width:1280px">
+  function renderGrouped(tasks, empty) {
+    if (!tasks.length) return `<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">${empty}</div>`;
+    const g = groupByFA(tasks);
+    const fas = [...FA_ORDER.filter(f=>g[f]),...Object.keys(g).filter(f=>!FA_ORDER.includes(f))];
+    return fas.map(fa => {
+      const col = FA_COLOR[fa]||'#94a3b8';
+      return `<div style="margin-bottom:10px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${col};padding:3px 8px;background:${col}18;border-radius:4px;display:inline-block;margin-bottom:6px">${esc(fa)} · ${g[fa].length}</div>
+        ${g[fa].map(taskCard).join('')}
+      </div>`;
+    }).join('');
+  }
+
+  el.innerHTML = `<div style="padding:24px 32px;max-width:1400px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
       <div>
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Team Intelligence</div>
         <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">Action Centre</div>
       </div>
-      <div style="display:flex;gap:8px">
-        <button onclick="openNewTaskModal('planned_action')" style="padding:7px 16px;border:1px solid var(--accent);border-radius:8px;background:none;color:var(--accent);font-size:12px;cursor:pointer;font-weight:600">+ Planned Action</button>
-        <button onclick="openNewTaskModal('risk')" style="padding:7px 16px;border:1px solid var(--amber);border-radius:8px;background:none;color:var(--amber);font-size:12px;cursor:pointer;font-weight:600">+ Risk</button>
-        ${isAdmin?`<button onclick="openNewTaskModal('escalation')" style="padding:7px 16px;border:1px solid #a78bfa;border-radius:8px;background:none;color:#a78bfa;font-size:12px;cursor:pointer;font-weight:600">+ Escalation</button>`:''}
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="openNewTaskModal('planned_action')" style="padding:7px 14px;border:1px solid var(--accent);border-radius:8px;background:none;color:var(--accent);font-size:11px;cursor:pointer;font-weight:600">+ Planned Action</button>
+        <button onclick="openNewTaskModal('risk')" style="padding:7px 14px;border:1px solid var(--amber);border-radius:8px;background:none;color:var(--amber);font-size:11px;cursor:pointer;font-weight:600">+ Risk</button>
+        ${isAdmin?`<button onclick="openNewTaskModal('escalation')" style="padding:7px 14px;border:1px solid #a78bfa;border-radius:8px;background:none;color:#a78bfa;font-size:11px;cursor:pointer;font-weight:600">+ Escalation</button>`:''}
       </div>
     </div>
 
-    <!-- Summary strip -->
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
-      ${[['Open Tasks',open.length,'var(--accent)'],['Overdue',overdue.length,'var(--red)'],['Risks Open',risks.length,'var(--amber)'],['Escalations',escalations.length,'#a78bfa'],['Rolled Over',rolledOver.length,'#94a3b8']].map(([l,v,c])=>`
-      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:12px;text-align:center">
-        <div style="font-family:Bebas_Neue,sans-serif;font-size:30px;color:${c};line-height:1">${v}</div>
-        <div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:3px">${l}</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px">
+      ${[['Open',open.length,'var(--accent)'],['Overdue',overdue.length,'var(--red)'],['Risks',risks.length,'var(--amber)'],['Escalations',escalations.length,'#a78bfa'],['Rolled Over',rolledOver.length,'#94a3b8']].map(([l,v,c])=>`
+      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:10px;text-align:center">
+        <div style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:${c};line-height:1">${v}</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted);margin-top:2px">${l}</div>
       </div>`).join('')}
     </div>
 
-    <!-- Three columns -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:start">
-
-      <!-- Planned Actions -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;align-items:start">
       <div>
-        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:8px">
-          📋 Planned Actions <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span>
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          📋 Planned <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span>
         </div>
-        ${overdue.filter(t=>t.task_type==='planned_action').length>0?
-          `<div style="font-size:10px;color:var(--red);margin-bottom:6px">⚠ ${overdue.filter(t=>t.task_type==='planned_action').length} overdue</div>`:''}
-        ${planned.length ? planned.map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open planned actions</div>'}
+        ${renderGrouped(planned,'No open planned actions')}
       </div>
-
-      <!-- Risks -->
       <div>
-        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:8px">
-          ⚠ Risks <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(251,191,36,.12);color:var(--amber)">${risks.length}</span>
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f59e0b;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          📅 Next Week <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b">${nextWeek.length}</span>
         </div>
-        ${risks.filter(t=>t.severity==='Critical'||t.severity==='High').length>0?
-          `<div style="font-size:10px;color:var(--red);margin-bottom:6px">🔴 ${risks.filter(t=>t.severity==='Critical'||t.severity==='High').length} high/critical</div>`:''}
-        ${risks.length ? risks.sort((a,b)=>{const o={Critical:0,High:1,Medium:2,Low:3};return (o[a.severity]??3)-(o[b.severity]??3);}).map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open risks</div>'}
+        ${renderGrouped(nextWeek,'No next week plans')}
       </div>
-
-      <!-- Escalations (admin-assigned) -->
       <div>
-        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:8px">
-          🔺 Escalations <span style="font-size:11px;padding:1px 8px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${escalations.length}</span>
-          ${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin assigns)</span>':''}
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          ⚠ Risks <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(251,191,36,.12);color:var(--amber)">${risks.length}</span>
         </div>
-        ${escalations.length ? escalations.map(taskCard).join('') : '<div style="font-size:12px;color:var(--muted);padding:20px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open escalations</div>'}
+        ${renderGrouped(risks,'No open risks')}
+      </div>
+      <div>
+        <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          🔺 Escalations <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${escalations.length}</span>
+          ${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin)</span>':''}
+        </div>
+        ${renderGrouped(escalations,'No open escalations')}
       </div>
     </div>
 
-    <!-- Recently Done -->
     ${done.length?`<div style="margin-top:20px">
       <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:10px">✓ Recently Completed</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${done.map(taskCard).join('')}</div>
     </div>`:''}
   </div>`;
 }
+
+function acExpand(id) {
+  var s=document.getElementById(id+'_short'); var f=document.getElementById(id+'_full');
+  if(s)s.style.display='none'; if(f)f.style.display='block';
+}
+function acCollapse(id) {
+  var s=document.getElementById(id+'_short'); var f=document.getElementById(id+'_full');
+  if(s)s.style.display=''; if(f)f.style.display='none';
+}
+function hcToggle(id){var f=document.getElementById(id+'_full');var b=document.getElementById(id+'_btn');if(!f||!b)return;var shown=f.style.display!=='none';f.style.display=shown?'none':'block';b.textContent=shown?'▼ More details':'▲ Less';}
 
 
 function init() {
