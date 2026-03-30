@@ -1,10 +1,3 @@
-
-
-
-
-
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1273,6 +1266,7 @@ function renderOps(w, pw, elArg) {
   }
   var week = w || (WEEK_ORDER&&WEEK_ORDER.length?WEEKS_DATA[WEEK_ORDER[WEEK_ORDER.length-1]]:{label:'&mdash;',payroll_risks:[],payroll_errors:0,payroll_month:''});
   if(!week||!week.week_key){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading week data…</div>';return;}
+  if(!week||!week.week_key){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading week data…</div>';return;}
   // ── HR Ops weekly submission data ────────────────────────────────
   var hropsGaps = ((week&&week.hrops_gaps)||[]).filter(function(r){
     var s=String(r||'').trim().toLowerCase();
@@ -1301,7 +1295,24 @@ function renderOps(w, pw, elArg) {
         +'<div style="font-size:13px;font-weight:600;color:var(--red)">'+payErrors+' payroll error'+(payErrors!==1?'s':'')
         +(payMonth?' — '+esc(payMonth):'')+' — Must resolve before disbursement.</div></div>'
     : '';
-  var payRisks = ((week&&week.payroll_risks)||[]).filter(function(r){return r&&r.trim()&&!['na','nil','none'].includes(r.toLowerCase().trim());});
+  var hropsGaps=((week&&week.hrops_gaps)||[]).filter(function(r){var s=String(r||'').trim().toLowerCase();return r&&r.trim()&&!['na','nil','none','no gaps'].includes(s);});
+  var hropsEsc=((week&&week.hrops_esc_texts)||[]).filter(function(r){var s=String(r||'').trim().toLowerCase();return r&&r.trim()&&!['na','nil','none'].includes(s);});
+  var payErrors=(week&&week.payroll_errors)||0;
+  var payMonth=(week&&week.payroll_month)||'';
+  var hropsGapsHTML=hropsGaps.map(function(g){
+    return'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:8px;padding:10px 14px;margin-bottom:8px">'
+      +'<div style="font-size:11px;color:var(--text);line-height:1.5">'+esc(g)+'</div></div>';}).join('')
+    ||'<div style="font-size:12px;color:var(--muted);padding:10px 0">No process gaps logged this week.</div>';
+  var hropsEscHTML=hropsEsc.map(function(e){
+    return'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid #a78bfa;border-radius:8px;padding:10px 14px;margin-bottom:8px">'
+      +'<div style="font-size:11px;color:var(--text);line-height:1.5">'+esc(e)+'</div></div>';}).join('')
+    ||'<div style="font-size:12px;color:var(--muted);padding:10px 0">No escalations logged this week.</div>';
+  var payErrBanner=payErrors>0
+    ?'<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px">'
+      +'<div style="font-size:13px;font-weight:600;color:var(--red)">'+payErrors+' payroll error'+(payErrors!==1?'s':'')
+      +(payMonth?' — '+esc(payMonth):'')+' — Must resolve before disbursement.</div></div>'
+    :'';
+  var payRisks=((week&&week.payroll_risks)||[]).filter(function(r){return r&&r.trim()&&!['na','nil','none'].includes(r.toLowerCase().trim());});
   var payRiskHTML = payRisks.length
     ? payRisks.map(function(r){return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:7px;font-size:12px;color:var(--text)">&starf; '+esc(r)+'</div>';}).join('')
     : '<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No payroll escalations reported this week</div>';
@@ -1507,6 +1518,8 @@ function buildRisks(w) {
 }
 
 function renderRisks(w, pw) {
+  if(!w){return "";} // null guard
+
   const risks = buildRisks(w);
   if (!risks.length) return '<div style="padding:40px;text-align:center;color:var(--muted)">No risks identified this week.</div>';
   const FA_ORDER_R=['TA','Payroll','HR Ops','HRBP','Platinum','FnF','Resignation','General'];
@@ -1590,6 +1603,8 @@ function isNil(s) {
 
 // ─── RENDER HRBP ──────────────────────────────────────────────
 function renderHRBP(w, pw) {
+  if(!w){return "";} // null guard
+
 
   // Connects: parse structured site visit format + free-text format
   var _ciIdx = 0;
@@ -2191,6 +2206,7 @@ function toggleConnectExpand(id) {
 
 function render() {
   const w = WEEKS_DATA[currentWeek];
+  if (!w) { console.warn('[render] No week data for key:', currentWeek, '| Keys in WEEKS_DATA:', Object.keys(WEEKS_DATA)); return; }
   const wKeys = (window.WEEK_ORDER_LIVE || WEEK_ORDER).filter(k => WEEKS_DATA[k]);
   const prevKey = wKeys[wKeys.indexOf(currentWeek) - 1] || wKeys[0];
   const pw = WEEKS_DATA[prevKey] || w;
@@ -3519,26 +3535,32 @@ let _formWeekKey=null,_formPhotos=[],_existingSub=null,_visitYes=false;
 
 // ── WEEK KEY HELPERS (global) ─────────────────────────────────────────────
 function getCurrentWeekKey() {
-  const now=new Date(),mo=now.getMonth(),day=now.getDate();
-  if(mo===1&&day>=2&&day<=8)  return'W05';
-  if(mo===1&&day>=9&&day<=15) return'W06';
-  if(mo===1&&day>=16&&day<=22)return'W07';
-  if(mo===1&&day>=23)         return'W08';
-  if(mo===2&&day>=2&&day<=8)  return'W09';
-  if(mo===2&&day>=9&&day<=15) return'W10';
-  if(mo===2&&day>=16&&day<=22)return'W11';
-  if(mo===2&&day>=23)         return'W12';
-  if(mo===3&&day>=6&&day<=12) return'W13';
-  if(mo===3&&day>=13&&day<=19)return'W14';
-  if(mo===3&&day>=20&&day<=26)return'W15';
-  if(mo===3&&day>=27)         return'W16';
-  if(mo===4&&day>=3&&day<=9)  return'W17';
-  if(mo===4&&day>=10&&day<=16)return'W18';
-  if(mo===4&&day>=17&&day<=23)return'W19';
-  if(mo===4&&day>=24)         return'W20';
-  const yr=now.getFullYear();
-  const wn=Math.ceil(((now-new Date(yr,0,1))/86400000+1)/7);
-  return'W'+String(wn).padStart(2,'0');
+  var now = new Date();
+  var mo = now.getMonth();
+  var day = now.getDate();
+  // Static map for FY2025-26 (Jan–Dec 2026) — extend as needed
+  var map = [
+    [1,2,8,'W05'],[1,9,15,'W06'],[1,16,22,'W07'],[1,23,31,'W08'],
+    [2,2,8,'W09'],[2,9,15,'W10'],[2,16,22,'W11'],[2,23,31,'W12'],
+    [3,6,12,'W13'],[3,13,19,'W14'],[3,20,26,'W15'],[3,27,31,'W16'],
+    [4,3,9,'W17'],[4,10,16,'W18'],[4,17,23,'W19'],[4,24,30,'W20'],
+    [5,1,9,'W21'],[5,10,16,'W22'],[5,17,23,'W23'],[5,24,31,'W24'],
+    [6,1,8,'W25'],[6,9,15,'W26'],[6,16,22,'W27'],[6,23,30,'W28'],
+    [7,1,8,'W29'],[7,9,15,'W30'],[7,16,22,'W31'],[7,23,31,'W32'],
+    [8,1,8,'W33'],[8,9,15,'W34'],[8,16,22,'W35'],[8,23,31,'W36'],
+    [9,1,8,'W37'],[9,9,15,'W38'],[9,16,22,'W39'],[9,23,30,'W40'],
+    [10,1,8,'W41'],[10,9,15,'W42'],[10,16,22,'W43'],[10,23,31,'W44'],
+    [11,1,8,'W45'],[11,9,15,'W46'],[11,16,22,'W47'],[11,23,30,'W48'],
+    [12,1,8,'W49'],[12,9,15,'W50'],[12,16,22,'W51'],[12,23,31,'W52']
+  ];
+  for(var i=0;i<map.length;i++){
+    if(mo===map[i][0]&&day>=map[i][1]&&day<=map[i][2]) return map[i][3];
+  }
+  // Dynamic fallback — ISO week number
+  var yr = now.getFullYear();
+  var start = new Date(yr,0,1);
+  var wn = Math.ceil(((now-start)/86400000+start.getDay()+1)/7);
+  return 'W'+String(wn).padStart(2,'0');
 }
 function getCurrentWeekLabel() {
   const now=new Date(),day=now.getDay();
@@ -4132,6 +4154,12 @@ async function submitWeeklyForm(fnType,region){
 }
 
 async function rebuildWeekFromSubmissions(weekKey){
+  // Only rebuild if weekly_reports doesn't already have this week
+  // (Supabase has the authoritative row — RLS-restricted queries produce partial data)
+  if(WEEKS_DATA[weekKey]&&WEEKS_DATA[weekKey].week_key){
+    console.log('[rebuild] Skipping — week already in WEEKS_DATA:', weekKey);
+    return;
+  }
   const{data:subs}=await _sb.from('weekly_submissions').select('*').eq('week_key',weekKey);
   if(!subs||!subs.length)return;
   const wT=WEEKS_DATA[weekKey]||{};
@@ -6174,6 +6202,28 @@ async function sbBoot(user){
   _sbUser=user;
   const{data:profile}=await _sb.from('user_profiles').select('role,region,function_type,tab_scope,display_name').eq('id',user.id).single();
   _sbRole=profile||{role:'viewer',region:null};
+  // Load TEAM_MEMBERS from user_profiles — replaces hardcoded array
+  try {
+    const{data:tmRows}=await _sb.from('user_profiles').select('id,display_name,role,function_type').order('display_name');
+    if(tmRows&&tmRows.length){
+      TEAM_MEMBERS=tmRows.filter(function(r){return r.display_name&&r.role!=='viewer';}).map(function(r){
+        var grp=r.role==='admin'?'Admin':r.role==='executive'?'CXO':
+          r.function_type==='hrops'?'HR Ops':r.function_type==='payroll'?'Payroll':
+          r.function_type==='hrbp'?'HRBP':r.function_type==='ta'?'TA':'Other';
+        return{id:r.id,name:r.display_name,fn:r.function_type||r.role,group:grp};
+      });
+      console.log('[sbBoot] TEAM_MEMBERS loaded from Supabase:', TEAM_MEMBERS.length, 'members');
+    }
+  } catch(e){ console.warn('[sbBoot] TEAM_MEMBERS fallback to hardcoded:', e.message); }
+  // Load Workforce Intel from Supabase — replaces hardcoded WI constant
+  try {
+    const{data:wiRow}=await _sb.from('workforce_intel').select('data').eq('id','current').single();
+    if(wiRow&&wiRow.data&&wiRow.data.active_hc_mar){
+      // Merge with hardcoded WI — Supabase takes precedence
+      Object.assign(WI, wiRow.data);
+      console.log('[sbBoot] WI loaded from Supabase, active_hc_mar:', WI.active_hc_mar);
+    }
+  } catch(e){ console.warn('[sbBoot] WI fallback to hardcoded:', e.message); }
   // Apply tab_scope restrictions
   if(_sbRole && (_sbRole.tab_scope === 'admin_facilities_only' || _sbRole.tab_scope === 'admin_facilities_overview_actions')) {
     var _scopeAllowed = {'Admin & Facilities':1,'Admin &amp; Facilities':1};
@@ -6187,6 +6237,7 @@ async function sbBoot(user){
     });
     setTimeout(function(){snavClick('admin');},150);
   }  const{data:weeks,error}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
+  console.log('[sbBoot] weekly_reports:', error?'ERROR:'+error.message:weeks?.length+' rows loaded');
   if(!error&&weeks&&weeks.length>0){WEEKS_DATA={};weeks.forEach(w=>{WEEKS_DATA[w.week_key]=w;});WEEK_ORDER=weeks.map(w=>w.week_key);weeks.forEach(w=>{WEEK_LABELS[w.week_key]=w.label||'';WEEK_NAMES[w.week_key]='Week '+w.week_num+(w.week_key===WEEK_ORDER[WEEK_ORDER.length-1]?' (Latest)':'');});window.WEEK_ORDER_LIVE=WEEK_ORDER;currentWeek=WEEK_ORDER[WEEK_ORDER.length-1];console.log('[HR] weeks loaded:',WEEK_ORDER.length);}
   else{console.warn('[HR] No weekly data yet');}
   // Check if current week has submissions but no weekly_reports row
