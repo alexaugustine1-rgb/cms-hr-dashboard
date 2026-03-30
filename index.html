@@ -1348,6 +1348,50 @@ function renderOps(w, pw, elArg) {
   var _wkData = WEEKS_DATA[currentWeek] || {};
   var _taDetail = (_wkData.ta_detail || []);
   var _wkLabel  = _wkData.label || currentWeek;
+  var _wkWeeklyHTML = '';
+  if(_taDetail.length > 0) {
+    var _wkRows = _taDetail.map(function(r) {
+      var _mine = matchesMe(r.name);
+      var _bg   = _mine ? 'rgba(96,165,250,.07)' : 'transparent';
+      var _nxt  = (r.next_week||'').trim().replace(/^(\d+)$/,'$1 expected');
+      return '<tr style="border-bottom:1px solid rgba(42,61,82,.25);background:'+_bg+'">'
+        +'<td style="padding:7px 10px;font-size:12px;color:var(--text);font-weight:'+(_mine?'600':'400')+'">'+esc(r.name||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(r.region||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--text);text-align:center">'+((r.opened||0))+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--green);text-align:center">'+((r.closed||0))+'</td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--amber);text-align:center">'+((r.offers||0))+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(_nxt||'—')+'</td>'
+        +(isAdminView?'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc((r.dropout_reason||'—').substring(0,40))+'</td>':'')
+        +'</tr>';
+    }).join('');
+    var _totO = _taDetail.reduce(function(s,r){return s+(r.opened||0);},0);
+    var _totC = _taDetail.reduce(function(s,r){return s+(r.closed||0);},0);
+    var _totOf= _taDetail.reduce(function(s,r){return s+(r.offers||0);},0);
+    _wkWeeklyHTML = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px">'
+      +'<div style="padding:10px 14px;background:var(--surface3);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
+      +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)">Weekly Submission — '+esc(_wkLabel)+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">'+_taDetail.length+' recruiter'+(+_taDetail.length!==1?'s':'')+' submitted</div>'
+      +'</div>'
+      +'<table style="width:100%;border-collapse:collapse">'
+      +'<thead><tr style="border-bottom:1px solid var(--border)">'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Recruiter</th>'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Region</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Opened</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--green);font-weight:600;text-transform:uppercase">Closed</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--amber);font-weight:600;text-transform:uppercase">Offers</th>'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Joining Plan</th>'
+      +(isAdminView?'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase">Dropout Reason</th>':'')
+      +'</tr></thead>'
+      +'<tbody>'+_wkRows+'</tbody>'
+      +'<tfoot><tr style="border-top:2px solid var(--border);background:var(--surface3)">'
+      +'<td colspan="2" style="padding:7px 10px;font-size:11px;font-weight:600;color:var(--muted)">TOTAL</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--text);text-align:center">'+_totO+'</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--green);text-align:center">'+_totC+'</td>'
+      +'<td style="padding:7px 10px;font-size:13px;font-weight:700;color:var(--amber);text-align:center">'+_totOf+'</td>'
+      +'<td'+(isAdminView?' colspan="2"':'')+' style="padding:7px 10px"></td>'
+      +'</tr></tfoot>'
+      +'</table></div>';
+  }
 
   el.innerHTML='<div style="padding:20px 28px;max-width:1280px">'
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">'
@@ -1868,7 +1912,7 @@ function renderLD(w, pw) {
   });
 
   const upcomingHtml = REGION_ORDER
-    .filter(r => grouped[r].length > 0)
+    .filter(r => grouped[r] && grouped[r].length > 0)
     .map(r => {
       const map = {'North':'N','South':'S','East':'E','West':'W','Pan-India':'P'};
       const rows = grouped[r].map(p => `
@@ -2213,8 +2257,8 @@ function render() {
   Object.entries(renders).forEach(([tab, fn]) => {
     const el = document.getElementById(`tab-${tab}`);
     if (!el) return;
-    const result = fn(w, pw);
-    if (result !== '') el.innerHTML = result;
+    try { const result = fn(w, pw); if (result !== '') el.innerHTML = result; }
+    catch(e) { console.error('[render] tab', tab, 'crashed:', e.message); }
   });
 
   // Load async HRBP visit alerts if logged in
@@ -3593,7 +3637,7 @@ async function renderSubmitTab(mc){
 }
 
 // ── TEAM MEMBERS ────────────────────────────────────────────────────────────
-var TEAM_MEMBERS = [
+const TEAM_MEMBERS = [
   {id:"33e4101d-df9b-44e3-bcc7-56d16abb0c40",name:"Alex Augustine",fn:"admin",group:"Admin"},
   {id:"c2e8382a-7628-44b6-a9f9-0ad507d944d0",name:"Amit Dasgupta",fn:"executive",group:"CXO"},
   {id:"cc470378-954c-4d21-bdfe-b122b3d5fcab",name:"Neeraj Sharma",fn:"executive",group:"CXO"},
