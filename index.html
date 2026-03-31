@@ -7331,42 +7331,44 @@ async function processEmployeeMaster(file) {
 
     // ── Compute and save Workforce Intel from ALL active employees ─────────
     try {
-      const allActive = rows.filter(function(r) {
+      var allActive = rows.filter(function(r) {
         return String(r['EmployeeStatus']||r['Employee Status']||'').trim() === 'Active';
       });
       log('Computing Workforce Intel from ' + allActive.length + ' active employees…', 'info');
 
-      function colVal(r, ...terms) {
-        const key = Object.keys(r).find(k => terms.some(t => k.toLowerCase().includes(t.toLowerCase())));
+      var colVal = function(r) {
+        var terms = Array.prototype.slice.call(arguments, 1);
+        var key = Object.keys(r).find(function(k) { return terms.some(function(t) { return k.toLowerCase().indexOf(t.toLowerCase()) >= 0; }); });
         return key ? String(r[key]||'').trim() : '';
-      }
-      function numVal(r, ...terms) {
-        const v = colVal(r, ...terms);
-        const n = parseFloat(v.replace(/,/g,''));
+      };
+      var numVal = function(r) {
+        var terms = Array.prototype.slice.call(arguments, 1);
+        var v = colVal.apply(null, [r].concat(terms));
+        var n = parseFloat(v.replace(/,/g,''));
         return isNaN(n) ? 0 : n;
-      }
+      };
 
       // Headcount by region
-      const regionHC = {}, regionWage = {}, regionFemale = {};
-      const ageGroups = {'<25':0,'25-30':0,'30-35':0,'35-45':0,'>45':0};
-      const tenureGroups = {'<6 months':0,'6m-1yr':0,'1-3 yrs':0,'3-5 yrs':0,'5-10 yrs':0,'>10 yrs':0};
-      const ctcGroups = {'<2.5L':0,'2.5-4L':0,'4-6L':0,'6-10L':0,'10-15L':0,'>15L':0};
-      let femaleCount = 0, totalWage = 0;
+      var regionHC = {}, regionWage = {}, regionFemale = {};
+      var ageGroups = {'<25':0,'25-30':0,'30-35':0,'35-45':0,'>45':0};
+      var tenureGroups = {'<6 months':0,'6m-1yr':0,'1-3 yrs':0,'3-5 yrs':0,'5-10 yrs':0,'>10 yrs':0};
+      var ctcGroups = {'<2.5L':0,'2.5-4L':0,'4-6L':0,'6-10L':0,'10-15L':0,'>15L':0};
+      var femaleCount = 0, totalWage = 0;
 
       allActive.forEach(function(r) {
-        const region  = colVal(r,'region') || 'Pan India';
-        const gender  = colVal(r,'gender','sex').toLowerCase();
-        const ctc     = numVal(r,'ctc','annual','salary');
-        const isFem   = gender === 'female' || gender === 'f';
+        var region  = colVal(r,'region') || 'Pan India';
+        var gender  = colVal(r,'gender','sex').toLowerCase();
+        var ctc     = numVal(r,'ctc','annual','salary');
+        var isFem   = gender === 'female' || gender === 'f';
 
         regionHC[region] = (regionHC[region]||0) + 1;
         if(isFem){ regionFemale[region]=(regionFemale[region]||0)+1; femaleCount++; }
         if(ctc>0){ regionWage[region]=(regionWage[region]||0)+ctc; totalWage+=ctc; }
 
         // Age
-        const dobStr = colVal(r,'dob','date of birth','birth');
+        var dobStr = colVal(r,'dob','date of birth','birth');
         if(dobStr){ try {
-          const age = Math.floor((new Date()-new Date(dobStr))/31536000000);
+          var age = Math.floor((new Date()-new Date(dobStr))/31536000000);
           if(age<25) ageGroups['<25']++;
           else if(age<30) ageGroups['25-30']++;
           else if(age<35) ageGroups['30-35']++;
@@ -7375,9 +7377,9 @@ async function processEmployeeMaster(file) {
         } catch(e){} }
 
         // Tenure
-        const dojStr = colVal(r,'doj','date of joining','join');
+        var dojStr = colVal(r,'doj','date of joining','join');
         if(dojStr){ try {
-          const yrs = (new Date()-new Date(dojStr))/31536000000;
+          var yrs = (new Date()-new Date(dojStr))/31536000000;
           if(yrs<0.5) tenureGroups['<6 months']++;
           else if(yrs<1) tenureGroups['6m-1yr']++;
           else if(yrs<3) tenureGroups['1-3 yrs']++;
@@ -7388,7 +7390,7 @@ async function processEmployeeMaster(file) {
 
         // CTC brackets (annual, in rupees)
         if(ctc>0){
-          const lac = ctc/100000;
+          var lac = ctc/100000;
           if(lac<2.5) ctcGroups['<2.5L']++;
           else if(lac<4) ctcGroups['2.5-4L']++;
           else if(lac<6) ctcGroups['4-6L']++;
@@ -7399,7 +7401,7 @@ async function processEmployeeMaster(file) {
       });
 
       // Build regions object
-      const regions = {};
+      var regions = {};
       Object.keys(regionHC).forEach(function(reg) {
         regions[reg] = {
           hc: regionHC[reg]||0,
@@ -7409,7 +7411,7 @@ async function processEmployeeMaster(file) {
         };
       });
 
-      const wiUpdate = {
+      var wiUpdate = {
         active_hc_mar:    allActive.length,
         female_count:     femaleCount,
         female_pct:       allActive.length ? Math.round(femaleCount/allActive.length*1000)/10 : 0,
@@ -7427,7 +7429,7 @@ async function processEmployeeMaster(file) {
       log('✓ Workforce Intel updated — ' + allActive.length + ' active employees, saved to database', 'ok');
 
       // Re-render workforce tab if active
-      const wfEl = document.getElementById('tab-workforce');
+      var wfEl = document.getElementById('tab-workforce');
       if(wfEl && wfEl.classList.contains('active') && typeof renderWorkforce==='function') {
         wfEl.innerHTML = renderWorkforce();
       }
