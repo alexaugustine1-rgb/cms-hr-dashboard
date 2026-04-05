@@ -1001,17 +1001,17 @@ function renderOverview(w, pw) {
       regExits += ra;
     });
     var regHC = rd.hc||1;
-    regAttr = regExits > 0 ? Math.round(regExits/regHC*4*100*10)/10 : null;
+    regAttr = regExits > 0 ? Math.round(regExits/regHC*4*100*10)/10 : 0;
     var fillRate = rd.ta_sourced>0?Math.round(rd.ta_joined/rd.ta_sourced*100):0;
-    var attrCol = regAttr!==null?(regAttr>25?'var(--red)':regAttr>15?'var(--amber)':'var(--green)'):'var(--muted)';
+    var attrCol = regAttr>0?(regAttr>25?'var(--red)':regAttr>15?'var(--amber)':'var(--green)'):'var(--muted)';
     var regCritical = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.region===reg&&r.tat>45;}).length : 0;
     var regColor = {'North':'#60a5fa','South':'#34d399','East':'#f59e0b','West':'#a78bfa'}[reg]||'var(--accent)';
     return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+regColor+';border-radius:10px;padding:14px 16px">'
       +'<div style="font-family:Bebas_Neue,sans-serif;font-size:18px;color:'+regColor+';letter-spacing:1px;margin-bottom:8px">'+reg+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
       +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">'+rd.hc.toLocaleString()+'</div><div style="font-size:10px;color:var(--muted)">Headcount</div></div>'
-      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+attrCol+'">'+regAttr+'%</div><div style="font-size:10px;color:var(--muted)">Annualised Attrition (Q1)</div></div>'
-      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">'+rd.ta_joined+'</div><div style="font-size:10px;color:var(--muted)">Joined Q1</div></div>'
+      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+attrCol+'">'+(regAttr>0?regAttr+'%':'—')+'</div><div style="font-size:10px;color:var(--muted)">Annualised Attrition (Q1)</div></div>'
+      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">'+(rd.ta_joined||'—')+'</div><div style="font-size:10px;color:var(--muted)">Joined Q1</div></div>'
       +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+(regCritical>5?'var(--red)':'var(--amber)')+'">'+regCritical+'</div><div style="font-size:10px;color:var(--muted)">Critical Reqs</div></div>'
       +'</div>'
       +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Fill rate: '+fillRate+'% &nbsp;|&nbsp; Wage: &#8377;'+rd.wage_cr+'Cr</div>'
@@ -4409,6 +4409,11 @@ let _fnfSort   = 'days_desc';
 
 function renderFnF() {
   if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _fnfRegion = _sbRole.region; }
+  if(!FNF_DATA||!FNF_DATA.length){
+    return '<div style="padding:60px;text-align:center;color:var(--muted)">'
+      +'<div style="font-size:28px;margin-bottom:10px">📋</div>'
+      +'<div>No FnF data loaded. Upload a FnF_*.xlsx file to populate this tab.</div></div>';
+  }
   const BAND_ORDER = {'1year&above':6,'180-365days':5,'90-180Days':4,'60-90days':3,'45-60days':2,'0-45days':1};
   const BAND_LABEL = {'1year&above':'1 Year+','180-365days':'180–365 Days','90-180Days':'90–180 Days','60-90days':'60–90 Days','45-60days':'45–60 Days','0-45days':'0–45 Days'};
   const BAND_COLOR = {'1year&above':'var(--red)','180-365days':'var(--red)','90-180Days':'var(--amber)','60-90days':'var(--amber)','45-60days':'var(--muted)','0-45days':'var(--muted)'};
@@ -4675,7 +4680,9 @@ function renderResignation(){
     var r1Badge=r.r1_status==='Accepted'?'<span style="font-size:10px;color:var(--green)">&#10003; Approved</span>':'<span style="font-size:10px;color:var(--red);font-weight:600">&#9888; Pending</span>';
     var reqCell=r.req_id?'<div style="font-size:11px"><span style="color:var(--green);font-weight:500">&#10003; REQ-'+esc(r.req_id)+'</span> <span style="color:var(--muted);font-size:10px">'+r.req_age+'d old</span></div><div style="font-size:10px;color:var(--muted)">'+esc(r.req_stage)+(r.req_ta?' &middot; '+esc(r.req_ta.split(',')[0]):'')+' </div>':'<span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(248,113,113,.15);color:#f87171">&#9888; No hire request raised</span>';
     var rowBg=r.days_to_lwd<0?'rgba(248,113,113,.06)':r.days_to_lwd<30?'rgba(248,113,113,.02)':'';
-    return'<div style="display:grid;grid-template-columns:150px 85px 130px 80px 70px 70px 80px 1fr 90px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';font-size:12px;align-items:center">'
+    var isPlatGoldNoReq = (r.tier==='Platinum'||r.tier==='Gold') && !r.req_id;
+    var rowBorder = isPlatGoldNoReq ? 'border-left:3px solid #a78bfa;' : '';
+    return'<div style="display:grid;grid-template-columns:150px 85px 130px 80px 70px 70px 80px 1fr 90px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';'+rowBorder+'font-size:12px;align-items:center">'
       +'<div><div style="font-weight:500;color:var(--text)">'+esc(r.name)+'</div><div style="font-size:10px;color:var(--muted2)">'+esc(r.designation)+'</div></div>'
       +'<div style="color:var(--muted);font-size:11px">'+esc(r.location||'&#x2014;')+'</div>'
       +'<div><div style="font-size:11px;color:var(--text)">'+esc(r.customer||'&#x2014;')+'</div><div style="margin-top:2px">'+tierBadge(r.tier)+'</div></div>'
@@ -4709,9 +4716,7 @@ function renderResignation(){
         +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-top:4px">'+a[0]+'</div>'
         +'<div style="font-size:10px;color:var(--muted2);margin-top:3px">'+a[3]+'</div></div>';
     }).join('')+'</div>'
-    +(platGoldNoReq.length?'<div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.3);border-radius:10px;padding:14px;margin-bottom:16px">'
-      +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px">&#9888; '+platGoldNoReq.length+' Platinum/Gold Employees &#x2014; No Hire Request Raised</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px">'+pgCards+'</div></div>':'')
+    
     +'<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'
     +'<span style="font-size:11px;color:var(--muted)">Region:</span>'+rf
     +'<span style="width:1px;height:18px;background:var(--border);margin:0 4px"></span>'
@@ -4732,6 +4737,11 @@ function renderResignation(){
 var _odRegion='All',_odTier='All',_odAuto='All',_odView='OD';
 function renderOD(){
   if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _odRegion = _sbRole.region; }
+  if((!CMS_OD_DATA||!CMS_OD_DATA.length)&&(!CMS_WFH_DATA||!CMS_WFH_DATA.length)){
+    return '<div style="padding:60px;text-align:center;color:var(--muted)">'
+      +'<div style="font-size:28px;margin-bottom:10px">📋</div>'
+      +'<div>No OD/WFH data loaded. Upload a cmsitn_outdoor_and_wfh_*.xlsx file.</div></div>';
+  }
   var S=CMS_SUMMARY;
   var WS=CMS_WFH_SUMMARY;
   var isWFH=_odView==='WFH';
@@ -4823,6 +4833,11 @@ function renderOD(){
 
 function renderTAPipeline(){
   if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _taRegion = _sbRole.region; }
+  if(!TA_ACTIVE_REQS||!TA_ACTIVE_REQS.length){
+    return '<div style="padding:60px;text-align:center;color:var(--muted)">'
+      +'<div style="font-size:28px;margin-bottom:10px">📋</div>'
+      +'<div>No requisition data loaded. Upload the cmsitn_requisition_wise_tat_*.xlsx file.</div></div>';
+  }
   var S = TA_SUMMARY;
   var allData = TA_ACTIVE_REQS.slice();
   var data = allData.slice();
@@ -5308,8 +5323,14 @@ async function processCandidate(wb) {
   log('Refreshing TA Pipeline…','info');
   
   // Trigger re-render of TA pipeline tab if active
+  if (typeof render === 'function') render();
   const el = document.getElementById('tab-tapipeline');
-  if (el && el.classList.contains('active')) el.innerHTML = renderTAPipeline();
+  if (el) el.innerHTML = renderTAPipeline();
+  if (typeof loadProspectiveJoiners === 'function') {
+    _pjLoaded = false;
+    await loadProspectiveJoiners();
+    log('✓ Prospective Joiners refreshed','ok');
+  }
 }
 
 // ── REQ TAT PARSER ───────────────────────────────────────────────────────
@@ -5393,8 +5414,9 @@ async function processReqTAT(wb) {
   }
   
   log('✓ Req TAT refreshed — '+active.length+' open reqs, '+closed.length+' March closures','ok');
+  if (typeof render === 'function') render();
   const el = document.getElementById('tab-tapipeline');
-  if (el && el.classList.contains('active')) el.innerHTML = renderTAPipeline();
+  if (el) el.innerHTML = renderTAPipeline();
 }
 
 
@@ -6111,6 +6133,7 @@ function snavClick(id, el) {
   if(id==='ta' && typeof _sbUser !== 'undefined' && _sbUser && !_taEscLoaded) { setTimeout(loadTAEscalations, 100); }
   if(id==='ops' && typeof _sbUser !== 'undefined' && _sbUser && !_statRisksLoaded) { setTimeout(loadStatutoryRisks, 100); }
   if(id==='absenteeism' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadAbsentCases, 100); }
+  if(id==='joiners' && typeof _sbUser !== 'undefined' && _sbUser && !_pjLoaded) { setTimeout(loadProspectiveJoiners, 100); }
   if(id==='ate' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadATECases, 100); }
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(renderActionCentre, 50); }
 }
@@ -6673,7 +6696,11 @@ async function processEmployeeMaster(file) {
     }
     if (!errors) {
       log('ATE Tracker updated: ' + upsertRows.length + ' records ✓', 'ok');
-      _ateLoaded = false; // force reload next time tab is opened
+      _ateLoaded = false;
+      if (typeof renderATETab === 'function') {
+        setTimeout(function(){ renderATETab(document.getElementById('tab-ate')); }, 300);
+      }
+      log('✓ ATE Tracker tab refreshed','ok');
     } else {
       log('Completed with ' + errors + ' batch error(s)', 'err');
     }
