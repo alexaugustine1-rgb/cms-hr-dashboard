@@ -2963,16 +2963,18 @@ async function handleUploadFile(file) {
   log('Reading: '+file.name,'info');
   const name=file.name.toLowerCase();
   let fileType=null;
+  // Most specific patterns first — 'cmsitn' is a prefix on ALL ZingHR files
+  // so it MUST NOT be used as a broad catch. Order matters.
   if(name.includes('unified')||name.includes('weekly_hr')||name.includes('hr_report')) fileType='weekly';
   else if(name.includes('fnf')||name.includes('full_final')||name.includes('full&final')||name.includes('f&f')) fileType='fnf';
-  else if(name.includes('with_ctc')||name.includes('ctc_master')||name.includes('ctc')) fileType='ctc';
-  else if(name.includes('candidate_transactional')||name.includes('cmsitn')||name.includes('candidate')) fileType='ta';
-  else if(name.includes('sper_employee')||name.includes('super_employee')||name.includes('employee_master')||name.includes('emp_master')) fileType='master';
-  else if(name.includes('super')||name.includes('sper')||name.includes('employee master')||name.includes('emp master')||name.includes('employee_master')||name.includes('emp_master')) fileType='super_emp';
   else if(name.includes('e-sep')||name.includes('esep')||name.includes('e_sep')||name.includes('separation')) fileType='esep';
+  else if(name.includes('outdoor')||name.includes('od_wfh')||name.includes('wfh_detail')) fileType='od_wfh';
+  else if(name.includes('super_employee')||name.includes('sper_employee')||name.includes('super employee')||name.includes('employee_master')||name.includes('emp_master')||name.includes('sper_emp')) fileType='super_emp';
+  else if(name.includes('req')&&(name.includes('tat')||name.includes('wise'))) fileType='req_tat';
+  else if(name.includes('candidate_transactional')||name.includes('candidate')) fileType='ta';
+  else if(name.includes('with_ctc')||name.includes('ctc_master')||name.includes('ctc')) fileType='ctc';
   else if(name.includes('attendance_consol')||name.includes('attendance')) fileType='attendance';
-  else if(name.includes('outdoor')||name.includes('od_wfh')||name.includes('wfh')) fileType='od_wfh';
-  else if(name.includes('req')&&name.includes('tat')) fileType='req_tat';
+  else if(name.includes('super')||name.includes('sper')) fileType='super_emp';
   if(!fileType){log('Filename not recognised — trying as Weekly HR Report','info');fileType='weekly';}
   log('Detected: '+fileType.toUpperCase(),'ok');
   const reader=new FileReader();
