@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6990,301 +6991,266 @@ async function _mergeWI(patch) {
 // Source: FnF_*.xlsx (custom CMS format with Band, Status, Region columns)
 // Updates: FNF_DATA global + fnf_snapshots Supabase table + re-renders tab
 // ═══════════════════════════════════════════════════════════════════════
-async function processFnFData(wb) {
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
-  // Find header row
-  let hIdx = 0;
-  for (let i = 0; i < Math.min(5, raw.length); i++) {
-    if (raw[i].some(v => String(v).toLowerCase().includes('employee') || String(v).toLowerCase().includes('band'))) {
-      hIdx = i; break;
-    }
-  }
-  const headers = raw[hIdx].map(h => String(h).trim());
-  const rows = raw.slice(hIdx + 1).map(r => {
-    const o = {}; headers.forEach((h,i) => { if(h) o[h] = r[i] ?? ''; }); return o;
-  }).filter(r => r['Employee code'] || r['EmployeeCode']);
-
-  const g = (r, ...keys) => { for (const k of keys) { if (r[k] !== undefined && String(r[k]).trim()) return String(r[k]).trim(); } return ''; };
-
-  log('Processing ' + rows.length + ' FnF records…', 'info');
-
-  const BAND_ORDER = ['0-45days','45-60days','60-90days','90-180Days','180-365days','1year&above'];
-  const by_band    = {};
-  const by_status  = {};
-  const by_region  = {North:{count:0,amount:0}, South:{count:0,amount:0}, East:{count:0,amount:0}, West:{count:0,amount:0}};
-  let total_cases = 0, total_liability = 0;
-
-  rows.forEach(r => {
-    const band   = g(r, 'Band');
-    const status = g(r, 'Status');
-    const region = g(r, 'Region');
-    const net    = parseFloat(String(g(r, 'Net Salary', 'NetSalary')).replace(/,/g,'')) || 0;
-
-    total_cases++;
-    if (net > 0) total_liability += net;
-    if (band)   by_band[band]   = {count: (by_band[band]?.count||0) + 1, amount: (by_band[band]?.amount||0) + net};
-    if (status) by_status[status] = {count: (by_status[status]?.count||0) + 1, amount: (by_status[status]?.amount||0) + net};
-    if (by_region[region]) { by_region[region].count++; by_region[region].amount += net; }
-  });
-
-  // Build FNF_DATA structure matching what renderFnF expects
-  const newFnF = {
-    total_cases, total_liability: Math.round(total_liability),
-    by_aging:  Object.fromEntries(BAND_ORDER.filter(b=>by_band[b]).map(b=>[b, by_band[b]])),
-    by_status: Object.entries(by_status).sort((a,b)=>b[1].count-a[1].count)
-                 .reduce((o,[k,v])=>({...o,[k]:v}),{}),
-    by_region,
-    as_of: new Date().toISOString().substring(0,10)
-  };
-
-  // Update global FNF_DATA
-  if (typeof FNF_DATA !== 'undefined') {
-    Object.assign(FNF_DATA, newFnF);
-  }
-
-  // Persist to Supabase fnf_snapshots
-  try {
-    const snap = {
-      snapshot_date: new Date().toISOString().substring(0,10),
-      week_key: typeof getCurrentWeekKey === 'function' ? getCurrentWeekKey() : 'W00',
-      total_pending: (by_status['Pending']?.count||0) + (by_status['Priority']?.count||0),
-      band_0_45:   by_band['0-45days']?.count   || 0,
-      band_45_60:  by_band['45-60days']?.count  || 0,
-      band_60_90:  by_band['60-90days']?.count  || 0,
-      band_90_180: by_band['90-180Days']?.count || 0,
-      band_180_365:by_band['180-365days']?.count|| 0,
-      band_1yr_plus:by_band['1year&above']?.count||0,
-      by_region: by_region
-    };
-    const {error} = await _sb.from('fnf_snapshots').upsert(snap, {onConflict:'snapshot_date'});
-    if (error) throw error;
-    log('✓ FnF snapshot saved to Supabase', 'ok');
-  } catch(e) {
-    log('Supabase save error: ' + e.message, 'err');
-  }
-
-  log('✓ Total cases: ' + total_cases + ' | Liability: ₹' + (total_liability/100000).toFixed(1) + 'L', 'ok');
-  log('By aging: ' + Object.entries(by_band).map(([k,v])=>k+':'+v.count).join(', '), 'ok');
-  log('By status: ' + Object.entries(by_status).map(([k,v])=>k+':'+v.count).join(', '), 'ok');
-
-  // Re-render FnF tab if active
-  const el = document.getElementById('tab-fnf');
-  if (el && el.classList.contains('active')) el.innerHTML = renderFnF();
-}
 
 // ═══════════════════════════════════════════════════════════════════════
 // RESIGNATION DATA PROCESSOR
 // Source: cmsitn_e-sep_transaction_details_*.xlsx
 // Updates: CMS_RES_DATA, CMS_SUMMARY resignation fields + re-renders tab
 // ═══════════════════════════════════════════════════════════════════════
-async function processResignationData(wb) {
-  // Find the data sheet (Sheet1 or the one with EmployeeCode column)
-  const sheetName = wb.SheetNames.find(s => {
-    const ws = wb.Sheets[s];
-    const cells = XLSX.utils.sheet_to_json(ws, {header:1, range:0, defval:''});
-    return cells[0] && cells[0].includes('EmployeeCode');
-  }) || wb.SheetNames[0];
-
-  const ws = wb.Sheets[sheetName];
-  const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
-
-  // Find header row
-  let hIdx = 0;
-  for (let i = 0; i < Math.min(8, raw.length); i++) {
-    if (raw[i].some(v => String(v).trim() === 'EmployeeCode' || String(v).trim() === 'Employee Code')) {
-      hIdx = i; break;
-    }
-  }
-  const headers = raw[hIdx].map(h => String(h).trim());
-  const rows = raw.slice(hIdx + 1).map(r => {
-    const o = {}; headers.forEach((h,i) => { if(h) o[h] = r[i] ?? ''; }); return o;
-  }).filter(r => r['EmployeeCode'] || r['Employee Code']);
-
-  const g = (r, ...keys) => { for (const k of keys) { if (r[k] !== undefined && String(r[k]).trim()) return String(r[k]).trim(); } return ''; };
-  const today = new Date();
-
-  log('Processing ' + rows.length + ' resignation records…', 'info');
-
-  let total = rows.length, pending = 0, approved = 0;
-  let r1_pending = 0, r2_pending = 0;
-  let lwd_past = 0, lwd_lt30 = 0;
-  const by_region = {North:0, South:0, East:0, West:0};
-  const by_reason = {};
-  const res_rows = [];
-
-  rows.forEach(r => {
-    const status  = g(r, 'FinalStatus');
-    const m1stat  = g(r, 'Manager1Status');
-    const m2stat  = g(r, 'Manager2Status');
-    const region  = g(r, 'Region');
-    const reason  = g(r, 'Reason');
-    const rel_raw = g(r, 'Relieving Date', 'RelievingDate');
-    const res_raw = g(r, 'DateOfResignation', 'Date Of Resignation');
-    const name    = g(r, 'EmployeeName', 'Employee Name');
-    const emp     = g(r, 'EmployeeCode', 'Employee Code');
-    const cust    = g(r, 'CustomerNa', 'Customer Name', 'CustomerName');
-    const grade   = g(r, 'Grade');
-
-    if (status === 'Pending') pending++;
-    else if (status === 'Approved') approved++;
-    if (m1stat === 'Pending') r1_pending++;
-    if (m1stat !== 'Pending' && m1stat !== '' && m2stat === 'Pending') r2_pending++;
-    if (by_region[region] !== undefined) by_region[region]++;
-    if (reason) by_reason[reason] = (by_reason[reason]||0) + 1;
-
-    if (rel_raw) {
-      try {
-        const d = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
-        const days = Math.floor((today - d) / 86400000);
-        if (days > 0) lwd_past++;
-        else if (days >= -30) lwd_lt30++;
-      } catch(e) {}
-    }
-
-    // Build CMS_RES_DATA row
-    if (status === 'Pending' || (res_raw && !rel_raw)) {
-      let res_date = '';
-      if (res_raw) {
-        try { res_date = new Date(String(res_raw).split(' ')[0]).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); } catch(e){}
-      }
-      res_rows.push({
-        emp_code: emp, name: name.replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').trim(),
-        designation: g(r, 'Designation', 'designation') || '',
-        customer: cust, region, reason, grade,
-        resignation_date: res_date,
-        status: m1stat === 'Pending' ? 'R1 Pending' : m2stat === 'Pending' ? 'R2 Pending' : 'Pending',
-        no_req: ''  // will be set when req is raised
-      });
-    }
-  });
-
-  // Update CMS_RES_DATA global
-  if (typeof CMS_RES_DATA !== 'undefined') {
-    CMS_RES_DATA.length = 0;
-    res_rows.forEach(r => CMS_RES_DATA.push(r));
-  }
-
-  // Update CMS_SUMMARY resignation fields
-  if (typeof CMS_SUMMARY !== 'undefined') {
-    CMS_SUMMARY.total_res   = total;
-    CMS_SUMMARY.r1_pending  = r1_pending;
-    CMS_SUMMARY.lwd_past    = lwd_past;
-    CMS_SUMMARY.lwd_lt30    = lwd_lt30;
-  }
-
-  log('✓ Total: ' + total + ' | Pending: ' + pending + ' | Approved: ' + approved, 'ok');
-  log('R1 pending: ' + r1_pending + ' | R2 pending: ' + r2_pending, 'ok');
-  log('LWD past: ' + lwd_past + ' | LWD <30d: ' + lwd_lt30, 'ok');
-  log('Top reason: ' + Object.entries(by_reason).sort((a,b)=>b[1]-a[1])[0]?.[0], 'ok');
-
-  // Re-render Resignation tab if active
-  const el = document.getElementById('tab-resignation');
-  if (el && el.classList.contains('active')) el.innerHTML = renderResignation();
-}
 
 // ═══════════════════════════════════════════════════════════════════════
 // OD / WFH DATA PROCESSOR
 // Source: cmsitn_outdoor_and_wfh_details_*.xlsx
 // Updates: CMS_OD_DATA, CMS_WFH_DATA, CMS_WFH_SUMMARY + re-renders tab
 // ═══════════════════════════════════════════════════════════════════════
-async function processOdWfh(wb) {
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// FnF PARSER — builds FNF_DATA array matching renderFnF() row structure
+// Fields: emp_code,name,doj,dol,days,band,band_order,gratuity,leave_enc,
+//         other,net_salary,status,paid,payment_date,region,billable,customer,year
+// ═══════════════════════════════════════════════════════════════════════
+async function processFnFData(wb) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
-
-  // Find header row (row 4 in ZingHR format)
   let hIdx = 0;
-  for (let i = 0; i < Math.min(8, raw.length); i++) {
-    if (raw[i].some(v => String(v).trim() === 'Employee Code' || String(v).trim() === 'Type')) {
-      hIdx = i; break;
-    }
+  for (let i = 0; i < Math.min(5, raw.length); i++) {
+    if (raw[i].some(v => /employee.code|emp.code/i.test(String(v)))) { hIdx = i; break; }
   }
   const headers = raw[hIdx].map(h => String(h).trim());
   const rows = raw.slice(hIdx + 1).map(r => {
     const o = {}; headers.forEach((h,i) => { if(h) o[h] = r[i] ?? ''; }); return o;
+  }).filter(r => r['Employee code'] || r['EmployeeCode']);
+
+  const g = (r, ...keys) => { for (const k of keys) if (r[k] !== undefined && String(r[k]).trim()) return String(r[k]).trim(); return ''; };
+  const BORDER = {'0-45days':1,'45-60days':2,'60-90days':3,'90-180Days':4,'180-365days':5,'1year&above':6};
+
+  const fmt = (v) => {
+    if (!v || v === 'None') return '';
+    try { const d = new Date(String(v).split(' ')[0]); return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); } catch(e) { return ''; }
+  };
+
+  log('Processing ' + rows.length + ' FnF records…', 'info');
+
+  const newRows = rows.map(r => {
+    const status = g(r, 'Status');
+    const net    = parseFloat(String(g(r,'Net Salary','NetSalary')).replace(/,/g,'')) || 0;
+    const band   = g(r, 'Band');
+    return {
+      emp_code:     g(r,'Employee code','EmployeeCode'),
+      name:         g(r,'Employee Name','EmployeeName'),
+      doj:          fmt(g(r,'DOJ','DateOfJoining')),
+      dol:          fmt(g(r,'DOL','DateOfLeaving','Relieving Date')),
+      days:         parseInt(g(r,'Days Count','DaysCount')) || 0,
+      band:         band,
+      band_order:   BORDER[band] || 0,
+      gratuity:     parseFloat(String(g(r,'Gratuity')).replace(/,/g,'')) || 0,
+      leave_enc:    parseFloat(String(g(r,'Leave encashment')).replace(/,/g,'')) || 0,
+      other:        parseFloat(String(g(r,'Otherthan Gratuity & Leave encashment')).replace(/,/g,'')) || 0,
+      net_salary:   net,
+      status:       status,
+      paid:         status === 'Paid' || g(r,'Payment done case') === 'Yes',
+      payment_date: '',
+      region:       g(r,'Region'),
+      billable:     g(r,'Billable/Non- Billable','Billable'),
+      customer:     g(r,'Customer'),
+      year:         g(r,'Year')
+    };
+  });
+
+  // Replace FNF_DATA contents
+  FNF_DATA.length = 0;
+  newRows.forEach(r => FNF_DATA.push(r));
+
+  // Persist snapshot to Supabase
+  const byBand = {};
+  FNF_DATA.forEach(r => { byBand[r.band] = (byBand[r.band]||0)+1; });
+  try {
+    const snap = {
+      snapshot_date: new Date().toISOString().substring(0,10),
+      week_key: typeof getCurrentWeekKey==='function'?getCurrentWeekKey():'W00',
+      total_pending: FNF_DATA.filter(r=>!r.paid).length,
+      band_0_45:    byBand['0-45days']   ||0,
+      band_45_60:   byBand['45-60days']  ||0,
+      band_60_90:   byBand['60-90days']  ||0,
+      band_90_180:  byBand['90-180Days'] ||0,
+      band_180_365: byBand['180-365days']||0,
+      band_1yr_plus:byBand['1year&above']||0,
+      by_region: {}
+    };
+    await _sb.from('fnf_snapshots').upsert(snap, {onConflict:'snapshot_date'});
+  } catch(e) { log('Snapshot save error: '+e.message,'err'); }
+
+  log('✓ FnF: '+FNF_DATA.length+' records loaded','ok');
+  log('Pending: '+FNF_DATA.filter(r=>!r.paid).length+' | Paid: '+FNF_DATA.filter(r=>r.paid).length,'ok');
+
+  // Force re-render
+  if (typeof render === 'function') render();
+  const el = document.getElementById('tab-fnf');
+  if (el) el.innerHTML = renderFnF();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RESIGNATION PARSER — builds CMS_RES_DATA array + updates CMS_SUMMARY
+// CMS_RES_DATA row: emp_code,name,designation,location,region,customer,
+//   tier,resign_date,lwd,days_since,days_to_lwd,r1_status,r1_name,
+//   reason,req_id,req_age,req_stage,req_ta
+// ═══════════════════════════════════════════════════════════════════════
+async function processResignationData(wb) {
+  const sheetName = wb.SheetNames.find(s => {
+    const first = XLSX.utils.sheet_to_json(wb.Sheets[s],{header:1,range:0,defval:''})[0]||[];
+    return first.includes('EmployeeCode') || first.includes('Employee Code');
+  }) || wb.SheetNames[0];
+
+  const ws = wb.Sheets[sheetName];
+  const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+  let hIdx = 0;
+  for (let i = 0; i < Math.min(8, raw.length); i++) {
+    if (raw[i].some(v => String(v).trim() === 'EmployeeCode' || String(v).trim() === 'Employee Code')) { hIdx = i; break; }
+  }
+  const headers = raw[hIdx].map(h => String(h).trim());
+  const rows = raw.slice(hIdx+1).map(r => {
+    const o = {}; headers.forEach((h,i) => { if(h) o[h] = r[i]??''; }); return o;
+  }).filter(r => r['EmployeeCode'] || r['Employee Code']);
+
+  const g = (r,...keys) => { for(const k of keys) if(r[k]!==undefined&&String(r[k]).trim()) return String(r[k]).trim(); return ''; };
+  const today = new Date();
+
+  const fmt = (v) => {
+    if(!v||v==='None') return '';
+    try { const d=new Date(String(v).split(' ')[0]); return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); } catch(e){return '';}
+  };
+  const daysDiff = (v) => {
+    if(!v||v==='None') return 0;
+    try { const d=new Date(String(v).split(' ')[0]); return Math.floor((today-d)/86400000); } catch(e){return 0;}
+  };
+
+  log('Processing '+rows.length+' eSep records for Resignation tab…','info');
+
+  const newRows = rows.map(r => {
+    const lwd_raw = g(r,'Relieving Date','RelievingDate');
+    const res_raw = g(r,'DateOfResignation','Date Of Resignation');
+    const m1s     = g(r,'Manager1Status');
+    const m1name  = g(r,'Manager1Name');
+    const days_since  = daysDiff(res_raw);
+    const days_to_lwd = lwd_raw ? Math.floor((new Date(String(lwd_raw).split(' ')[0])-today)/86400000) : 0;
+    return {
+      emp_code:   g(r,'EmployeeCode','Employee Code'),
+      name:       g(r,'EmployeeName','Employee Name').replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').trim(),
+      designation:'',
+      location:   '',
+      region:     g(r,'Region'),
+      customer:   g(r,'CustomerNa','Customer Name','CustomerName'),
+      tier:       'Regular',
+      resign_date:fmt(res_raw),
+      lwd:        fmt(lwd_raw),
+      days_since, days_to_lwd,
+      r1_status:  m1s||'Pending',
+      r1_name:    m1name,
+      reason:     g(r,'Reason'),
+      req_id:     '',
+      req_age:    0,
+      req_stage:  '',
+      req_ta:     ''
+    };
+  });
+
+  // Update CMS_RES_DATA
+  CMS_RES_DATA.length = 0;
+  newRows.forEach(r => CMS_RES_DATA.push(r));
+
+  // Update CMS_SUMMARY fields
+  const r1_pending = newRows.filter(r=>r.r1_status==='Pending').length;
+  const lwd_past   = newRows.filter(r=>r.days_to_lwd<0).length;
+  const lwd_lt30   = newRows.filter(r=>r.days_to_lwd>=0&&r.days_to_lwd<=30).length;
+  const no_req     = newRows.filter(r=>!r.req_id).length;
+  CMS_SUMMARY.total_res  = newRows.length;
+  CMS_SUMMARY.r1_pending = r1_pending;
+  CMS_SUMMARY.lwd_past   = lwd_past;
+  CMS_SUMMARY.lwd_lt30   = lwd_lt30;
+  CMS_SUMMARY.no_req     = no_req;
+
+  log('✓ Resignation: '+newRows.length+' records | R1 pending: '+r1_pending+' | LWD past: '+lwd_past,'ok');
+
+  if (typeof render === 'function') render();
+  const el = document.getElementById('tab-resignation');
+  if (el) el.innerHTML = renderResignation();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// OD/WFH PARSER — builds CMS_OD_DATA + CMS_WFH_DATA arrays per-employee
+// Row structure: name,count,partial,multi,customer,region,desig,tier,auto
+// Also updates CMS_SUMMARY.od_total/od_pending/od_auto
+// ═══════════════════════════════════════════════════════════════════════
+async function processOdWfh(wb) {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+  let hIdx = 0;
+  for (let i = 0; i < Math.min(8, raw.length); i++) {
+    if (raw[i].some(v => String(v).trim()==='Employee Code'||String(v).trim()==='Type')) { hIdx=i; break; }
+  }
+  const headers = raw[hIdx].map(h => String(h).trim());
+  const rows = raw.slice(hIdx+1).map(r => {
+    const o={}; headers.forEach((h,i)=>{if(h)o[h]=r[i]??'';}); return o;
   }).filter(r => r['Employee Code']);
 
-  const g = (r, ...keys) => { for (const k of keys) { if (r[k] !== undefined && String(r[k]).trim()) return String(r[k]).trim(); } return ''; };
+  const g = (r,...keys) => { for(const k of keys) if(r[k]!==undefined&&String(r[k]).trim()) return String(r[k]).trim(); return ''; };
 
-  log('Processing ' + rows.length + ' OD/WFH records…', 'info');
+  log('Processing '+rows.length+' OD/WFH records…','info');
 
-  let od_total = 0, wfh_total = 0;
-  let od_approved = 0, od_pending = 0, od_auto = 0;
-  let wfh_approved = 0, wfh_pending = 0;
-  const by_region  = {North:0, South:0, East:0, West:0};
-  const wfh_by_reg = {North:0, South:0, East:0, West:0};
-  const emp_od = new Set(), emp_wfh = new Set();
-  const cust_counts = {};
-
-  // For WFH summary — track biggest customer
-  const cust_wfh = {};
+  // Build per-employee aggregates for OD
+  const odMap = {}, wfhMap = {};
+  let od_total=0, od_pending=0, od_auto=0, wfh_total=0;
 
   rows.forEach(r => {
-    const type   = g(r, 'Type');
-    const status = g(r, 'Approval Status');
-    const region = g(r, 'Region');
-    const emp    = g(r, 'Employee Code');
-    const cust   = g(r, 'Customer Name');
+    const type   = g(r,'Type');
+    const emp    = g(r,'Employee Code');
+    const name   = g(r,'Employee Name');
+    const status = g(r,'Approval Status');
+    const cust   = g(r,'Customer Name');
+    const region = g(r,'Region');
+    const desig  = g(r,'Designation');
+    const grade  = g(r,'Grade','Claim Grade');
+    const tier   = 'Regular'; // will be enriched later if needed
+    const isAuto = status==='' || status==='Auto Approved';
+    const isMulti= g(r,'Application Type')==='Multiple Days';
 
-    if (type === 'Outdoor') {
+    if (type==='Outdoor') {
       od_total++;
-      emp_od.add(emp);
-      if (status === 'Approved') od_approved++;
-      else if (status === 'Applied') od_pending++;
-      else if (status === 'Auto Approved' || status === '') od_auto++;
-      if (by_region[region] !== undefined) by_region[region]++;
-    } else if (type === 'WFH') {
+      if (status==='Applied') od_pending++;
+      if (isAuto) od_auto++;
+      if (!odMap[emp]) odMap[emp]={name,count:0,partial:0,multi:0,customer:cust,region,desig,tier,auto:0};
+      odMap[emp].count++;
+      if (isMulti) odMap[emp].multi++; else odMap[emp].partial++;
+      if (isAuto) odMap[emp].auto++;
+    } else if (type==='WFH') {
       wfh_total++;
-      emp_wfh.add(emp);
-      if (status === 'Approved') wfh_approved++;
-      else if (status === 'Applied') wfh_pending++;
-      if (wfh_by_reg[region] !== undefined) wfh_by_reg[region]++;
-      if (cust) cust_wfh[cust] = (cust_wfh[cust]||0) + 1;
+      if (!wfhMap[emp]) wfhMap[emp]={name,count:0,partial:0,multi:0,customer:cust,region,desig,tier,auto:0};
+      wfhMap[emp].count++;
+      if (isMulti) wfhMap[emp].multi++; else wfhMap[emp].partial++;
+      if (isAuto) wfhMap[emp].auto++;
     }
   });
 
-  // Find top WFH customer
-  const top_wfh_cust = Object.entries(cust_wfh).sort((a,b)=>b[1]-a[1])[0];
+  // Sort by count descending
+  const odArr  = Object.values(odMap).sort((a,b)=>b.count-a.count);
+  const wfhArr = Object.values(wfhMap).sort((a,b)=>b.count-a.count);
 
-  // Update global constants
-  if (typeof CMS_OD_DATA !== 'undefined') {
-    CMS_OD_DATA.total   = od_total;
-    CMS_OD_DATA.approved = od_approved;
-    CMS_OD_DATA.pending  = od_pending;
-    CMS_OD_DATA.by_region = by_region;
-    CMS_OD_DATA.employees = emp_od.size;
-  }
+  CMS_OD_DATA.length  = 0; odArr.forEach(r=>CMS_OD_DATA.push(r));
+  CMS_WFH_DATA.length = 0; wfhArr.forEach(r=>CMS_WFH_DATA.push(r));
 
-  if (typeof CMS_WFH_DATA !== 'undefined') {
-    CMS_WFH_DATA.total    = wfh_total;
-    CMS_WFH_DATA.approved = wfh_approved;
-    CMS_WFH_DATA.pending  = wfh_pending;
-    CMS_WFH_DATA.by_region = wfh_by_reg;
-    CMS_WFH_DATA.employees = emp_wfh.size;
-  }
+  CMS_SUMMARY.od_total   = od_total;
+  CMS_SUMMARY.od_pending = od_pending;
+  CMS_SUMMARY.od_auto    = od_auto;
+  CMS_WFH_SUMMARY.total      = wfh_total;
+  CMS_WFH_SUMMARY.employees  = wfhArr.length;
+  CMS_WFH_SUMMARY.pending    = 0;
 
-  if (typeof CMS_WFH_SUMMARY !== 'undefined') {
-    CMS_WFH_SUMMARY.total     = wfh_total;
-    CMS_WFH_SUMMARY.pending   = wfh_pending;
-    CMS_WFH_SUMMARY.auto      = od_auto;
-    CMS_WFH_SUMMARY.employees = emp_wfh.size;
-    if (top_wfh_cust) CMS_WFH_SUMMARY.top_cust_count = top_wfh_cust[1];
-  }
+  log('✓ OD: '+od_total+' records, '+odArr.length+' employees | WFH: '+wfh_total+' records, '+wfhArr.length+' employees','ok');
 
-  // Update CMS_SUMMARY
-  if (typeof CMS_SUMMARY !== 'undefined') {
-    CMS_SUMMARY.od_total   = od_total;
-    CMS_SUMMARY.od_pending = od_pending;
-    CMS_SUMMARY.od_auto    = od_auto;
-  }
-
-  log('✓ OD: ' + od_total + ' (Approved: ' + od_approved + ', Pending: ' + od_pending + ')', 'ok');
-  log('✓ WFH: ' + wfh_total + ' (Employees: ' + emp_wfh.size + ')', 'ok');
-  log('OD by region: ' + JSON.stringify(by_region), 'ok');
-
-  // Re-render OD tab if active
+  if (typeof render === 'function') render();
   const el = document.getElementById('tab-od');
-  if (el && el.classList.contains('active')) el.innerHTML = renderOD();
+  if (el) el.innerHTML = renderOD();
 }
 
 </script>
