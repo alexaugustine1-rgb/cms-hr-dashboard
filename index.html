@@ -2992,10 +2992,11 @@ async function handleUploadFile(file) {
 
       else if(fileType==='esep') { await processEsep(wb); await processWIEsep(wb); await processResignationData(wb); }
       else if(fileType==='od_wfh') await processOdWfh(wb);
+      else if(fileType==='attendance') await processAttendanceAbsence(wb);
 
       else if(fileType==='req_tat') await processReqTAT(wb);
       else if(fileType==='fnf') await processFnFData(wb);
-      else{log('File type not recognised. Supported: Weekly HR Report, Employee Master, CTC Master, Candidate Transactional, eSep Transaction Details.','info');}
+      else{log('File type not recognised. Supported files: FnF_*.xlsx · cmsitn_e-sep_*.xlsx · cmsitn_outdoor_and_wfh_*.xlsx · cmsitn_super_employee_master_*.xlsx · cmsitn_requisition_wise_tat_*.xlsx · cmsitn_candidate_transactional_*.xlsx · Unified_Weekly_HR_Report_*.xlsx','info');}
     }catch(err){log('Parse error: '+err.message,'err');console.error(err);}
   };
   reader.readAsArrayBuffer(file);
@@ -7280,6 +7281,166 @@ async function processOdWfh(wb) {
   if (typeof render === 'function') render();
   const el = document.getElementById('tab-od');
   if (el) el.innerHTML = renderOD();
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// ATTENDANCE CONSOLIDATION → Long Absenteeism
+// Source: cmsitn_attendance_consolidation_*.xlsx
+// Logic:  7+ consecutive 'A' (Absent) days → upsert to absent_cases
+// Preserves any existing HRBP status/notes on matched employees
+// ═══════════════════════════════════════════════════════════════════════
+async function processAttendanceAbsence(wb) {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:false});
+
+  let hIdx = 0;
+  for (let i = 0; i < Math.min(8, raw.length); i++) {
+    if (raw[i].some(v => String(v).trim() === 'Employee Code')) { hIdx = i; break; }
+  }
+  const headers = raw[hIdx].map(h => String(h).trim());
+  const rows = raw.slice(hIdx + 1).map(r => {
+    const o = {}; headers.forEach((h, i) => { if(h) o[h] = r[i] ?? ''; }); return o;
+  }).filter(r => r['Employee Code'] && String(r['Employee Code']).trim());
+
+  const g = (r, ...keys) => {
+    for (const k of keys) if (r[k] !== undefined && String(r[k]).trim()) return String(r[k]).trim();
+    return '';
+  };
+
+  const dateColKeys = headers.filter(h => /^\d{2}\s+[A-Za-z]{3}\s+\d{4}$/.test(h.trim()));
+  log('Scanning ' + rows.length + ' employees × ' + dateColKeys.length + ' days…', 'info');
+
+  const THRESHOLD  = 7;
+  const weekKey    = typeof getCurrentWeekKey === 'function' ? getCurrentWeekKey() : 'W00';
+
+  const parseDate = (label) => {
+    try {
+      const p = label.trim().split(' ');
+      if (p.length === 3) return new Date(p[1] + ' ' + p[0] + ' ' + p[2]).toISOString().substring(0, 10);
+    } catch(e) {}
+    return null;
+  };
+
+  const newCases = [];
+
+  rows.forEach(r => {
+    const empCode = g(r, 'Employee Code');
+    if (!empCode) return;
+
+    // Consecutive absent logic:
+    // A = absent → counts and continues the run
+    // WO / H = week-off / holiday → TRANSPARENT (doesn't break the run, doesn't add to count)
+    // P / PL / CL / SiL etc = present/leave → BREAKS the run
+    // This matches how a real 42-day absence across months is counted
+    let maxConsec = 0, currConsec = 0;
+    let currStart = '', bestStart = '', firstAbsent = '', lastPresent = '';
+    let inRun = false;
+
+    dateColKeys.forEach(dk => {
+      const val = String(r[dk] || '').trim().toUpperCase();
+      const isAbsent     = val === 'A';
+      const isTransparent = val === 'WO' || val === 'H' || val === '';
+      const isPresent    = !isAbsent && !isTransparent; // PL, CL, P, SiL, P-A etc
+
+      if (isAbsent) {
+        if (!inRun) { inRun = true; currStart = dk; currConsec = 0; }
+        if (!firstAbsent) firstAbsent = dk;
+        currConsec++;
+        if (currConsec > maxConsec) { maxConsec = currConsec; bestStart = currStart; }
+      } else if (isTransparent) {
+        // Keep run going — WO/H between absent days don't reset the streak
+        // but don't increment the counter
+      } else {
+        // P, PL, CL, SiL — breaks the run
+        if (isPresent) lastPresent = dk;
+        inRun = false;
+        currConsec = 0;
+      }
+    });
+
+    if (maxConsec < THRESHOLD) return;
+
+    const cust = g(r, 'Customer Name');
+    let tier = 'Regular';
+    if (typeof CMS_PLAT_GOLD !== 'undefined') {
+      const m = CMS_PLAT_GOLD.find(a => a.name && a.name.toUpperCase() === cust.toUpperCase());
+      if (m) tier = m.tier;
+    }
+
+    const totalAbsent = parseInt(g(r, 'A')) || maxConsec;
+
+    newCases.push({
+      emp_code:          empCode,
+      emp_name:          g(r, 'Employee Name'),
+      designation:       g(r, 'Designation'),
+      customer:          cust,
+      account_tier:      tier,
+      region:            g(r, 'Region'),
+      manager_name:      g(r, 'Manager Name'),
+      consecutive_absent: maxConsec,
+      absent_since:      parseDate(bestStart),
+      last_present:      parseDate(lastPresent) || null,
+      total_absent_days: totalAbsent,
+      status:            'Uncontacted',
+      source_week:       weekKey,
+    });
+  });
+
+  log('Found ' + newCases.length + ' employees with ' + THRESHOLD + '+ consecutive absent days', 'ok');
+
+  if (!newCases.length) {
+    log('No new long absence cases in this file', 'info');
+    // Existing cases in Supabase remain visible — loadAbsentCases will show them
+    if (typeof loadAbsentCases === 'function') await loadAbsentCases();
+    return;
+  }
+
+  // Upsert — ONLY update attendance fields, NEVER touch status/notes set by HRBPs
+  // Previous-period unresolved cases stay in Supabase untouched if emp not in this file
+  let saved = 0, errors = 0;
+  for (const c of newCases) {
+    try {
+      const { data: existing } = await _sb
+        .from('absent_cases')
+        .select('id, status, status_note, status_updated_by, next_followup_date, esep_initiated')
+        .eq('emp_code', c.emp_code)
+        .maybeSingle();
+
+      if (existing) {
+        // Update attendance metrics only — preserve all HRBP work
+        await _sb.from('absent_cases').update({
+          emp_name:          c.emp_name,
+          designation:       c.designation,
+          customer:          c.customer,
+          account_tier:      c.account_tier,
+          region:            c.region,
+          manager_name:      c.manager_name,
+          consecutive_absent:c.consecutive_absent,
+          absent_since:      c.absent_since,
+          last_present:      c.last_present,
+          total_absent_days: c.total_absent_days,
+          source_week:       c.source_week,
+          updated_at:        new Date().toISOString(),
+        }).eq('id', existing.id);
+      } else {
+        // Brand new case — insert with Uncontacted status
+        await _sb.from('absent_cases').insert(c);
+      }
+      saved++;
+    } catch(e) {
+      console.warn('[Attendance]', c.emp_code, e.message);
+      errors++;
+    }
+  }
+
+  log('✓ ' + saved + ' cases saved to absent_cases' + (errors ? ' (' + errors + ' errors)' : ''), 'ok');
+
+  // Reload tab — shows new cases PLUS all existing unresolved cases from previous periods
+  if (typeof loadAbsentCases === 'function') {
+    await loadAbsentCases();
+    log('✓ Long Absenteeism tab refreshed', 'ok');
+  }
 }
 
 </script>
