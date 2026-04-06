@@ -6911,24 +6911,34 @@ async function processWIEsep(wb) {
     const region  = g(r, 'Region');
     const reason  = g(r, 'Reason');
 
-    // Exit month from relieving date
+    // Exit month from relieving date — current year only
     if (rel_raw) {
       try {
         const d = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
-        const mon = MONTHS[d.getMonth()];
-        exits_by_month[mon] = (exits_by_month[mon] || 0) + 1;
+        if (d.getFullYear() === today.getFullYear()) {
+          const mon = MONTHS[d.getMonth()];
+          exits_by_month[mon] = (exits_by_month[mon] || 0) + 1;
+        }
       } catch(e) {}
     }
 
-    if (exits_by_region[region] !== undefined) exits_by_region[region]++;
-    // Also track per-month region exits
+    // Region exits — check year via rel_raw
+    if (exits_by_region[region] !== undefined && rel_raw) {
+      try {
+        const _dr = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
+        if (_dr.getFullYear() === today.getFullYear()) exits_by_region[region]++;
+      } catch(e) {}
+    }
+    // Also track per-month region exits — current year only
     if (rel_raw) {
       try {
         const _d2 = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
-        const _mon2 = MONTHS[_d2.getMonth()];
-        if (!exits_by_month_region[_mon2]) exits_by_month_region[_mon2] = {};
-        if (exits_by_region[region] !== undefined) {
-          exits_by_month_region[_mon2][region] = (exits_by_month_region[_mon2][region]||0) + 1;
+        if (_d2.getFullYear() === today.getFullYear()) {
+          const _mon2 = MONTHS[_d2.getMonth()];
+          if (!exits_by_month_region[_mon2]) exits_by_month_region[_mon2] = {};
+          if (exits_by_region[region] !== undefined) {
+            exits_by_month_region[_mon2][region] = (exits_by_month_region[_mon2][region]||0) + 1;
+          }
         }
       } catch(e) {}
     }
