@@ -1,3 +1,6 @@
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -958,7 +961,7 @@ function renderOverview(w, pw) {
 
   // ── 1. COMMAND STRIP ──────────────────────────────────────────────────
   var q1exits = (wAttr.Jan&&wAttr.Jan.exits||0)+(wAttr.Feb&&wAttr.Feb.exits||0)+(wAttr.Mar&&wAttr.Mar.exits||0);
-  var q1hc = ((wAttr.Jan&&wAttr.Jan.active_hc||0)+(wAttr.Feb&&wAttr.Feb.active_hc||0)+(wAttr.Mar&&wAttr.Mar.active_hc||0))/3||1;
+  var q1hc = (function(){var _fhc=(W&&W.active_hc)||2800;var _j=wAttr.Jan&&wAttr.Jan.active_hc>0?wAttr.Jan.active_hc:_fhc;var _f=wAttr.Feb&&wAttr.Feb.active_hc>0?wAttr.Feb.active_hc:_fhc;var _m=wAttr.Mar&&wAttr.Mar.active_hc>0?wAttr.Mar.active_hc:_fhc;return(_j+_f+_m)/3||1;})()
   // Voluntary attrition only — excludes Absorption (Conversion) and Dismissal types
   var q1attr = Math.round(q1exits/q1hc*4*100*10)/10;
   // Use live Supabase count if loaded, else fall back to static weekly_reports value
@@ -5172,7 +5175,7 @@ async function processCandidate(wb) {
   const rows = getRows(ws);
   log(rows.length+' candidate rows found','info');
   
-  const REF = new Date(2026,2,25); // March 25 2026
+  const REF = new Date(); // today — dynamic TAT calculation // March 25 2026
   const TA_NORMALIZED = {
     'salma saifi':'Salma Saifi','nilam sunil patil':'Nilam Sunil Patil',
     'suhail bhisty':'Suhail Bhisty','nikita yadav':'Nikita Yadav',
@@ -6896,6 +6899,7 @@ async function processWIEsep(wb) {
 
   const exits_by_month = {};
   const exits_by_region = {North:0,South:0,East:0,West:0};
+  const exits_by_month_region = {}; // {Jan: {North:2, South:1}}
   const reasons = {};
   const tenure_exits = {'<3 months':0,'3m-1yr':0,'1-2 yrs':0,'2-5 yrs':0,'>5 yrs':0};
 
@@ -6917,6 +6921,17 @@ async function processWIEsep(wb) {
     }
 
     if (exits_by_region[region] !== undefined) exits_by_region[region]++;
+    // Also track per-month region exits
+    if (rel_raw) {
+      try {
+        const _d2 = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
+        const _mon2 = MONTHS[_d2.getMonth()];
+        if (!exits_by_month_region[_mon2]) exits_by_month_region[_mon2] = {};
+        if (exits_by_region[region] !== undefined) {
+          exits_by_month_region[_mon2][region] = (exits_by_month_region[_mon2][region]||0) + 1;
+        }
+      } catch(e) {}
+    }
 
     if (reason) reasons[reason] = (reasons[reason] || 0) + 1;
 
@@ -6935,12 +6950,12 @@ async function processWIEsep(wb) {
     }
   });
 
-  // Build attrition object — group current-year months (Jan onwards)
+  // Build attrition — use WI.active_hc as denominator (best proxy for monthly HC)
   const attrition = {};
-  const curYear = today.getFullYear();
+  const totalHC = (typeof WI !== 'undefined' && WI.active_hc) || 2800;
   MONTHS.forEach(mon => {
     if (exits_by_month[mon]) {
-      attrition[mon] = { exits: exits_by_month[mon], active_hc: 0, rate: 0 };
+      attrition[mon] = { exits: exits_by_month[mon], active_hc: totalHC, rate: 0, region: exits_by_month_region[mon]||{} };
     }
   });
 
