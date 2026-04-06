@@ -3548,9 +3548,9 @@ function getCurrentWeekKey() {
   // Static map for FY2025-26 (Jan–Dec 2026) — extend as needed
   var map = [
     [1,2,8,'W05'],[1,9,15,'W06'],[1,16,22,'W07'],[1,23,31,'W08'],
-    [2,2,8,'W09'],[2,9,15,'W10'],[2,16,22,'W11'],[2,23,31,'W12'],
-    [3,6,12,'W13'],[3,13,19,'W14'],[3,20,26,'W15'],[3,27,31,'W16'],
-    [4,3,9,'W17'],[4,10,16,'W18'],[4,17,23,'W19'],[4,24,30,'W20'],
+    [2,2,8,'W09'],[2,9,15,'W10'],[2,16,22,'W11'],[2,23,29,'W12'],
+    [2,30,31,'W13'],[3,1,5,'W13'],[3,6,12,'W14'],[3,13,19,'W15'],[3,20,26,'W16'],[3,27,31,'W16'],
+    [4,1,5,'W17'],[4,6,12,'W17'],[4,13,19,'W18'],[4,17,23,'W19'],[4,24,30,'W20'],
     [5,1,9,'W21'],[5,10,16,'W22'],[5,17,23,'W23'],[5,24,31,'W24'],
     [6,1,8,'W25'],[6,9,15,'W26'],[6,16,22,'W27'],[6,23,30,'W28'],
     [7,1,8,'W29'],[7,9,15,'W30'],[7,16,22,'W31'],[7,23,31,'W32'],
@@ -3604,6 +3604,8 @@ async function renderSubmitTab(mc){
     };
     WEEK_NAMES[liveWkKey] = liveWkKey + ' (Current)';
     WEEK_LABELS[liveWkKey] = liveLabel;
+    // Ensure WEEKS_DATA has a label for the current week button
+    if (WEEKS_DATA[liveWkKey]) WEEKS_DATA[liveWkKey].label = liveLabel;
   }
   const availWeeks = [...new Set([liveWkKey, ...WEEK_ORDER.slice(-3)])].slice(0,3).sort((a,b)=>{
     const na=parseInt(a.replace('W',''))||0, nb=parseInt(b.replace('W',''))||0; return nb-na;
@@ -3615,6 +3617,16 @@ async function renderSubmitTab(mc){
   const statusHTML=_existingSub?'<span class="wform-status-badge wsb-submitted">✓ Submitted · '+(_existingSub.updated_at||'').substring(0,10)+'</span>':'<span class="wform-status-badge wsb-none">Not submitted yet</span>';
   mc.innerHTML='<div class="wform-wrap"><div class="wform-header"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report</div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">'+fn.icon+' '+fn.label+'</div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">'+displayName+(region?' · '+region:'')+'</span>'+statusHTML+'</div></div><div style="margin-bottom:20px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div><div class="wform-week-select">'+availWeeks.map(k=>'<button class="wform-week-btn'+(k===_formWeekKey?' active':'')+'" onclick="selectFormWeek(\''+k+'\')">'+( WEEK_NAMES[k]||k)+' · '+(WEEKS_DATA[k]?.label||'')+'</button>').join('')+'</div></div>'+buildFunctionSections(fnType)+'<div class="wform-section"><div class="wform-section-title">📸 Photos</div><div class="wform-row"><label>Upload photos (site visits, R&R, town halls, training)</label><div class="wform-photo-zone" id="formPhotoZone" ondragover="event.preventDefault();this.classList.add(\'drag\')" ondragleave="this.classList.remove(\'drag\')" ondrop="formPhotoDrop(event)"><input type="file" accept="image/*" multiple onchange="formPhotoAdd(this.files)"><div style="font-size:20px;margin-bottom:6px">📷</div><div style="font-size:13px;color:var(--muted)">Drop photos or click to browse</div></div><div class="wform-photo-preview" id="formPhotoPreview"></div></div></div><div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button class="wform-submit-btn" id="formSubmitBtn" onclick="submitWeeklyForm(\''+fnType+'\',\''+region+'\')">'+(_existingSub?'Update Submission':'Submit Report')+'</button>'+(_existingSub?'<span style="font-size:12px;color:var(--muted)">You can update until the week closes</span>':'')+'</div><div id="formSubmitStatus" style="margin-top:12px"></div></div>';
   setVisit(_visitYes);
+  // Inject week date banner
+  (function(){
+    var _wkLabel = (WEEKS_DATA[_formWeekKey]&&WEEKS_DATA[_formWeekKey].label)?WEEKS_DATA[_formWeekKey].label:(WEEK_LABELS&&WEEK_LABELS[_formWeekKey]?WEEK_LABELS[_formWeekKey]:getCurrentWeekLabel());
+    var _wkName = WEEK_NAMES[_formWeekKey]||_formWeekKey;
+    var _banner = document.createElement('div');
+    _banner.style.cssText='background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:10px;padding:12px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between';
+    _banner.innerHTML='<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Submitting for</div>'+'<div style="font-size:22px;font-weight:700;color:var(--text)">'+esc(_wkName)+'</div></div>'+'<div style="text-align:right"><div style="font-size:14px;font-weight:600;color:var(--accent)">'+esc(_wkLabel)+'</div>'+'<div style="font-size:10px;color:var(--muted);margin-top:2px">Submit by end of week</div></div>';
+    var _wrap = mc.querySelector('.wform-wrap');
+    if(_wrap) _wrap.insertBefore(_banner, _wrap.querySelector('.wform-section')||_wrap.firstChild.nextSibling);
+  })();
   if(_existingSub){
     populateForm(_existingSub);
     var _sl=document.querySelector('#snav-submit .item-label');
@@ -3629,6 +3641,7 @@ async function renderSubmitTab(mc){
   if(typeof renderActionEntries==='function')renderActionEntries();
   if(typeof renderTaAgingEntries==='function')renderTaAgingEntries();
   if(typeof renderTaJoinerEntries==='function')renderTaJoinerEntries();
+  if(fnType==='ta'&&typeof loadUpcomingJoinersForForm==='function')loadUpcomingJoinersForForm();
   // Load pending tasks checklist
   if(typeof loadPendingTasks==='function') loadPendingTasks();
 }
@@ -3751,7 +3764,7 @@ function renderTaJoinerEntries(){
     :_taJoinerEntries.map(function(e,i){
       return '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface3);border-radius:8px;margin-bottom:6px;border-left:3px solid var(--green)">'
         +'<div style="flex:1;display:flex;gap:12px;align-items:center">'
-        +'<span style="font-size:12px;font-weight:600;color:var(--text)">'+esc(e.name)+'</span>'
+        +'<span style="font-size:12px;font-weight:600;color:var(--text)">'+esc(e.name)+'</span>'+(e.fromPipeline?'<span style="font-size:9px;padding:1px 5px;border-radius:8px;background:rgba(96,165,250,.15);color:#60a5fa;margin-left:5px">pipeline</span>':'')
         +(e.account?'<span style="font-size:11px;color:var(--muted)">'+esc(e.account)+'</span>':'')
         +(e.doj?'<span style="font-size:11px;color:var(--green)">DOJ: '+e.doj+'</span>':'')
         +'</div>'
@@ -4226,7 +4239,10 @@ async function renderSubmissionTracker(mc,displayName,roleLabel){
   const availWeeks=[...new Set([_liveWk2,...WEEK_ORDER.slice(-3)])].slice(0,3).sort((a,b)=>(parseInt(b.replace('W',''))||0)-(parseInt(a.replace('W',''))||0));
   const{data:subs}=await _sb.from('weekly_submissions').select('submitter_name,submitter_email,function_type,region,status,updated_at').eq('week_key',wk).order('function_type');
   const submitted=subs||[];
-  const{data:allUsers}=await _sb.from('user_profiles').select('display_name,email,function_type,region,role').eq('role','hrbp');
+  // Fetch ALL team members who should submit (not just hrbp)
+  const{data:allUsers}=await _sb.from('user_profiles')
+    .select('display_name,email,function_type,region,role')
+    .in('role',['hrbp','ta']);
   const leads=allUsers||[];
   const submittedEmails=new Set(submitted.map(s=>s.submitter_email));
   const notSubmitted=leads.filter(u=>!submittedEmails.has(u.email));
@@ -7529,6 +7545,36 @@ async function processAttendanceAbsence(wb) {
     log('✓ Long Absenteeism tab refreshed', 'ok');
   }
 }
+
+
+async function loadUpcomingJoinersForForm() {
+  if (_taJoinersPreloaded) return;
+  var listEl = document.getElementById('taJoinerList');
+  if (!listEl || !_sbUser) return;
+  try {
+    var today = new Date().toISOString().substring(0,10);
+    var fwd14 = new Date(Date.now()+14*86400000).toISOString().substring(0,10);
+    var q = _sb.from('prospective_joiners')
+      .select('id,candidate_name,customer,designation,doj,region,offer_status')
+      .gte('doj', today).lte('doj', fwd14)
+      .in('offer_status', ['Offered','Accepted','Confirmed'])
+      .order('doj', {ascending:true});
+    if (_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India') q=q.eq('region',_sbRole.region);
+    var data = ((await q).data)||[];
+    if (!data.length) {
+      listEl.innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0">No upcoming joiners in pipeline. Add manually below.</div>';
+      _taJoinersPreloaded=true; return;
+    }
+    data.forEach(function(j) {
+      if (typeof _taJoinerEntries==='undefined') return;
+      var dup=_taJoinerEntries.some(function(e){return e.name===j.candidate_name;});
+      if (!dup) _taJoinerEntries.push({name:j.candidate_name||'',account:j.customer||'',doj:j.doj||'',fromPipeline:true});
+    });
+    _taJoinersPreloaded=true;
+    if (typeof renderTaJoinerEntries==='function') renderTaJoinerEntries();
+  } catch(e) { console.warn('[JoinerForm]',e.message); }
+}
+var _taJoinersPreloaded=false;
 
 </script>
 
