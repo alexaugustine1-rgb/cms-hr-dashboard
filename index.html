@@ -5360,7 +5360,17 @@ async function processReqTAT(wb) {
     const cust = getCustomer(row);
     const rec = {
       req_id: String(row[hIdx('Requisition ID')]||''),
-      designation: String(row[hIdx('Designation')]||''),
+      designation: (function(){
+        var d = String(row[hIdx('Designation')]||'').trim();
+        if (d) return d;
+        // Extract from title: 'ACCOUNT - Designation - Level - Location'
+        var t = String(row[hIdx('Requisition Title')]||'').trim();
+        var parts = t.split(' - ');
+        if (parts.length > 1) {
+          return parts[1].replace(/\s*\[.*?\]/g,'').trim();
+        }
+        return '';
+      })(),
       customer: cust, tier: 'Regular', region: String(row[hIdx('Region')]||''),
       pos_type: String(row[hIdx('ReplacementCount')]||'0')!=='0' ? 'Replacement' : 'New',
       ta_recruiter: String(row[hIdx('Recruiter Assigned(s)')]||''),
