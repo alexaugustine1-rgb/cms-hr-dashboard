@@ -123,9 +123,10 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
 
 /* WEEK SELECTOR BAR */
-.week-bar{position:relative;z-index:10;background:var(--surface);border-bottom:1px solid var(--border);padding:0 36px;display:flex;align-items:center;gap:0;justify-content:space-between}
-.week-bar-left{display:flex;gap:0}
-.week-btn{padding:13px 20px;font-family:DM_Mono,monospace;font-size:11px;border:none;border-bottom:2px solid transparent;background:none;color:var(--muted);cursor:pointer;transition:all .2s;letter-spacing:.5px;white-space:nowrap}
+.week-bar{position:relative;z-index:10;background:var(--surface);border-bottom:1px solid var(--border);padding:0 36px;display:flex;align-items:center;gap:0;justify-content:flex-start;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.week-bar-left{display:flex;gap:0;flex-shrink:0}
+.week-bar::-webkit-scrollbar{display:none}
+  .week-btn{padding:13px 20px;font-family:DM_Mono,monospace;font-size:11px;border:none;border-bottom:2px solid transparent;background:none;color:var(--muted);cursor:pointer;transition:all .2s;letter-spacing:.5px;white-space:nowrap}
 .week-btn:hover{color:var(--text)}
 .week-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
 .week-btn.latest::after{content:'LATEST';font-size:8px;vertical-align:super;margin-left:4px;color:var(--green);letter-spacing:1px}
@@ -1609,6 +1610,13 @@ function isNil(s) {
 // ─── RENDER HRBP ──────────────────────────────────────────────
 function renderHRBP(w, pw) {
   if(!w){return "";} // null guard
+  // Ensure arrays are always arrays even when DB column is NULL
+  w.hrbp_connects  = Array.isArray(w.hrbp_connects)  ? w.hrbp_connects  : [];
+  w.hrbp_discipline= Array.isArray(w.hrbp_discipline) ? w.hrbp_discipline: [];
+  w.hrbp_retention = Array.isArray(w.hrbp_retention)  ? w.hrbp_retention : [];
+  w.hrbp_issues    = Array.isArray(w.hrbp_issues)     ? w.hrbp_issues    : [];
+  w.hrbp_activities= Array.isArray(w.hrbp_activities) ? w.hrbp_activities: [];
+  w.hrbp_case_entries = Array.isArray(w.hrbp_case_entries) ? w.hrbp_case_entries : [];
 
 
   // Connects: parse structured site visit format + free-text format
