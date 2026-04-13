@@ -1653,6 +1653,94 @@ async function loadHRBPSiteVisitsForTab() {
   } catch(e) { console.warn('[siteVisitsTab]', e.message); }
 }
 
+// ── JOURNEY PLAN PANEL ────────────────────────────────────────────────────
+function buildJourneyPlanPanel() {
+  // Only show for HRBP function type
+  var fnType = (_sbRole&&_sbRole.function_type)||'';
+  var region = (_sbRole&&_sbRole.region)||'All';
+  var isPanIndia = !region||region==='All'||region==='Pan India';
+  if (fnType !== 'hrbp') return '';
+
+  // Get Plat/Gold accounts for this HRBP's region
+  var pgAccounts = CUSTOMER_LIST.filter(function(c){
+    return (c.t==='Platinum'||c.t==='Gold') && (isPanIndia || c.r===region);
+  }).sort(function(a,b){
+    var tOrd = {Platinum:0,Gold:1};
+    return (tOrd[a.t]||2)-(tOrd[b.t]||2) || (b.hc||0)-(a.hc||0);
+  });
+
+  if (!pgAccounts.length) return '';
+
+  // Build last visit map from _hrbpSVCache
+  var lastVisitMap = {}; // account_upper -> {date, submitter}
+  (_hrbpSVCache||[]).forEach(function(sv){
+    var key = (sv.account_name||'').toUpperCase().trim();
+    if (!key) return;
+    if (!lastVisitMap[key]||sv.visit_date>lastVisitMap[key].date) {
+      lastVisitMap[key] = {date:sv.visit_date, submitter:sv.submitter_name||''};
+    }
+  });
+  // Also check hrbp_connects from weekly submissions
+  var allWeeks = Object.values(WEEKS_DATA||{});
+  allWeeks.forEach(function(wk){
+    (wk.hrbp_connects||[]).forEach(function(c){
+      var acct = (c.account_name||c.customer||'').toUpperCase().trim();
+      var dt = wk.to_label||wk.label||'';
+      if (acct && (!lastVisitMap[acct]||dt>lastVisitMap[acct].date))
+        lastVisitMap[acct] = {date:dt, submitter:c.name||''};
+    });
+  });
+
+  var today = new Date();
+  var tierCol = {Platinum:'#a78bfa',Gold:'#f59e0b'};
+
+  // Split into overdue (>30d or never) and visited this month
+  var overdue = [], recent = [];
+  pgAccounts.forEach(function(c){
+    var key = c.n.toUpperCase().trim();
+    var lv = lastVisitMap[key];
+    var daysSince = null;
+    if (lv && lv.date) {
+      var lvDate = new Date(lv.date);
+      if (!isNaN(lvDate)) daysSince = Math.floor((today-lvDate)/86400000);
+    }
+    var tc = tierCol[c.t]||'var(--muted2)';
+    var card = '<div style="background:var(--surface3);border:1px solid var(--border);border-left:3px solid '+tc+';border-radius:6px;padding:8px 10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+      +'<div>'
+      +'<div style="font-size:11px;font-weight:600;color:var(--text)">'+esc(c.n)+'</div>'
+      +'<div style="display:flex;gap:6px;margin-top:2px">'
+      +'<span style="font-size:9px;font-weight:700;color:'+tc+'">'+c.t+'</span>'
+      +'<span style="font-size:9px;color:var(--muted2)">'+c.r+'</span>'
+      +(c.hc?'<span style="font-size:9px;color:var(--muted2)">'+c.hc+' HC</span>':'')
+      +'</div></div>'
+      +'<div style="text-align:right;flex-shrink:0">'
+      +(daysSince===null
+        ?'<div style="font-size:10px;color:var(--red);font-weight:600">Never visited</div>'
+        :daysSince>30
+          ?'<div style="font-size:10px;color:var(--red);font-weight:600">'+daysSince+'d ago</div>'
+          :daysSince>14
+            ?'<div style="font-size:10px;color:var(--amber);font-weight:600">'+daysSince+'d ago</div>'
+            :'<div style="font-size:10px;color:var(--green);font-weight:600">'+daysSince+'d ago</div>')
+      +(lv?'<div style="font-size:9px;color:var(--muted2)">'+esc(lv.submitter)+'</div>':'')
+      +'</div></div></div>';
+    if (daysSince===null||daysSince>30) overdue.push(card);
+    else recent.push(card);
+  });
+
+  return '<div style="margin-bottom:16px">'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">🗺️ Journey Plan — Platinum &amp; Gold Accounts</div>'
+    +(overdue.length
+      ?'<div style="font-size:10px;font-weight:600;color:var(--red);margin-bottom:6px">⚠️ Visit Overdue ('+overdue.length+')</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:12px">'+overdue.join('')+'</div>'
+      :'')
+    +(recent.length
+      ?'<div style="font-size:10px;font-weight:600;color:var(--green);margin-bottom:6px">✓ Visited Recently ('+recent.length+')</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">'+recent.join('')+'</div>'
+      :'')
+    +'</div>';
+}
+
 // ─── RENDER HRBP ──────────────────────────────────────────────
 function renderHRBP(w, pw) {
   if(!w){return "";} // null guard
@@ -1883,6 +1971,8 @@ const _allConnects=w.hrbp_connects||[];
         <div class="card-body">${activityItems || '<div class="empty-state">No activities logged.</div>'}</div>
       </div>
     </div>
+
+    ${buildJourneyPlanPanel()}
 
     ${(w.hrbp_case_entries&&w.hrbp_case_entries.length)?`<div style="margin-bottom:16px">`+`<div class="section-label">ER Case Entries</div>`+w.hrbp_case_entries.map(function(c){const sev=c.severity||'Medium';const sevCol=sev==='Critical'?'var(--red)':sev==='High'?'var(--amber)':'var(--muted)';return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${sevCol};border-radius:8px;padding:10px 14px;margin-bottom:8px">`+`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">`+`<div style="font-size:12px;font-weight:600;color:var(--text)">${esc(c.employee||'')} &mdash; ${esc(c.account||'')}</div>`+`<div style="display:flex;gap:5px">`+`<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(148,163,184,.1);color:var(--muted);font-weight:600">${esc(c.caseType||'')}</span>`+`<span style="font-size:9px;padding:1px 7px;border-radius:10px;font-weight:600;color:${sevCol};background:${sevCol}18">${esc(sev)}</span>`+`</div></div>`+`<div style="font-size:11px;color:var(--muted);line-height:1.5">${esc(trim(c.description||'',200))}</div>`+`<div style="font-size:10px;color:var(--muted2);margin-top:3px">${esc(c.by||'')} ${c.region?rtag(c.region):''}</div>`+`</div>`;}).join('')+`</div>`:''}
     <div class="section-label">Employee Relations & Retention</div>
@@ -6550,6 +6640,17 @@ async function sbBoot(user){
   _sbUser=user;
   const{data:profile}=await _sb.from('user_profiles').select('role,region,function_type,tab_scope,display_name').eq('id',user.id).single();
   _sbRole=profile||{role:'viewer',region:null};
+  // Load customer_accounts from Supabase — live tier data
+  try {
+    const {data:ca} = await _sb.from('customer_accounts').select('name,region,tier,active,headcount').eq('active',true).order('headcount',{ascending:false});
+    if (ca && ca.length) {
+      CUSTOMER_LIST.length = 0;
+      ca.forEach(function(c){
+        CUSTOMER_LIST.push({n:c.name, r:c.region, t:c.tier, a:true, hc:c.headcount||0});
+      });
+    }
+  } catch(e) { console.warn('[customer_accounts]', e.message); }
+
   // Load TEAM_MEMBERS from user_profiles — replaces hardcoded array
   try {
     const{data:tmRows}=await _sb.from('user_profiles').select('id,display_name,role,function_type').order('display_name');
