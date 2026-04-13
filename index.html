@@ -664,6 +664,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <button class="sidebar-item" id="snav-users" onclick="snavClick('users',this)">
         <span class="item-icon">👥</span><span class="item-label">User Management</span>
       </button>
+      <button class="sidebar-item" id="snav-accounts" onclick="snavClick('accounts',this)">
+        <span class="item-icon">🏢</span><span class="item-label">Manage Accounts</span>
+      </button>
     </div>
   </div>
 </div>
@@ -711,6 +714,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-submit" class="tab-content"></div>
   <div id="tab-upload" class="tab-content"></div>
   <div id="tab-users" class="tab-content"></div>
+  <div id="tab-accounts" class="tab-content"></div>
   <div id="tab-resignation" class="tab-content"></div>
   <div id="tab-joiners" class="tab-content"></div>
   <div id="tab-joiners" class="tab-content"></div>
@@ -3036,6 +3040,7 @@ function switchTab(id, btn) {
 
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadActionTasks, 100); }
   else if(id==='users') renderUsersTab(el);
+  else if(id==='accounts') renderAccountsTab(el);
   else if(id==='gallery') renderGalleryTab();
   else if(id==='resignation'){const mc=document.getElementById('tab-resignation');if(mc)mc.innerHTML=renderResignation();}
   else if(id==='od'){const mc=document.getElementById('tab-od');if(mc)mc.innerHTML=renderOD();}
@@ -4482,6 +4487,91 @@ async function updateUserRole(uid,role){return updateUserField(uid,'role',role);
 
 async function removeUser(uid){if(!confirm('Remove user?'))return;await _sb.auth.admin.deleteUser(uid);await _sb.from('user_profiles').delete().eq('id',uid);await renderUsersTab(document.getElementById('tab-users'));}
 
+
+// ── MANAGE ACCOUNTS TAB ───────────────────────────────────────────────────
+async function renderAccountsTab(mc) {
+  var allowed = ['admin','executive','hrops'];
+  if (!_sbRole || allowed.indexOf(_sbRole.role) < 0) {
+    if (mc) mc.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Admin access required</div>';
+    return;
+  }
+  if (mc) mc.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Loading...</div>';
+  var res = await _sb.from('customer_accounts').select('id,name,region,tier,active,headcount').order('region').order('headcount',{ascending:false});
+  if (res.error || !res.data) {
+    if (mc) mc.innerHTML = '<div style="padding:40px;color:var(--red)">Error: '+(res.error ? res.error.message : 'unknown')+'</div>';
+    return;
+  }
+  var accts = res.data;
+  var tiers = ['Platinum','Gold','Silver','Bronze','Regular'];
+  var regions = ['North','South','East','West'];
+  var tierCol = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Bronze:'#d97706',Regular:'var(--muted2)'};
+
+  function acctRow(a) {
+    var col = tierCol[a.tier] || 'var(--muted2)';
+    var regOpts = regions.map(function(r){
+      return '<option' + (r === a.region ? ' selected' : '') + '>' + r + '</option>';
+    }).join('');
+    var tierOpts = tiers.map(function(t){
+      return '<option' + (t === a.tier ? ' selected' : '') + '>' + t + '</option>';
+    }).join('');
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      + '<td style="padding:7px 10px;font-size:11px">' + esc(a.name) + '</td>'
+      + '<td style="padding:7px 10px"><select data-id="' + a.id + '" data-field="region" onchange="updateAcct(this)" style="background:var(--surface3);border:1px solid var(--border);color:var(--text);font-size:11px;padding:3px 6px;border-radius:4px">' + regOpts + '</select></td>'
+      + '<td style="padding:7px 10px"><select data-id="' + a.id + '" data-field="tier" onchange="updateAcct(this)" style="background:var(--surface3);border:1px solid var(--border);color:' + col + ';font-weight:600;font-size:11px;padding:3px 6px;border-radius:4px">' + tierOpts + '</select></td>'
+      + '<td style="padding:7px 10px;font-size:11px;color:var(--muted);text-align:center">' + (a.headcount || 0) + '</td>'
+      + '<td style="padding:7px 10px;text-align:center"><input type="checkbox" data-id="' + a.id + '" data-field="active" onchange="updateAcct(this)"' + (a.active ? ' checked' : '') + '/></td>'
+      + '</tr>';
+  }
+
+  var filterBtns = ['All'].concat(tiers).map(function(t) {
+    var cnt = t === 'All' ? accts.length : accts.filter(function(a){ return a.tier === t; }).length;
+    var col = tierCol[t] || 'var(--accent)';
+    return '<button id="af-' + t + '" onclick="filterAcctTab(\'' + t + '\')" style="padding:4px 10px;border:1px solid ' + col + ';border-radius:4px;background:transparent;color:' + col + ';font-size:11px;cursor:pointer">' + t + ' (' + cnt + ')</button>';
+  }).join(' ');
+
+  var tblHead = ['Account','Region','Tier','HC','Active'].map(function(h){
+    return '<th style="padding:7px 10px;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);text-align:left">' + h + '</th>';
+  }).join('');
+
+  var tbl = '<table style="width:100%;border-collapse:collapse">'
+    + '<thead><tr style="background:var(--surface3)">' + tblHead + '</tr></thead>'
+    + '<tbody id="accts-tbody">' + accts.map(acctRow).join('') + '</tbody>'
+    + '</table>';
+
+  if (mc) mc.innerHTML = '<div style="padding:24px 28px">'
+    + '<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:14px">Manage Customer Accounts</div>'
+    + '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Changes save immediately. Drives Journey Plan and HRBP visit dropdown.</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' + filterBtns + '</div>'
+    + tbl + '</div>';
+}
+
+function filterAcctTab(tier) {
+  document.querySelectorAll('#accts-tbody tr').forEach(function(r) {
+    var sels = r.querySelectorAll('select');
+    if (sels.length < 2) return;
+    r.style.display = (tier === 'All' || sels[1].value === tier) ? '' : 'none';
+  });
+  document.querySelectorAll('[id^="af-"]').forEach(function(b) {
+    b.style.fontWeight = (b.id === 'af-' + tier) ? '700' : '400';
+  });
+}
+
+async function updateAcct(el) {
+  var id = el.getAttribute('data-id');
+  var field = el.getAttribute('data-field');
+  var value = (el.type === 'checkbox') ? el.checked : el.value;
+  var patch = {updated_at: new Date().toISOString(), updated_by: (_sbRole && _sbRole.display_name) || 'admin'};
+  patch[field] = value;
+  var res = await _sb.from('customer_accounts').update(patch).eq('id', id);
+  if (res.error) { alert('Save failed: ' + res.error.message); return; }
+  var fresh = await _sb.from('customer_accounts').select('name,region,tier,active,headcount').eq('active', true).order('headcount', {ascending: false});
+  if (fresh.data) {
+    CUSTOMER_LIST.length = 0;
+    fresh.data.forEach(function(c) {
+      CUSTOMER_LIST.push({n: c.name, r: c.region, t: c.tier, a: true, hc: c.headcount || 0});
+    });
+  }
+}
 
 // ── ADMIN & FACILITIES TAB ─────────────────────────────────────────────────
 function renderAdmin(w, weekKey) {
