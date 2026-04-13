@@ -5451,7 +5451,11 @@ async function processCandidate(wb) {
       try { var d=new Date(s); if(!isNaN(d)) return d.toISOString().substring(0,10); } catch(e) {}
       return '';
     })(_pDojRaw);
-    if(_pStatus==='Accepted' && !_pHasCode && _pDoj) {
+    // Accepted + no ECode + DOJ = upcoming joiner
+    // Accepted + has ECode = already joined — mark as 'Joined'
+    var _isProspective = (_pStatus==='Accepted' && !_pHasCode && _pDoj);
+    var _isJoined      = (_pStatus==='Accepted' && _pHasCode);
+    if (_isProspective || _isJoined) {
       var _pCust = ss(_pr['CustomerNameRoleandLocation']||_pr['Customer Name']||_pr['Customer']||'');
       // Extract customer name — before first hyphen
       var _pCustShort = _pCust.split(' - ')[0].split('-')[0].trim();
@@ -5466,7 +5470,7 @@ async function processCandidate(wb) {
         recruiter_name: _pRecs[0]||'',
         resume_source:  ss(_pr['Resume Source']||''),
         req_id:         ss(_pr['Req ID']||_pr['Requisition ID']||''),
-        offer_status:   'Accepted',
+        offer_status:   _isJoined ? 'Joined' : 'Accepted',
         status:         'Offer Accepted'
       });
     }
@@ -7954,7 +7958,7 @@ async function loadUpcomingJoinersForForm() {
     var q = _sb.from('prospective_joiners')
       .select('id,candidate_name,customer,designation,doj,region,offer_status')
       .gte('doj', today).lte('doj', fwd14)
-      .in('offer_status', ['Offered','Accepted','Confirmed'])
+      .eq('offer_status', 'Accepted')
       .order('doj', {ascending:true});
     if (_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India') q=q.eq('region',_sbRole.region);
     var data = ((await q).data)||[];
