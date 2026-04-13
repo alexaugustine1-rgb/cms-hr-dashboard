@@ -1669,7 +1669,9 @@ async function loadHRBPSiteVisitsForTab() {
       var el = document.getElementById('tab-hrbp');
       if (el && currentTab === 'hrbp') {
         var w = WEEKS_DATA[currentWeek];
-        var pw = currentWeek ? WEEKS_DATA[getPrevWeek(currentWeek)] : null;
+        var wkKeys = Object.keys(WEEKS_DATA||{}).sort();
+        var wkIdx = wkKeys.indexOf(currentWeek);
+        var pw = wkIdx > 0 ? WEEKS_DATA[wkKeys[wkIdx-1]] : null;
         el.innerHTML = renderHRBP(w, pw);
       }
     }
