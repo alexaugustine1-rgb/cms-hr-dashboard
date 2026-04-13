@@ -1976,7 +1976,7 @@ const _allConnects=w.hrbp_connects||[];
   const activityItems=(_allConnects||[]).filter(function(c){return c.activities&&c.activities.trim()&&c.activities.length>5;}).map(function(c){return c.activities.split('\n').filter(function(l){return l.trim().length>5;}).map(function(l){return `<div class="attr-row"><div class="attr-icon">📌</div><div class="attr-body"><div class="attr-text">${esc(trim(l.trim(),160))}</div><div class="attr-meta">${esc(c.name||'')} ${rtag(c.region||'')}</div></div></div>`;}).join('');}).join('');
 
   return `
-    <div id="platGoldPanel" style="margin-bottom:0"></div>
+
     <div class="section-label">HRBP Numbers · ${esc(w.label)}</div>
     <div class="mini-stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--accent)">${actualVisits}</div><div class="mini-stat-label">Site Visits / Connects</div></div>
@@ -3058,7 +3058,6 @@ function switchTab(id, btn) {
   currentTab=id;
   if(id==='upload') { if(el){el.innerHTML=renderUploadTab(); document.getElementById('weeksList').innerHTML=weeksListHTML();} }
   if(id==='hrbp' && typeof _sbUser !== 'undefined' && _sbUser) {
-    setTimeout(loadHRBPVisitAlerts, 100);
     setTimeout(loadHRBPSiteVisitsForTab, 150);
   }
 
@@ -5900,121 +5899,9 @@ async function processReqTAT(wb) {
 
 // ── Async HRBP site visit alert population ───────────────────────────────
 async function loadHRBPVisitAlerts() {
-  // v2 — direct Supabase query, region-scoped
-  try {
-    // Determine region scope for this user
-    var _hvRole   = _sbRole ? (_sbRole.role||'')          : '';
-    var _hvFnType = _sbRole ? (_sbRole.function_type||'') : '';
-    var _hvRegion = _sbRole ? (_sbRole.region||'All')     : 'All';
-    var _hvPanIndia = _hvRole==='admin'||_hvRole==='executive'
-      ||_hvFnType==='hrops'||_hvFnType==='payroll'
-      ||_hvRegion==='Pan India'||_hvRegion==='All';
-
-    // Fetch Plat/Gold accounts directly from customer_accounts — region-filtered at DB level
-    var caQuery = _sb.from('customer_accounts')
-      .select('name,region,tier,headcount')
-      .in('tier',['Platinum','Gold'])
-      .eq('active',true);
-    if (!_hvPanIndia) caQuery = caQuery.eq('region', _hvRegion);
-    const {data: caAccts} = await caQuery.order('headcount',{ascending:false});
-
-    // Deduplicate by name — keep highest headcount entry
-    var _caMap = {};
-    (caAccts||[]).forEach(function(a){
-      if (!_caMap[a.name]||(a.headcount||0)>(_caMap[a.name].headcount||0)) _caMap[a.name]=a;
-    });
-    var _tOrd2={Platinum:0,Gold:1};
-    var _pgAcctsDB = Object.values(_caMap).sort(function(a,b){
-      return (_tOrd2[a.tier]||2)-(_tOrd2[b.tier]||2)||(b.headcount||0)-(a.headcount||0);
-    });
-
-    const {data: visits, error} = await _sb
-      .from('hrbp_site_visits')
-      .select('account_name, visit_date, submitter_name, account_tier, region')
-      .order('visit_date', {ascending: false});
-    
-    const el = document.getElementById('platGoldPanel');
-    if (!el) return;
-    
-    // Build last visit per account — combine hrbp_site_visits + WEEKS_DATA connects
-    const lastVisit = {};
-    (visits || []).forEach(function(v) {
-      const acc = (v.account_name || '').toUpperCase();
-      if (!lastVisit[acc] || v.visit_date > lastVisit[acc].date) {
-        lastVisit[acc] = {date: v.visit_date, hrbp: v.submitter_name||'', tier: v.account_tier, region: v.region};
-      }
-    });
-    // Also extract visits from weekly submissions connects (hrbp_connects field)
-    // Each connect entry with account_name gets treated as a visit for that week
-    if (typeof WEEKS_DATA !== 'undefined') {
-      Object.values(WEEKS_DATA).forEach(function(wk) {
-        var weekDate = wk.to_label || wk.label || '';
-        var connects = wk.hrbp_connects || [];
-        connects.forEach(function(c) {
-          var acct = (c.account_name || c.customer || '').toUpperCase();
-          if (!acct) return;
-          // Use week end date as visit date approximation
-          if (!lastVisit[acct] || weekDate > (lastVisit[acct].date || '')) {
-            lastVisit[acct] = {date: weekDate, hrbp: c.name || ''};
-          }
-        });
-        // Also check hrbp_site_visits submitted via the form
-        var siteVisits = wk.hrbp_site_visits || [];
-        siteVisits.forEach(function(sv) {
-          var acct = (sv.account_name || '').toUpperCase();
-          if (!acct) return;
-          if (!lastVisit[acct] || sv.visit_date > (lastVisit[acct].date || '')) {
-            lastVisit[acct] = {date: sv.visit_date, hrbp: sv.submitter_name || ''};
-          }
-        });
-      });
-    }
-    
-    const today = new Date();
-    const REF = today.getTime();
-
-    // Use _pgAcctsDB fetched directly from Supabase above
-
-    var cards = _pgAcctsDB.map(function(acc) {
-      const key = acc.name.toUpperCase();
-      const lv = lastVisit[key];
-      var daysSince = null;
-      var lastHrbp = '';
-      if (lv && lv.date) {
-        const d = new Date(lv.date);
-        daysSince = Math.round((REF - d.getTime()) / 86400000);
-        lastHrbp = lv.hrbp || '';
-      }
-      var col = daysSince === null ? 'var(--red)' : daysSince > 90 ? 'var(--red)' : daysSince > 60 ? 'var(--amber)' : 'var(--green)';
-      var label = daysSince === null ? 'Never visited' : daysSince + 'd ago';
-      var tierColor = acc.tier === 'Platinum' ? '#a78bfa' : '#f59e0b';
-      return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+tierColor+';border-radius:8px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px">'
-        + '<div><div style="font-size:12px;font-weight:500;color:var(--text)">'+esc(acc.name.substring(0,30))+'</div>'
-        + '<div style="font-size:10px;color:var(--muted);margin-top:2px">'+tierBadge(acc.tier)+(lastHrbp?' &middot; '+esc(lastHrbp):'')+'</div></div>'
-        + '<div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:'+col+'">'+label+'</div>'
-        + (daysSince!==null && daysSince>60 ? '<div style="font-size:10px;color:'+col+'">⚠ Overdue</div>' : '')
-        + '</div></div>';
-    });
-    
-    var overdue = _pgAcctsDB.filter(function(acc) {
-      const key = acc.name.toUpperCase();
-      const lv = lastVisit[key];
-      if (!lv) return true;
-      const days = Math.round((REF - new Date(lv.date).getTime()) / 86400000);
-      return days > 60;
-    }).length;
-    
-    el.innerHTML = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
-      + '<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">Platinum &amp; Gold Account Visit Tracker</div>'
-      + (overdue > 0 ? '<span style="font-size:11px;font-weight:600;color:var(--red);background:rgba(248,113,113,.1);padding:3px 10px;border-radius:20px">⚠ '+overdue+' overdue (>60d)</span>' : '<span style="font-size:11px;color:var(--green)">All accounts visited recently</span>')
-      + '</div>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px">'
-      + cards.join('') + '</div></div>';
-  } catch(e) {
-    console.error('[Visit alerts]', e);
-  }
+  // Retired — visit tracking now handled by Journey Plan panel (buildJourneyPlanPanel)
 }
+
 
 
 // ── THEME TOGGLE ──────────────────────────────────────────────────────────
@@ -6791,10 +6678,6 @@ async function sbBoot(user){
       ca.forEach(function(c){
         CUSTOMER_LIST.push({n:c.name, r:c.region, t:c.tier, a:true, hc:c.headcount||0});
       });
-      // Refresh visit tracker panel if HRBP tab is active — now we have real account data
-      if (typeof loadHRBPVisitAlerts === 'function' && document.getElementById('platGoldPanel')) {
-        setTimeout(loadHRBPVisitAlerts, 50);
-      }
     }
   } catch(e) { console.warn('[customer_accounts]', e.message); }
 
