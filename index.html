@@ -4,6 +4,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <script>
   // ── Remove Vercel toolbar (prevents response headers leaking into page) ──
   (function(){
@@ -5895,6 +5898,7 @@ async function processReqTAT(wb) {
 
 // ── Async HRBP site visit alert population ───────────────────────────────
 async function loadHRBPVisitAlerts() {
+  // v2 — direct Supabase query, region-scoped
   try {
     // Determine region scope for this user
     var _hvRole   = _sbRole ? (_sbRole.role||'')          : '';
