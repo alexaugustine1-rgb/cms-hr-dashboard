@@ -7380,7 +7380,7 @@ async function processWISuperEmp(wb) {
 }
 
 async function processWIEsep(wb) {
-  // Compute: attrition exits by month, by region, by reason, by tenure-at-exit
+  // Compute attrition — voluntary approved exits only, with correct monthly denominators
   const sheetName = wb.SheetNames.find(s => !s.toLowerCase().includes('title') && !s.toLowerCase().includes('cover')) || wb.SheetNames[0];
   const ws = wb.Sheets[sheetName];
   const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
@@ -7399,60 +7399,71 @@ async function processWIEsep(wb) {
   const today = new Date();
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  const exits_by_month = {};
-  const exits_by_region = {North:0,South:0,East:0,West:0};
-  const exits_by_month_region = {}; // {Jan: {North:2, South:1}}
+  // ── Voluntary exit classification ──────────────────────────────────────
+  // Only count: FinalStatus=Approved AND ResignationType is voluntary
+  const VOLUNTARY_TYPES = new Set([
+    'Self Initiation',
+    'Employee Initiated resignation of portal'
+  ]);
+  // Exclude these even if voluntary type matches
+  const EXCLUDE_REASONS = new Set([
+    'Unauthorised Absenteeism -M1', 'Unauthorised Absenteeism -HR',
+    'Joined and Left', 'Joined and Left -M1',
+    'Absconding', 'Absconding -M1'
+  ]);
+
+  const exits_by_month = {};          // {Jan: count}
+  const exits_by_month_region = {};   // {Jan: {North:2, South:1}}
+  const exits_by_region = {North:0, South:0, East:0, West:0};
   const reasons = {};
   const tenure_exits = {'<3 months':0,'3m-1yr':0,'1-2 yrs':0,'2-5 yrs':0,'>5 yrs':0};
 
-  log('Processing ' + rows.length + ' exit records…', 'info');
+  let total_raw = 0, excl_status = 0, excl_type = 0, excl_reason = 0;
+
+  log('Processing ' + rows.length + ' eSep records…', 'info');
 
   rows.forEach(r => {
-    const rel_raw = g(r, 'Relieving Date', 'RelievingDate');
-    const doj_raw = g(r, 'DateOfJoining', 'Date Of Joining');
-    const region  = g(r, 'Region');
-    const reason  = g(r, 'Reason');
+    const rel_raw  = g(r, 'Relieving Date', 'RelievingDate');
+    const doj_raw  = g(r, 'DateOfJoining', 'Date Of Joining');
+    const region   = g(r, 'Region');
+    const reason   = g(r, 'Reason');
+    const final_st = g(r, 'FinalStatus', 'Final Status');
+    const res_type = g(r, 'ResignationType', 'Resignation Type');
 
-    // Exit month from relieving date — current year only
-    if (rel_raw) {
-      try {
-        const d = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
-        if (d.getFullYear() === today.getFullYear()) {
-          const mon = MONTHS[d.getMonth()];
-          exits_by_month[mon] = (exits_by_month[mon] || 0) + 1;
-        }
-      } catch(e) {}
-    }
+    if (!rel_raw) return;
+    let rel_date;
+    try {
+      rel_date = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
+      if (isNaN(rel_date) || rel_date.getFullYear() !== today.getFullYear()) return;
+    } catch(e) { return; }
 
-    // Region exits — check year via rel_raw
-    if (exits_by_region[region] !== undefined && rel_raw) {
-      try {
-        const _dr = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
-        if (_dr.getFullYear() === today.getFullYear()) exits_by_region[region]++;
-      } catch(e) {}
-    }
-    // Also track per-month region exits — current year only
-    if (rel_raw) {
-      try {
-        const _d2 = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
-        if (_d2.getFullYear() === today.getFullYear()) {
-          const _mon2 = MONTHS[_d2.getMonth()];
-          if (!exits_by_month_region[_mon2]) exits_by_month_region[_mon2] = {};
-          if (exits_by_region[region] !== undefined) {
-            exits_by_month_region[_mon2][region] = (exits_by_month_region[_mon2][region]||0) + 1;
-          }
-        }
-      } catch(e) {}
+    total_raw++;
+
+    // Filter 1: Must be Approved
+    if (final_st !== 'Approved') { excl_status++; return; }
+
+    // Filter 2: Must be voluntary resignation type
+    if (!VOLUNTARY_TYPES.has(res_type)) { excl_type++; return; }
+
+    // Filter 3: Exclude specific involuntary reasons
+    if (EXCLUDE_REASONS.has(reason)) { excl_reason++; return; }
+
+    const mon = MONTHS[rel_date.getMonth()];
+    exits_by_month[mon] = (exits_by_month[mon] || 0) + 1;
+
+    if (exits_by_region[region] !== undefined) exits_by_region[region]++;
+    if (!exits_by_month_region[mon]) exits_by_month_region[mon] = {};
+    if (exits_by_region[region] !== undefined) {
+      exits_by_month_region[mon][region] = (exits_by_month_region[mon][region] || 0) + 1;
     }
 
     if (reason) reasons[reason] = (reasons[reason] || 0) + 1;
 
     // Tenure at exit
-    if (doj_raw && rel_raw) {
+    if (doj_raw) {
       try {
         const doj = doj_raw instanceof Date ? doj_raw : new Date(String(doj_raw).split(' ')[0]);
-        const rel = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
-        const yrs = (rel - doj) / (365.25 * 86400000);
+        const yrs = (rel_date - doj) / (365.25 * 86400000);
         if (yrs < 0.25) tenure_exits['<3 months']++;
         else if (yrs < 1) tenure_exits['3m-1yr']++;
         else if (yrs < 2) tenure_exits['1-2 yrs']++;
@@ -7462,37 +7473,71 @@ async function processWIEsep(wb) {
     }
   });
 
-  // Build attrition — use WI.active_hc as denominator (best proxy for monthly HC)
+  log('Voluntary approved exits: ' + Object.values(exits_by_month).reduce((s,v)=>s+v,0), 'ok');
+  log('Excluded (not Approved): ' + excl_status + ' | Involuntary/other: ' + (excl_type+excl_reason), 'ok');
+
+  // ── Load monthly HC denominators from monthly_hc_snapshot ──────────────
+  let hc_snap = {};
+  try {
+    const {data: snap} = await _sb.from('monthly_hc_snapshot').select('month_key,opening_hc').order('month_key');
+    if (snap) snap.forEach(function(s) {
+      // month_key = '2026-01', extract mon label
+      const mo = parseInt(s.month_key.split('-')[1]) - 1;
+      hc_snap[MONTHS[mo]] = s.opening_hc;
+    });
+  } catch(e) { console.warn('[eSep] HC snap load failed:', e.message); }
+
+  const fallbackHC = (typeof WI !== 'undefined' && WI.active_hc) || 2830;
+
+  // ── Build attrition object with correct per-month denominator ──────────
   const attrition = {};
-  const totalHC = (typeof WI !== 'undefined' && WI.active_hc) || 2800;
   MONTHS.forEach(mon => {
-    if (exits_by_month[mon]) {
-      attrition[mon] = { exits: exits_by_month[mon], active_hc: totalHC, rate: 0, region: exits_by_month_region[mon]||{} };
-    }
+    if (!exits_by_month[mon]) return;
+    const ohc = hc_snap[mon] || fallbackHC;
+    const rate = Math.round(exits_by_month[mon] / ohc * 12 * 1000) / 10; // annualised, 1dp
+    attrition[mon] = {
+      exits: exits_by_month[mon],
+      active_hc: ohc,
+      rate,
+      region: exits_by_month_region[mon] || {}
+    };
   });
 
-  // Top exit reasons sorted
   const top_reasons = Object.entries(reasons)
-    .sort((a,b)=>b[1]-a[1]).slice(0,10)
-    .map(([reason,count])=>({reason,count}));
+    .sort((a,b) => b[1]-a[1]).slice(0,10)
+    .map(([reason,count]) => ({reason,count}));
 
   const patch = {
     attrition,
     attrition_by_region: exits_by_region,
     attrition_by_tenure: Object.fromEntries(
-      Object.entries(tenure_exits).map(([k,v])=>[k,{total: v}])
+      Object.entries(tenure_exits).map(([k,v]) => [k, {total: v}])
     ),
     exit_reasons: { latest: top_reasons },
-    _esep_updated: new Date().toISOString().substring(0,10)
+    _esep_updated: new Date().toISOString().substring(0, 10)
   };
 
-  log('Total exits: ' + rows.length, 'ok');
   log('By month: ' + JSON.stringify(exits_by_month), 'ok');
-  log('By region: ' + JSON.stringify(exits_by_region), 'ok');
+  log('By region YTD: ' + JSON.stringify(exits_by_region), 'ok');
   log('Top reason: ' + (top_reasons[0]?.reason || '—'), 'ok');
 
   await _mergeWI(patch);
+
+  // ── Update monthly_hc_snapshot exits for each month ────────────────────
+  try {
+    for (const [mon, cnt] of Object.entries(exits_by_month)) {
+      const mo_idx = MONTHS.indexOf(mon);
+      if (mo_idx < 0) continue;
+      const month_key = today.getFullYear() + '-' + String(mo_idx+1).padStart(2,'0');
+      await _sb.from('monthly_hc_snapshot')
+        .upsert({month_key, month_label: mon+' '+today.getFullYear(), exits: cnt, updated_at: new Date().toISOString()},
+                {onConflict:'month_key', ignoreDuplicates:false});
+    }
+    log('monthly_hc_snapshot exits updated', 'ok');
+  } catch(e) { console.warn('[eSep] snapshot update failed:', e.message); }
 }
+
+
 
 async function processWICandidate(wb) {
   // Compute: TA sourced/offered/joined by month, resume source stats
