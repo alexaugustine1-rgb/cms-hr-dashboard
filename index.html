@@ -7586,10 +7586,10 @@ async function processOdWfh(wb) {
   CMS_SUMMARY.od_total   = ls.od_records || 0;
   CMS_SUMMARY.od_pending = ls.od_pending || 0;
   CMS_SUMMARY.od_auto    = 0; // removed — all approvals are manager-approved
-  CMS_WFH_SUMMARY = CMS_WFH_SUMMARY || {};
-  CMS_WFH_SUMMARY.total     = ls.wfh_records || 0;
-  CMS_WFH_SUMMARY.employees = ls.wfh_employees || 0;
-  CMS_WFH_SUMMARY.pending   = ls.wfh_pending || 0;
+  // CMS_WFH_SUMMARY is const — mutate in place, never reassign
+  CMS_WFH_SUMMARY.total     = ls.wfh_records  || 0;
+  CMS_WFH_SUMMARY.employees = ls.wfh_employees|| 0;
+  CMS_WFH_SUMMARY.pending   = ls.wfh_pending  || 0;
 
   // Persist to data_cache — store new monthly structure
   const odFlat  = monthArr[latestMonth]||[];
