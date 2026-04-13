@@ -3176,7 +3176,7 @@ async function loadProspectiveJoiners() {
       .select('*')
       .gte('doj', fromDt)
       .lte('doj', toDt)
-      .order('doj', {ascending:true});
+      .order('doj', {ascending:false});
     if(_sbRole && _sbRole.role==='hrbp' && _sbRole.function_type==='hrbp'
        && _sbRole.region && _sbRole.region!=='Pan India') {
       q = q.eq('region', _sbRole.region);
@@ -7959,7 +7959,7 @@ async function loadUpcomingJoinersForForm() {
       .select('id,candidate_name,customer,designation,doj,region,offer_status')
       .gte('doj', today).lte('doj', fwd14)
       .eq('offer_status', 'Accepted')
-      .order('doj', {ascending:true});
+      .order('doj', {ascending:false});
     if (_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India') q=q.eq('region',_sbRole.region);
     var data = ((await q).data)||[];
     if (!data.length) {
