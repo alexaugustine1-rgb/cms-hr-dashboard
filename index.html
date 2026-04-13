@@ -2432,14 +2432,14 @@ function renderAbsenteeism(el) {
   if (_absentFilter.status !== 'All') data = data.filter(r => r.status === _absentFilter.status);
 
   // KPI cards
-  const urgent = _absentCases.filter(r => r.status === 'Uncontacted').length;
-  const critical = _absentCases.filter(r => r.consecutive_absent >= 21).length;
-  const platGold = _absentCases.filter(r => r.account_tier === 'Platinum' || r.account_tier === 'Gold').length;
-  const warned = _absentCases.filter(r => r.status === 'Warning Letter Issued' || r.status === 'Show Cause Notice Issued').length;
-  const esepInitiated = _absentCases.filter(r => r.esep_initiated).length;
+  const urgent        = data.filter(r => r.status === 'Uncontacted').length;
+  const critical      = data.filter(r => r.consecutive_absent >= 21).length;
+  const platGold      = data.filter(r => r.account_tier === 'Platinum' || r.account_tier === 'Gold').length;
+  const warned        = data.filter(r => r.status === 'Warning Letter Issued' || r.status === 'Show Cause Notice Issued').length;
+  const esepInitiated = data.filter(r => r.esep_initiated).length;
 
   const kpiHTML = `<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px">
-    ${[['Open Cases',_absentCases.length,'var(--accent)'],['Uncontacted',urgent,'var(--red)'],['Critical >21d',critical,'#f97316'],['Plat/Gold',platGold,'#a78bfa'],['eSep Raised',esepInitiated,'var(--green)']].map(([l,v,c])=>`
+    ${[['Open Cases',data.length,'var(--accent)'],['Uncontacted',urgent,'var(--red)'],['Critical >21d',critical,'#f97316'],['Plat/Gold',platGold,'#a78bfa'],['eSep Raised',esepInitiated,'var(--green)']].map(([l,v,c])=>`
     <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:12px;text-align:center">
       <div style="font-family:Bebas_Neue,sans-serif;font-size:30px;color:${c};line-height:1">${v}</div>
       <div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:3px">${l}</div>
@@ -4724,7 +4724,7 @@ function renderResignation(){
     +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:28px;letter-spacing:1px;color:var(--text);margin-top:2px">Active Resignations &#x2192; Hire Status</div></div>'
     +'<div style="font-size:11px;color:var(--muted)">As of 25 Mar 2026 &middot; '+S.total_res+' active resignations</div></div>'
     +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">'
-    +[['Past LWD',S.lwd_past,'var(--red)','Already left'],['&lt;30 Days to LWD',S.lwd_lt30,'var(--red)','Start search now'],['Platinum/Gold No Req',S.plat_gold_no_req,'#a78bfa','Premium risk'],['R1 Not Approved',S.r1_pending,'var(--amber)','Blocking chain'],['No Req Raised',S.no_req,'var(--muted)','of '+S.total_res+' active']].map(function(a){
+    +(function(){var _lp=data.filter(function(r){return r.days_to_lwd<0;}).length;var _l3=data.filter(function(r){return r.days_to_lwd>=0&&r.days_to_lwd<=30;}).length;var _pg=data.filter(function(r){return['Platinum','Gold'].includes(r.tier)&&!r.req_id;}).length;var _r1=data.filter(function(r){return r.r1_status==='Pending'||!r.r1_status;}).length;var _nr=data.filter(function(r){return!r.req_id;}).length;return[['Past LWD',_lp,'var(--red)','Already left'],['&lt;30 Days to LWD',_l3,'var(--red)','Start search now'],['Platinum/Gold No Req',_pg,'#a78bfa','Premium risk'],['R1 Not Approved',_r1,'var(--amber)','Blocking chain'],['No Req Raised',_nr,'var(--muted)','of '+data.length+' shown']];}()).map(function(a){
       return'<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+a[2]+';border-radius:10px;padding:14px;text-align:center">'
         +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:34px;color:'+a[2]+';line-height:1">'+a[1]+'</div>'
         +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-top:4px">'+a[0]+'</div>'
@@ -4845,16 +4845,27 @@ function renderOD(){
       +' — WFH days exceed calendar days in month. Likely multi-month application filed in ZingHR. Verify with employee.</div>');
   }
 
-  // ── Stats cards
+  // ── Stats cards — computed from filtered empArr so region filter applies
+  const _isFiltered = _odRegion !== 'All';
+  const _statArr = _isFiltered ? empArr : null; // null = use summary totals
+  // Filtered OD stats
+  const _odRecs  = _statArr ? _statArr.reduce((s,r)=>s+r.od_records,0)  : (summary.od_records||0);
+  const _odDays  = _statArr ? _statArr.reduce((s,r)=>s+r.od_days,0)     : (summary.od_days||0);
+  const _odEmps  = _statArr ? _statArr.filter(r=>r.od_days>0).length     : (summary.od_employees||0);
+  const _odPend  = _statArr ? _statArr.reduce((s,r)=>s+r.od_pending,0)  : (summary.od_pending||0);
+  const _wfhRecs = _statArr ? _statArr.reduce((s,r)=>s+r.wfh_records,0) : (summary.wfh_records||0);
+  const _wfhDays = _statArr ? _statArr.reduce((s,r)=>s+r.wfh_days,0)    : (summary.wfh_days||0);
+  const _wfhEmps = _statArr ? _statArr.filter(r=>r.wfh_days>0).length    : (summary.wfh_employees||0);
+  const _wfhPend = _statArr ? _statArr.reduce((s,r)=>s+r.wfh_pending,0) : (summary.wfh_pending||0);
   const statsData = isWFH
-    ? [['WFH Applications',(summary.wfh_records||0).toLocaleString(),'var(--accent)'],
-       ['WFH Employees',(summary.wfh_employees||0),'var(--purple)'],
-       ['Pending Approval',(summary.wfh_pending||0),'var(--amber)'],
-       ['Avg Days / Employee',summary.wfh_employees>0?Math.round((summary.wfh_days||0)/summary.wfh_employees):0,'var(--muted)']]
-    : [['OD Applications',(summary.od_records||0).toLocaleString(),'var(--accent)'],
-       ['OD Employees',(summary.od_employees||0),'var(--purple)'],
-       ['Pending Approval',(summary.od_pending||0),'var(--amber)'],
-       ['Avg Days / Employee',summary.od_employees>0?Math.round((summary.od_days||0)/summary.od_employees):0,'var(--muted)']];
+    ? [['WFH Applications',_wfhRecs.toLocaleString(),'var(--accent)'],
+       ['WFH Employees',_wfhEmps,'var(--purple)'],
+       ['Pending Approval',_wfhPend,'var(--amber)'],
+       ['Avg Days / Employee',_wfhEmps>0?Math.round(_wfhDays/_wfhEmps):0,'var(--muted)']]
+    : [['OD Applications',_odRecs.toLocaleString(),'var(--accent)'],
+       ['OD Employees',_odEmps,'var(--purple)'],
+       ['Pending Approval',_odPend,'var(--amber)'],
+       ['Avg Days / Employee',_odEmps>0?Math.round(_odDays/_odEmps):0,'var(--muted)']];
 
   const statCards = statsData.map(([label,val,col])=>
     '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:14px;text-align:center">'
@@ -4910,7 +4921,7 @@ function renderOD(){
     // Table
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
     +'<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 100px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['Employee','Account','Region','Designation',colLabel+' Days',colLabel+' Recs','Approver'].map(h=>
+    +['Employee','Account','Region','Designation',colLabel+' Days','Applications','Approver Code'].map(h=>
       '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>'
     ).join('')+'</div>'
     +(rows||'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>')+'</div>'
@@ -6617,8 +6628,10 @@ function renderATETab(el) {
   if (_ateFilterAlert  === 'Active')   rows = rows.filter(function(r){ return ateAlert(r) === 'active'; });
   if (_ateFilterAlert  === 'Closed')   rows = rows.filter(function(r){ return ateAlert(r) === 'closed'; });
 
-  // Summary counts (from full region-filtered set before status/alert filter)
-  var base = _ateCases.filter(function(r){ return isPanIndia ? true : r.region === region; });
+  // Summary counts — use filter bar region (_ateFilterRegion) so cards match table
+  var base = _ateFilterRegion === 'All'
+    ? _ateCases
+    : _ateCases.filter(function(r){ return r.region === _ateFilterRegion; });
   var cntTotal    = base.length;
   var cntOverdue  = base.filter(function(r){ return ateAlert(r)==='overdue'; }).length;
   var cntDue30    = base.filter(function(r){ return ateAlert(r)==='due30'; }).length;
@@ -7570,16 +7583,21 @@ async function processOdWfh(wb) {
     };
   });
 
-  // Store in CMS_OD_DATA as {months, monthArr, monthSummary} — new structure
-  // Also keep legacy CMS_OD_DATA as flat array for backward compat (latest month)
-  const latestMonth = months[months.length-1] || '';
-  CMS_OD_DATA.length = 0;
-  (monthArr[latestMonth]||[]).forEach(r=>CMS_OD_DATA.push(r));
-  CMS_WFH_DATA.length = 0;
-  (monthArr[latestMonth]||[]).filter(r=>r.wfh_days>0).forEach(r=>CMS_WFH_DATA.push(r));
+  // Merge with existing monthly data — preserve prior months, add/update new ones
+  const existing = (window._OD_MONTHLY && window._OD_MONTHLY.months) ? window._OD_MONTHLY : null;
+  const mergedMonths    = existing ? [...new Set([...existing.months, ...months])].sort((a,b)=>new Date('01 '+a)-new Date('01 '+b)) : months;
+  const mergedMonthArr  = Object.assign({}, existing ? existing.monthArr : {}, monthArr);
+  const mergedSummary   = Object.assign({}, existing ? existing.monthSummary : {}, monthSummary);
 
-  // Store full monthly structure in a global
-  window._OD_MONTHLY = {months, monthArr, monthSummary};
+  // Store full monthly structure in global
+  window._OD_MONTHLY = {months: mergedMonths, monthArr: mergedMonthArr, monthSummary: mergedSummary};
+
+  // Set CMS arrays to latest month for backward compat
+  const latestMonth = mergedMonths[mergedMonths.length-1] || '';
+  CMS_OD_DATA.length = 0;
+  (mergedMonthArr[latestMonth]||[]).forEach(r=>CMS_OD_DATA.push(r));
+  CMS_WFH_DATA.length = 0;
+  (mergedMonthArr[latestMonth]||[]).filter(r=>r.wfh_days>0).forEach(r=>CMS_WFH_DATA.push(r));
 
   // Summary for stat cards (latest month)
   const ls = monthSummary[latestMonth] || {};
@@ -7591,11 +7609,12 @@ async function processOdWfh(wb) {
   CMS_WFH_SUMMARY.employees = ls.wfh_employees|| 0;
   CMS_WFH_SUMMARY.pending   = ls.wfh_pending  || 0;
 
-  // Persist to data_cache — store new monthly structure
-  const odFlat  = monthArr[latestMonth]||[];
-  const wfhFlat = (monthArr[latestMonth]||[]).filter(r=>r.wfh_days>0);
+  // Persist merged data to data_cache
+  const odFlat  = mergedMonthArr[latestMonth]||[];
+  const wfhFlat = (mergedMonthArr[latestMonth]||[]).filter(r=>r.wfh_days>0);
   try {
-    await _sb.from('data_cache').upsert({id:'od', data:JSON.parse(JSON.stringify({months,monthArr,monthSummary})), row_count:odFlat.length, uploaded_at:new Date().toISOString()},{onConflict:'id'});
+    const savePayload = JSON.parse(JSON.stringify({months:mergedMonths, monthArr:mergedMonthArr, monthSummary:mergedSummary}));
+    await _sb.from('data_cache').upsert({id:'od', data:savePayload, row_count:odFlat.length, uploaded_at:new Date().toISOString()},{onConflict:'id'});
     await _sb.from('data_cache').upsert({id:'wfh',data:wfhFlat,row_count:wfhFlat.length,uploaded_at:new Date().toISOString()},{onConflict:'id'});
   } catch(e){console.warn('[OD cache]',e.message);}
 
