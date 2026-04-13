@@ -1,6 +1,3 @@
-
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3558,8 +3555,8 @@ function getCurrentWeekKey() {
   var map = [
     [1,2,8,'W05'],[1,9,15,'W06'],[1,16,22,'W07'],[1,23,31,'W08'],
     [2,2,8,'W09'],[2,9,15,'W10'],[2,16,22,'W11'],[2,23,29,'W12'],
-    [2,30,31,'W13'],[3,1,5,'W13'],[3,6,12,'W14'],[3,13,19,'W15'],[3,20,26,'W16'],[3,27,31,'W16'],
-    [4,1,5,'W17'],[4,6,12,'W17'],[4,13,19,'W18'],[4,17,23,'W19'],[4,24,30,'W20'],
+    [2,30,31,'W13'],[3,1,5,'W13'],[3,6,12,'W14'],[3,13,19,'W15'],[3,20,26,'W16'],[3,27,30,'W17'],
+    [4,1,3,'W17'],[4,4,10,'W18'],[4,11,17,'W19'],[4,18,24,'W20'],[4,25,30,'W21'],
     [5,1,9,'W21'],[5,10,16,'W22'],[5,17,23,'W23'],[5,24,31,'W24'],
     [6,1,8,'W25'],[6,9,15,'W26'],[6,16,22,'W27'],[6,23,30,'W28'],
     [7,1,8,'W29'],[7,9,15,'W30'],[7,16,22,'W31'],[7,23,31,'W32'],
@@ -5299,7 +5296,24 @@ async function processCandidate(wb) {
     var _pr = rows[_pi];
     var _pStatus = ss(_pr['Offer Status']||'');
     var _pHasCode = !!ss(_pr['Employee Code']||'');
-    var _pDoj = ss(_pr['Tentative Date Of Joining']||_pr['Final Date of Joining']||_pr['Final DOJ']||_pr['Expected DOJ']||'');
+    var _pDojRaw = ss(_pr['Tentative Date Of Joining']||_pr['Final Date of Joining']||_pr['Final DOJ']||_pr['Expected DOJ']||'');
+    var _pDoj = (function(s){
+      if (!s) return '';
+      // Already YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      // '01-Apr-26' or '01 Apr 26' or '01-Apr-2026'
+      var MON={jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+      var parts = s.replace(/-/g,' ').split(' ').filter(function(p){return p.trim();});
+      if (parts.length >= 3) {
+        var dd = parts[0].length===2?parts[0]:'0'+parts[0];
+        var mm = MON[(parts[1]||'').toLowerCase().substring(0,3)]||'01';
+        var yy = parts[2]; if (yy.length===2) yy='20'+yy;
+        return yy+'-'+mm+'-'+dd;
+      }
+      // Try JS Date as fallback
+      try { var d=new Date(s); if(!isNaN(d)) return d.toISOString().substring(0,10); } catch(e) {}
+      return '';
+    })(_pDojRaw);
     if(_pStatus==='Accepted' && !_pHasCode && _pDoj) {
       var _pCust = ss(_pr['CustomerNameRoleandLocation']||_pr['Customer Name']||_pr['Customer']||'');
       // Extract customer name — before first hyphen
@@ -7274,7 +7288,20 @@ async function processResignationData(wb) {
 
   log('Processing '+rows.length+' eSep records for Resignation tab…','info');
 
-  const newRows = rows.map(r => {
+  // Only include rows that are actionable:
+  // - EmpStatus is not 'Existing' (those are active employees, not resigned)
+  // - LWD is in future OR within last 90 days (older cases are stale, not actionable)
+  const newRows = rows.filter(r => {
+    const _es = String(g(r,'EmpStatus')||'').trim();
+    if (_es === 'Existing') return false;
+    const _lwd = g(r,'Relieving Date','RelievingDate');
+    if (!_lwd || _lwd === 'None') return true; // include if no LWD (upcoming)
+    try {
+      const _lwdDate = new Date(String(_lwd).split(' ')[0]);
+      const _daysToLwd = Math.floor((_lwdDate - today) / 86400000);
+      return _daysToLwd >= -90; // future + last 90 days only
+    } catch(e) { return true; }
+  }).map(r => {
     const lwd_raw = g(r,'Relieving Date','RelievingDate');
     const res_raw = g(r,'DateOfResignation','Date Of Resignation');
     const m1s     = g(r,'Manager1Status');
@@ -7311,11 +7338,13 @@ async function processResignationData(wb) {
   const lwd_past   = newRows.filter(r=>r.days_to_lwd<0).length;
   const lwd_lt30   = newRows.filter(r=>r.days_to_lwd>=0&&r.days_to_lwd<=30).length;
   const no_req     = newRows.filter(r=>!r.req_id).length;
-  CMS_SUMMARY.total_res  = newRows.length;
-  CMS_SUMMARY.r1_pending = r1_pending;
-  CMS_SUMMARY.lwd_past   = lwd_past;
-  CMS_SUMMARY.lwd_lt30   = lwd_lt30;
-  CMS_SUMMARY.no_req     = no_req;
+  const plat_gold_no_req = newRows.filter(r=>['Platinum','Gold'].includes(r.tier)&&!r.req_id).length;
+  CMS_SUMMARY.total_res       = newRows.length;
+  CMS_SUMMARY.r1_pending      = r1_pending;
+  CMS_SUMMARY.lwd_past        = lwd_past;
+  CMS_SUMMARY.lwd_lt30        = lwd_lt30;
+  CMS_SUMMARY.no_req          = no_req;
+  CMS_SUMMARY.plat_gold_no_req = plat_gold_no_req;
 
   // Persist to data_cache
   try {
