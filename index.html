@@ -5940,8 +5940,32 @@ async function loadHRBPVisitAlerts() {
     
     const today = new Date();
     const REF = today.getTime();
-    
-    var cards = CMS_PLAT_GOLD.map(function(acc) {
+
+    // Build region-scoped Plat/Gold list from CUSTOMER_LIST (live, from Supabase)
+    var _hRole   = _sbRole ? (_sbRole.role||'') : '';
+    var _hFnType = _sbRole ? (_sbRole.function_type||'') : '';
+    var _hRegion = _sbRole ? (_sbRole.region||'All') : 'All';
+    var _isPanHRBP = _hRole==='admin'||_hRole==='executive'
+      ||_hFnType==='hrops'||_hFnType==='payroll'
+      ||_hRegion==='Pan India'||_hRegion==='All';
+    // Get Plat/Gold accounts for this HRBP's region, deduped by name
+    var _pgPool = CUSTOMER_LIST.filter(function(c){
+      return (c.t==='Platinum'||c.t==='Gold') && c.a
+        && (_isPanHRBP || c.r===_hRegion);
+    });
+    // Deduplicate by name — keep highest headcount entry
+    var _pgSeen = {};
+    _pgPool.forEach(function(c){
+      if (!_pgSeen[c.n]||(c.hc||0)>(_pgSeen[c.n].hc||0)) _pgSeen[c.n]=c;
+    });
+    var _tOrd = {Platinum:0,Gold:1};
+    var _pgAccts = Object.values(_pgSeen)
+      .sort(function(a,b){return (_tOrd[a.t]||2)-(_tOrd[b.t]||2)||(b.hc||0)-(a.hc||0);})
+      .map(function(c){return {name:c.n, tier:c.t, region:c.r};});
+    // Fall back to CMS_PLAT_GOLD if CUSTOMER_LIST not yet loaded
+    if (!_pgAccts.length && typeof CMS_PLAT_GOLD!=='undefined') _pgAccts=CMS_PLAT_GOLD;
+
+    var cards = _pgAccts.map(function(acc) {
       const key = acc.name.toUpperCase();
       const lv = lastVisit[key];
       var daysSince = null;
@@ -5962,7 +5986,7 @@ async function loadHRBPVisitAlerts() {
         + '</div></div>';
     });
     
-    var overdue = CMS_PLAT_GOLD.filter(function(acc) {
+    var overdue = _pgAccts.filter(function(acc) {
       const key = acc.name.toUpperCase();
       const lv = lastVisit[key];
       if (!lv) return true;
