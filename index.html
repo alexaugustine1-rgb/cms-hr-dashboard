@@ -5896,6 +5896,32 @@ async function processReqTAT(wb) {
 // ── Async HRBP site visit alert population ───────────────────────────────
 async function loadHRBPVisitAlerts() {
   try {
+    // Determine region scope for this user
+    var _hvRole   = _sbRole ? (_sbRole.role||'')          : '';
+    var _hvFnType = _sbRole ? (_sbRole.function_type||'') : '';
+    var _hvRegion = _sbRole ? (_sbRole.region||'All')     : 'All';
+    var _hvPanIndia = _hvRole==='admin'||_hvRole==='executive'
+      ||_hvFnType==='hrops'||_hvFnType==='payroll'
+      ||_hvRegion==='Pan India'||_hvRegion==='All';
+
+    // Fetch Plat/Gold accounts directly from customer_accounts — region-filtered at DB level
+    var caQuery = _sb.from('customer_accounts')
+      .select('name,region,tier,headcount')
+      .in('tier',['Platinum','Gold'])
+      .eq('active',true);
+    if (!_hvPanIndia) caQuery = caQuery.eq('region', _hvRegion);
+    const {data: caAccts} = await caQuery.order('headcount',{ascending:false});
+
+    // Deduplicate by name — keep highest headcount entry
+    var _caMap = {};
+    (caAccts||[]).forEach(function(a){
+      if (!_caMap[a.name]||(a.headcount||0)>(_caMap[a.name].headcount||0)) _caMap[a.name]=a;
+    });
+    var _tOrd2={Platinum:0,Gold:1};
+    var _pgAcctsDB = Object.values(_caMap).sort(function(a,b){
+      return (_tOrd2[a.tier]||2)-(_tOrd2[b.tier]||2)||(b.headcount||0)-(a.headcount||0);
+    });
+
     const {data: visits, error} = await _sb
       .from('hrbp_site_visits')
       .select('account_name, visit_date, submitter_name, account_tier, region')
@@ -5941,39 +5967,9 @@ async function loadHRBPVisitAlerts() {
     const today = new Date();
     const REF = today.getTime();
 
-    // Build region-scoped Plat/Gold list from CUSTOMER_LIST (live, from Supabase)
-    var _hRole   = _sbRole ? (_sbRole.role||'') : '';
-    var _hFnType = _sbRole ? (_sbRole.function_type||'') : '';
-    var _hRegion = _sbRole ? (_sbRole.region||'All') : 'All';
-    var _isPanHRBP = _hRole==='admin'||_hRole==='executive'
-      ||_hFnType==='hrops'||_hFnType==='payroll'
-      ||_hRegion==='Pan India'||_hRegion==='All';
-    // Get Plat/Gold accounts for this HRBP's region, deduped by name
-    var _pgPool = CUSTOMER_LIST.filter(function(c){
-      return (c.t==='Platinum'||c.t==='Gold') && c.a
-        && (_isPanHRBP || c.r===_hRegion);
-    });
-    // Deduplicate by name — keep highest headcount entry
-    var _pgSeen = {};
-    _pgPool.forEach(function(c){
-      if (!_pgSeen[c.n]||(c.hc||0)>(_pgSeen[c.n].hc||0)) _pgSeen[c.n]=c;
-    });
-    var _tOrd = {Platinum:0,Gold:1};
-    var _pgAccts = Object.values(_pgSeen)
-      .sort(function(a,b){return (_tOrd[a.t]||2)-(_tOrd[b.t]||2)||(b.hc||0)-(a.hc||0);})
-      .map(function(c){return {name:c.n, tier:c.t, region:c.r};});
-    // Fall back to CMS_PLAT_GOLD if CUSTOMER_LIST not yet loaded — but filter by region
-    if (!_pgAccts.length && typeof CMS_PLAT_GOLD!=='undefined') {
-      var _pgFb = CMS_PLAT_GOLD.filter(function(a){
-        return _isPanHRBP || (a.region||'')=== _hRegion;
-      });
-      // Deduplicate fallback by name too
-      var _fbSeen = {};
-      _pgFb.forEach(function(a){ if(!_fbSeen[a.name]) _fbSeen[a.name]=a; });
-      _pgAccts = Object.values(_fbSeen);
-    }
+    // Use _pgAcctsDB fetched directly from Supabase above
 
-    var cards = _pgAccts.map(function(acc) {
+    var cards = _pgAcctsDB.map(function(acc) {
       const key = acc.name.toUpperCase();
       const lv = lastVisit[key];
       var daysSince = null;
@@ -5994,7 +5990,7 @@ async function loadHRBPVisitAlerts() {
         + '</div></div>';
     });
     
-    var overdue = _pgAccts.filter(function(acc) {
+    var overdue = _pgAcctsDB.filter(function(acc) {
       const key = acc.name.toUpperCase();
       const lv = lastVisit[key];
       if (!lv) return true;
