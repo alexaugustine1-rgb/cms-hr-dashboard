@@ -975,7 +975,23 @@ function renderOverview(w, pw) {
   // pending_cases = active long-absent cases with no eSep raised
   var openReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.length : (S.total_reqs||0);
   var critReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.tat>45;}).length : (S.reqs_critical||0);
-  var mJoiners  = w.ta_closed||0;
+  // Joiners this week — use ta_closed if populated, else count from prospective_joiners
+  var mJoiners = w.ta_closed||0;
+  if (!mJoiners && typeof _prospectiveJoiners !== 'undefined' && _prospectiveJoiners.length && w.from_label && w.to_label) {
+    // Parse week range from labels like '06 Apr' to get date window
+    var _pjCount = 0;
+    try {
+      var _wFrom = new Date(w.from_label + ' 2026');
+      var _wTo   = new Date(w.to_label   + ' 2026');
+      if (!isNaN(_wFrom) && !isNaN(_wTo)) {
+        _pjCount = _prospectiveJoiners.filter(function(j){
+          var d = new Date(j.doj);
+          return !isNaN(d) && d >= _wFrom && d <= _wTo;
+        }).length;
+      }
+    } catch(e) {}
+    mJoiners = _pjCount;
+  }
 
   function cmdKpi(icon, val, label, color, sub) {
     return '<div style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+color+';border-radius:10px;padding:14px 16px">'
