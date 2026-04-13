@@ -5962,8 +5962,16 @@ async function loadHRBPVisitAlerts() {
     var _pgAccts = Object.values(_pgSeen)
       .sort(function(a,b){return (_tOrd[a.t]||2)-(_tOrd[b.t]||2)||(b.hc||0)-(a.hc||0);})
       .map(function(c){return {name:c.n, tier:c.t, region:c.r};});
-    // Fall back to CMS_PLAT_GOLD if CUSTOMER_LIST not yet loaded
-    if (!_pgAccts.length && typeof CMS_PLAT_GOLD!=='undefined') _pgAccts=CMS_PLAT_GOLD;
+    // Fall back to CMS_PLAT_GOLD if CUSTOMER_LIST not yet loaded — but filter by region
+    if (!_pgAccts.length && typeof CMS_PLAT_GOLD!=='undefined') {
+      var _pgFb = CMS_PLAT_GOLD.filter(function(a){
+        return _isPanHRBP || (a.region||'')=== _hRegion;
+      });
+      // Deduplicate fallback by name too
+      var _fbSeen = {};
+      _pgFb.forEach(function(a){ if(!_fbSeen[a.name]) _fbSeen[a.name]=a; });
+      _pgAccts = Object.values(_fbSeen);
+    }
 
     var cards = _pgAccts.map(function(acc) {
       const key = acc.name.toUpperCase();
@@ -6781,6 +6789,10 @@ async function sbBoot(user){
       ca.forEach(function(c){
         CUSTOMER_LIST.push({n:c.name, r:c.region, t:c.tier, a:true, hc:c.headcount||0});
       });
+      // Refresh visit tracker panel if HRBP tab is active — now we have real account data
+      if (typeof loadHRBPVisitAlerts === 'function' && document.getElementById('platGoldPanel')) {
+        setTimeout(loadHRBPVisitAlerts, 50);
+      }
     }
   } catch(e) { console.warn('[customer_accounts]', e.message); }
 
