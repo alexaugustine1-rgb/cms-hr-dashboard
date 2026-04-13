@@ -975,22 +975,24 @@ function renderOverview(w, pw) {
   // pending_cases = active long-absent cases with no eSep raised
   var openReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.length : (S.total_reqs||0);
   var critReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.tat>45;}).length : (S.reqs_critical||0);
-  // Joiners this week — use ta_closed if populated, else count from prospective_joiners
-  var mJoiners = w.ta_closed||0;
+  // Joiners this week — priority: ta_closed (from NewJoinee in Super Emp) → WI.joiners_by_week → prospective_joiners
+  var _curWkKey = typeof getCurrentWeekKey==='function' ? getCurrentWeekKey() : '';
+  var _selWkKey = (w && w.week_key) || _curWkKey;
+  var mJoiners = w.ta_closed || 0;
+  if (!mJoiners && W && W.joiners_by_week && W.joiners_by_week[_selWkKey]) {
+    mJoiners = W.joiners_by_week[_selWkKey];
+  }
   if (!mJoiners && typeof _prospectiveJoiners !== 'undefined' && _prospectiveJoiners.length && w.from_label && w.to_label) {
-    // Parse week range from labels like '06 Apr' to get date window
-    var _pjCount = 0;
     try {
       var _wFrom = new Date(w.from_label + ' 2026');
       var _wTo   = new Date(w.to_label   + ' 2026');
       if (!isNaN(_wFrom) && !isNaN(_wTo)) {
-        _pjCount = _prospectiveJoiners.filter(function(j){
+        mJoiners = _prospectiveJoiners.filter(function(j){
           var d = new Date(j.doj);
           return !isNaN(d) && d >= _wFrom && d <= _wTo;
         }).length;
       }
     } catch(e) {}
-    mJoiners = _pjCount;
   }
 
   function cmdKpi(icon, val, label, color, sub) {
@@ -7037,10 +7039,48 @@ async function processWISuperEmp(wb) {
 
   log('Processing ' + rows.length + ' employee records…', 'info');
 
+  // Track NewJoinee employees per week for weekly joiner counts
+  const joiners_by_week = {}; // weekKey -> count
+  const joiners_by_week_region = {}; // weekKey -> {region: count}
+  const WEEK_MAP_SUP = [
+    [1,2,8,'W05'],[1,9,15,'W06'],[1,16,22,'W07'],[1,23,31,'W08'],
+    [2,2,8,'W09'],[2,9,15,'W10'],[2,16,22,'W11'],[2,23,29,'W12'],
+    [2,30,31,'W13'],[3,1,5,'W13'],[3,6,12,'W14'],[3,13,19,'W15'],[3,20,26,'W16'],[3,27,30,'W17'],
+    [4,1,3,'W17'],[4,4,10,'W18'],[4,11,17,'W19'],[4,18,24,'W20'],[4,25,30,'W21']
+  ];
+  function getWeekKey(dt) {
+    var mo=dt.getMonth(), day=dt.getDate();
+    for (var _i=0;_i<WEEK_MAP_SUP.length;_i++) {
+      var _e=WEEK_MAP_SUP[_i];
+      if (_e[0]===mo && day>=_e[1] && day<=_e[2]) return _e[3];
+    }
+    return null;
+  }
+
   rows.forEach(r => {
-    const empStatus = g(r, 'EmployeeStatus', 'Employee Status');
+    const empStatusRaw = g(r, 'Employee Status'); // col 2: Existing/NewJoinee/FnF etc
+    const empStatus    = g(r, 'EmployeeStatus');  // col 6: Active/Inactive
     if (empStatus !== 'Active') return;
     active++;
+
+    // Track NewJoinee employees — flag by week using DOJ
+    if (empStatusRaw === 'NewJoinee') {
+      const doj_j = g(r, 'DOJ', 'Date_Of_Joining');
+      const reg_j = g(r, 'Region');
+      if (doj_j) {
+        try {
+          const d_j = doj_j instanceof Date ? doj_j : new Date(String(doj_j).split(' ')[0]);
+          if (!isNaN(d_j) && d_j.getFullYear() === today.getFullYear()) {
+            const wk_j = getWeekKey(d_j);
+            if (wk_j) {
+              joiners_by_week[wk_j] = (joiners_by_week[wk_j]||0) + 1;
+              if (!joiners_by_week_region[wk_j]) joiners_by_week_region[wk_j] = {};
+              joiners_by_week_region[wk_j][reg_j] = (joiners_by_week_region[wk_j][reg_j]||0)+1;
+            }
+          }
+        } catch(e) {}
+      }
+    }
 
     const gender  = g(r, 'Gender');
     const region  = g(r, 'Region');
@@ -7114,6 +7154,7 @@ async function processWISuperEmp(wb) {
   const patch = {
     active_hc: active,
     active_hc_current: active,
+    joiners_by_week, joiners_by_week_region,
     female_count: female,
     female_pct: active > 0 ? Math.round(female * 100 / active * 10) / 10 : 0,
     regions: regionData,
@@ -7125,6 +7166,29 @@ async function processWISuperEmp(wb) {
   log('Regions: ' + JSON.stringify(Object.fromEntries(Object.entries(regionData).map(([k,v])=>[k,v.hc]))), 'ok');
 
   await _mergeWI(patch);
+
+  // Update weekly_reports ta_closed (joiners) per week from NewJoinee data
+  if (Object.keys(joiners_by_week).length > 0) {
+    for (const [wk, cnt] of Object.entries(joiners_by_week)) {
+      try {
+        await _sb.from('weekly_reports')
+          .update({ta_closed: cnt})
+          .eq('week_key', wk)
+          .gt('ta_closed', cnt - 1); // only update if our count is higher or same
+        // Also upsert if week doesn't exist yet
+        const {data: existing} = await _sb.from('weekly_reports')
+          .select('week_key').eq('week_key', wk).single();
+        if (!existing) {
+          const wLabel = (WEEK_NAMES&&WEEK_NAMES[wk])||wk;
+          await _sb.from('weekly_reports')
+            .insert({week_key:wk, week_num:parseInt(wk.replace('W',''))||0,
+                     label:wLabel, total_respondents:0, ta_closed:cnt});
+        }
+      } catch(e) { console.warn('[SuperEmp joiners]', wk, e.message); }
+    }
+    log('Joiner counts by week: '+JSON.stringify(joiners_by_week), 'ok');
+  }
+
 }
 
 async function processWIEsep(wb) {
