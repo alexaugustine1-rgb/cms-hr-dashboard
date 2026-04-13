@@ -4750,98 +4750,171 @@ function renderResignation(){
 // ── OD INTELLIGENCE ───────────────────────────────────────────────────────
 var _odRegion='All',_odTier='All',_odAuto='All',_odView='OD';
 function renderOD(){
-  if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _odRegion = _sbRole.region; }
-  if((!CMS_OD_DATA||!CMS_OD_DATA.length)&&(!CMS_WFH_DATA||!CMS_WFH_DATA.length)){
-    return '<div style="padding:60px;text-align:center;color:var(--muted)">'
-      +'<div style="font-size:28px;margin-bottom:10px">📋</div>'
-      +'<div>No OD/WFH data loaded. Upload a cmsitn_outdoor_and_wfh_*.xlsx file.</div></div>';
+  if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India'){
+    _odRegion = _sbRole.region;
   }
-  var S=CMS_SUMMARY;
-  var WS=CMS_WFH_SUMMARY;
-  var isWFH=_odView==='WFH';
-  var srcData=isWFH?CMS_WFH_DATA:CMS_OD_DATA;
-  var data=srcData.slice();
-  if(_odRegion!=='All')data=data.filter(function(r){return r.region===_odRegion;});
-  if(_odTier!=='All')data=data.filter(function(r){return r.tier===_odTier;});
-  if(_odAuto==='Auto Only')data=data.filter(function(r){return r.auto>0;});
-  if(_odAuto==='Manual Only')data=data.filter(function(r){return r.auto===0;});
+  // Load monthly structure — falls back to legacy flat data
+  const monthly = (typeof window !== 'undefined' && window._OD_MONTHLY) || null;
+  const hasData  = monthly ? monthly.months.length > 0 : (CMS_OD_DATA&&CMS_OD_DATA.length)||(CMS_WFH_DATA&&CMS_WFH_DATA.length);
 
-  var viewToggle='<div style="display:flex;gap:0;margin-bottom:16px;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:3px;width:fit-content">'
+  if(!hasData){
+    return '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:10px">📋</div><div>No OD/WFH data loaded. Upload a cmsitn_outdoor_and_wfh_*.xlsx file.</div></div>';
+  }
+
+  // Month selector state
+  if (!window._odMonth) window._odMonth = monthly ? monthly.months[monthly.months.length-1] : '';
+  const months    = monthly ? monthly.months : [];
+  const selMonth  = window._odMonth || (months[months.length-1]||'');
+  const isWFH     = _odView === 'WFH';
+  const summary   = monthly ? (monthly.monthSummary[selMonth]||{}) : {};
+  let   empArr    = monthly ? (monthly.monthArr[selMonth]||[]) : (isWFH ? CMS_WFH_DATA : CMS_OD_DATA).slice();
+
+  // Region filter
+  if(_odRegion!=='All') empArr=empArr.filter(r=>r.region===_odRegion);
+
+  // View-specific filter
+  const viewArr = isWFH ? empArr.filter(r=>r.wfh_days>0) : empArr.filter(r=>r.od_days>0);
+
+  // Working days for threshold
+  const workDays = summary.working_days || 22;
+
+  // ── Month selector buttons
+  const monthBtns = months.map(m =>
+    '<button onclick="window._odMonth=\''+m+'\';document.getElementById(\'tab-od\').innerHTML=renderOD()" '
+    +'style="padding:6px 14px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;'
+    +'background:'+(m===selMonth?'var(--accent)':'var(--surface3)')+';'
+    +'color:'+(m===selMonth?'var(--bg)':'var(--muted)')+';font-family:\'DM Mono\',monospace;letter-spacing:.5px">'+m+'</button>'
+  ).join('');
+
+  // ── View toggle
+  const viewToggle =
+    '<div style="display:flex;gap:0;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:3px;width:fit-content">'
     +'<button onclick="_odView=\'OD\';document.getElementById(\'tab-od\').innerHTML=renderOD()" style="padding:7px 24px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:'+(!isWFH?'var(--accent)':'transparent')+';color:'+(!isWFH?'var(--bg)':'var(--muted)')+';font-family:\'DM Mono\',monospace;letter-spacing:.5px">Outdoor Duty</button>'
     +'<button onclick="_odView=\'WFH\';document.getElementById(\'tab-od\').innerHTML=renderOD()" style="padding:7px 24px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:'+(isWFH?'var(--accent)':'transparent')+';color:'+(isWFH?'var(--bg)':'var(--muted)')+';font-family:\'DM Mono\',monospace;letter-spacing:.5px">WFH</button>'
     +'</div>';
 
-  var totalApproved=isWFH?WS.total:S.od_total;
-  var totalAuto=isWFH?WS.auto:S.od_auto;
-  var totalPending=isWFH?WS.pending:S.od_pending;
-  var totalEmps=isWFH?WS.employees:CMS_OD_DATA.length;
+  // ── MoM comparison (if 2 months available)
+  let momPanel = '';
+  if (monthly && monthly.months.length >= 2) {
+    const prevM = monthly.months[monthly.months.indexOf(selMonth)-1];
+    if (prevM) {
+      const prev = monthly.monthSummary[prevM]||{};
+      const cur  = summary;
+      const odChg  = cur.od_records  - (prev.od_records||0);
+      const wfhChg = cur.wfh_records - (prev.wfh_records||0);
+      const odPct  = prev.od_records  > 0 ? Math.round(odChg/prev.od_records*100)  : 0;
+      const wfhPct = prev.wfh_records > 0 ? Math.round(wfhChg/prev.wfh_records*100): 0;
+      momPanel =
+        '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 18px;margin-bottom:16px">'
+        +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Month-on-Month vs '+prevM+'</div>'
+        +'<div style="display:flex;gap:24px;flex-wrap:wrap">'
+        +'<div><div style="font-size:11px;color:var(--muted)">OD Applications</div>'
+        +'<div style="font-size:18px;font-weight:700;color:var(--text)">'+cur.od_records+'</div>'
+        +'<div style="font-size:11px;color:'+(odChg>0?'var(--red)':odChg<0?'var(--green)':'var(--muted)')+';">'+(odChg>0?'▲ +':'▼ ')+Math.abs(odChg)+' ('+odPct+'%)</div></div>'
+        +'<div><div style="font-size:11px;color:var(--muted)">OD Employees</div>'
+        +'<div style="font-size:18px;font-weight:700;color:var(--text)">'+cur.od_employees+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+(prev.od_employees||0)+' prior month</div></div>'
+        +'<div><div style="font-size:11px;color:var(--muted)">WFH Applications</div>'
+        +'<div style="font-size:18px;font-weight:700;color:var(--text)">'+cur.wfh_records+'</div>'
+        +'<div style="font-size:11px;color:'+(wfhChg>0?'var(--red)':wfhChg<0?'var(--green)':'var(--muted)')+';">'+(wfhChg>0?'▲ +':'▼ ')+Math.abs(wfhChg)+' ('+wfhPct+'%)</div></div>'
+        +'<div><div style="font-size:11px;color:var(--muted)">WFH Employees</div>'
+        +'<div style="font-size:18px;font-weight:700;color:var(--text)">'+cur.wfh_employees+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+(prev.wfh_employees||0)+' prior month</div></div>'
+        +'</div></div>';
+    }
+  }
 
+  // ── Policy flags
+  const flags = [];
+  if (!isWFH && summary.high_od > 0) {
+    flags.push('<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:10px 14px;font-size:12px">'
+      +'<span style="color:var(--amber);font-weight:600">⚠ '+summary.high_od+' employees</span>'
+      +' had OD applications on every working day this month ('+workDays+'+ days). Likely full-time field roles — verify account assignment is correct in ZingHR.</div>');
+  }
+  if (isWFH && summary.wfh_excess > 0) {
+    flags.push('<div style="background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;font-size:12px">'
+      +'<span style="color:var(--red);font-weight:600">⚠ '+summary.wfh_excess+' employees</span>'
+      +' had more than 4 WFH days this month. Review against account WFH policy.</div>');
+  }
+  // WFH anomaly — days > days in month
+  const anomalies = viewArr.filter(r=>r.wfh_days>(summary.days_in_month||30));
+  if (isWFH && anomalies.length > 0) {
+    flags.push('<div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.4);border-radius:8px;padding:10px 14px;font-size:12px">'
+      +'<span style="color:var(--red);font-weight:600">⚑ Data anomaly: </span>'
+      +anomalies.map(r=>'<b>'+esc(r.name)+'</b> ('+r.wfh_days+'d)').join(', ')
+      +' — WFH days exceed calendar days in month. Likely multi-month application filed in ZingHR. Verify with employee.</div>');
+  }
+
+  // ── Stats cards
+  const statsData = isWFH
+    ? [['WFH Applications',(summary.wfh_records||0).toLocaleString(),'var(--accent)'],
+       ['WFH Employees',(summary.wfh_employees||0),'var(--purple)'],
+       ['Pending Approval',(summary.wfh_pending||0),'var(--amber)'],
+       ['Avg Days / Employee',summary.wfh_employees>0?Math.round((summary.wfh_days||0)/summary.wfh_employees):0,'var(--muted)']]
+    : [['OD Applications',(summary.od_records||0).toLocaleString(),'var(--accent)'],
+       ['OD Employees',(summary.od_employees||0),'var(--purple)'],
+       ['Pending Approval',(summary.od_pending||0),'var(--amber)'],
+       ['Avg Days / Employee',summary.od_employees>0?Math.round((summary.od_days||0)/summary.od_employees):0,'var(--muted)']];
+
+  const statCards = statsData.map(([label,val,col])=>
+    '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+col+';border-radius:10px;padding:14px;text-align:center">'
+    +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:34px;color:'+col+';line-height:1">'+val+'</div>'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-top:4px">'+label+'</div></div>'
+  ).join('');
+
+  // ── Region filter
   var rf=['All','North','South','East','West'].map(function(v){return _filterBtn(v,_odRegion===v,"_odRegion='"+v+"';document.getElementById('tab-od').innerHTML=renderOD()");}).join('');
-  var tf=['All','Platinum','Gold','Silver','Regular'].map(function(v){return _filterBtn(v,_odTier===v,"_odTier='"+v+"';document.getElementById('tab-od').innerHTML=renderOD()");}).join('');
-  var af=['All','Auto Only','Manual Only'].map(function(v){return _filterBtn(v,_odAuto===v,"_odAuto='"+v+"';document.getElementById('tab-od').innerHTML=renderOD()");}).join('');
 
-  // WFH-specific alert for ABFRL
-  var wfhAlert=isWFH?'<div style="background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.3);border-radius:10px;padding:12px 16px;margin-bottom:16px">'
-    +'<div style="font-size:12px;font-weight:500;color:#a78bfa;margin-bottom:3px">&#9888; ABFRL (Platinum) &#x2014; 958 WFH approvals · 70% of all WFH records</div>'
-    +'<div style="font-size:11px;color:var(--muted)">ABFRL is a Platinum account where employees are expected to be onsite. 958 WFH approvals in Feb&#x2013;Mar 2026 is significantly above expected norms for a field services account. Recommend discussion with delivery head and account manager to verify if a formal WFH arrangement exists.</div>'
-    +'</div>':'';
-
-  var rows=data.map(function(r){
-    var odCol=r.count>=45?'var(--red)':r.count>=30?'var(--amber)':'var(--text)';
-    var rowBg=r.count>=45?'rgba(248,113,113,.03)':r.count>=30?'rgba(251,191,36,.02)':'';
-    var appLabel=r.auto===r.count?'<span style="color:#f87171;font-size:10px;font-weight:600">All Auto</span>':r.auto>0?'<span style="color:var(--amber);font-size:10px">'+r.auto+' auto</span>':'<span style="color:var(--green);font-size:10px">Manual</span>';
-    return'<div style="display:grid;grid-template-columns:180px 1fr 110px 100px 55px 55px 60px 100px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';font-size:12px;align-items:center">'
-      +'<div style="font-weight:500;color:var(--text)">'+esc(r.name.replace('Mr.','').replace('Ms.','').replace('Mrs.','').trim())+'</div>'
-      +'<div><div style="font-size:11px;color:var(--muted)">'+esc(r.customer||'&#x2014;')+'</div><div style="margin-top:2px">'+tierBadge(r.tier)+'</div></div>'
+  // ── Employee table rows
+  const colLabel = isWFH ? 'WFH' : 'OD';
+  const rows = viewArr.map(r => {
+    const days    = isWFH ? r.wfh_days : r.od_days;
+    const records = isWFH ? r.wfh_records : r.od_records;
+    const thresh  = isWFH ? 10 : workDays;
+    const dayCol  = days >= thresh ? 'var(--red)' : days >= Math.round(thresh*0.7) ? 'var(--amber)' : 'var(--text)';
+    const rowBg   = days >= thresh ? 'rgba(248,113,113,.03)' : '';
+    const pending = isWFH ? r.wfh_pending : r.od_pending;
+    const approverBadge = r.approver
+      ? '<span style="font-size:10px;color:var(--green)">✓ '+esc(r.approver)+'</span>'
+      : '<span style="font-size:10px;color:var(--amber)">Pending</span>';
+    return '<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 100px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';font-size:12px;align-items:center">'
+      +'<div style="font-weight:500;color:var(--text)">'+esc(r.name)+'</div>'
+      +'<div><div style="font-size:11px;color:var(--muted)">'+esc(r.customer||'—')+'</div></div>'
       +'<div style="font-size:11px;color:var(--muted)">'+esc(r.region)+'</div>'
-      +'<div style="font-size:11px;color:var(--muted2)">'+esc(r.desig)+'</div>'
-      +'<div style="font-weight:700;color:'+odCol+'">'+r.count+'</div>'
-      +'<div style="font-size:11px;color:var(--muted)">'+r.partial+'</div>'
-      +'<div style="font-size:11px;color:var(--muted)">'+r.multi+'</div>'
-      +'<div style="font-size:11px">'+appLabel+'</div>'
+      +'<div style="font-size:11px;color:var(--muted2)">'+esc(r.desig||'—')+'</div>'
+      +'<div style="font-weight:700;color:'+dayCol+'">'+days+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">'+records+'</div>'
+      +'<div>'+approverBadge+(pending>0?'<span style="font-size:9px;color:var(--amber);margin-left:4px">+'+pending+' pending</span>':'')+'</div>'
       +'</div>';
   }).join('');
 
-  return'<div style="padding:28px 36px;max-width:1200px">'
+  return '<div style="padding:28px 36px;max-width:1200px">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">'
     +'<div><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Attendance Intelligence</div>'
     +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:28px;letter-spacing:1px;color:var(--text);margin-top:2px">OD &amp; WFH Intelligence</div></div>'
-    +'<div style="font-size:11px;color:var(--muted)">Feb&#x2013;Mar 2026 &middot; '+(isWFH?WS.total.toLocaleString()+' WFH records':S.od_total.toLocaleString()+' OD records')+'</div></div>'
+    +'<div style="font-size:11px;color:var(--muted)">'+selMonth+' &middot; '+(isWFH?(summary.wfh_records||0)+' WFH records':(summary.od_records||0)+' OD records')+'</div></div>'
+    // Month selector
+    +'<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap">'
+    +'<span style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Month</span>'
+    +monthBtns+'</div>'
     +viewToggle
-    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">'
-    +[['Total Approved',totalApproved.toLocaleString(),'var(--accent)'],
-      ['Auto-Approved (ODAppr)',totalAuto.toLocaleString(),'var(--red)'],
-      ['Pending Approval',totalPending,'var(--amber)'],
-      ['Employees Tracked',totalEmps,'var(--muted)']].map(function(a){
-      return'<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+a[2]+';border-radius:10px;padding:14px;text-align:center">'
-        +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:34px;color:'+a[2]+';line-height:1">'+a[1]+'</div>'
-        +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-top:4px">'+a[0]+'</div></div>';
-    }).join('')+'</div>'
-    +'<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:10px;padding:12px 16px;margin-bottom:16px">'
-    +'<div style="font-size:12px;font-weight:500;color:#f87171;margin-bottom:3px">&#9888; System Auto-Approval Detected &#x2014; &ldquo;ODAppr&rdquo; Code</div>'
-    +'<div style="font-size:11px;color:var(--muted)">'+(isWFH?'1,048':'8,200')+' '+(isWFH?'WFH':'OD')+' approvals processed by a system rule (ODAppr), not by a manager. Raise with your ZingHR admin to disable and reroute to R1 managers.</div></div>'
-    +wfhAlert
-    +(isWFH?'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px">'
-      +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">WFH by Region</div>'
-      +'<div style="display:flex;gap:16px">'
-      +'<div style="text-align:center;padding:8px 16px;background:var(--surface3);border-radius:8px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:var(--red)">70%</div><div style="font-size:10px;color:var(--muted)">South</div></div>'
-      +'<div style="text-align:center;padding:8px 16px;background:var(--surface3);border-radius:8px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:var(--amber)">22%</div><div style="font-size:10px;color:var(--muted)">West</div></div>'
-      +'<div style="text-align:center;padding:8px 16px;background:var(--surface3);border-radius:8px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:var(--muted)">6%</div><div style="font-size:10px;color:var(--muted)">North</div></div>'
-      +'<div style="text-align:center;padding:8px 16px;background:var(--surface3);border-radius:8px"><div style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:var(--muted)">1%</div><div style="font-size:10px;color:var(--muted)">East</div></div>'
-      +'</div></div>':'')
+    // Stat cards
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0">'+statCards+'</div>'
+    // MoM panel
+    +momPanel
+    // Policy flags
+    +(flags.length ? '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">'+flags.join('')+'</div>' : '')
+    // Region filter
     +'<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'
-    +'<span style="font-size:11px;color:var(--muted)">Region:</span>'+rf
-    +'<span style="width:1px;height:18px;background:var(--border);margin:0 4px"></span>'
-    +'<span style="font-size:11px;color:var(--muted)">Tier:</span>'+tf
-    +'<span style="width:1px;height:18px;background:var(--border);margin:0 4px"></span>'
-    +'<span style="font-size:11px;color:var(--muted)">Approval:</span>'+af+'</div>'
+    +'<span style="font-size:11px;color:var(--muted)">Region:</span>'+rf+'</div>'
+    // Table
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
-    +'<div style="display:grid;grid-template-columns:180px 1fr 110px 100px 55px 55px 60px 100px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['Employee','Account','Region','Designation',(isWFH?'WFH':'OD'),'Partial','Multi','Approval'].map(function(h){
-      return'<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
-    }).join('')+'</div>'
+    +'<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 100px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+    +['Employee','Account','Region','Designation',colLabel+' Days',colLabel+' Recs','Approver'].map(h=>
+      '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>'
+    ).join('')+'</div>'
     +(rows||'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>')+'</div>'
-    +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+data.length+' employees &middot; '+(isWFH?'WFH':'OD')+' view &middot; Sorted by count descending</div>'
+    +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+viewArr.length+' employees &middot; '+colLabel+' view &middot; '+selMonth+'</div>'
     +'</div>';
 }
 
@@ -6360,7 +6433,19 @@ async function sbBoot(user){
         if (!row.data) return;
         if (row.id==='fnf'        && row.row_count>0) { FNF_DATA        = row.data; console.log('[sbBoot] FNF_DATA:',row.row_count,'rows'); }
         if (row.id==='resignation' && row.row_count>0) { CMS_RES_DATA   = row.data; console.log('[sbBoot] CMS_RES_DATA:',row.row_count,'rows'); }
-        if (row.id==='od'          && row.row_count>0) { CMS_OD_DATA    = row.data; console.log('[sbBoot] CMS_OD_DATA:',row.row_count,'rows'); }
+        if (row.id==='od' && row.row_count>0) {
+          // New structure: {months, monthArr, monthSummary} — or legacy flat array
+          if (row.data && row.data.months) {
+            window._OD_MONTHLY = row.data;
+            const latest = row.data.months[row.data.months.length-1]||'';
+            CMS_OD_DATA.length=0; (row.data.monthArr[latest]||[]).forEach(r=>CMS_OD_DATA.push(r));
+            CMS_WFH_DATA.length=0; (row.data.monthArr[latest]||[]).filter(r=>r.wfh_days>0).forEach(r=>CMS_WFH_DATA.push(r));
+            const ls=row.data.monthSummary[latest]||{};
+            CMS_SUMMARY.od_total=ls.od_records||0; CMS_SUMMARY.od_pending=ls.od_pending||0;
+          } else {
+            CMS_OD_DATA = row.data; // legacy flat array
+          }
+          console.log('[sbBoot] OD monthly data loaded'); }
         if (row.id==='wfh'         && row.row_count>0) { CMS_WFH_DATA   = row.data; console.log('[sbBoot] CMS_WFH_DATA:',row.row_count,'rows'); }
         if (row.id==='ta_reqs'     && row.row_count>0) { TA_ACTIVE_REQS = row.data; console.log('[sbBoot] TA_ACTIVE_REQS:',row.row_count,'rows'); }
         if (row.id==='summary' && row.data && row.data.total_res) { Object.assign(CMS_SUMMARY, row.data); console.log('[sbBoot] CMS_SUMMARY loaded from cache'); }
@@ -7377,65 +7462,153 @@ async function processOdWfh(wb) {
   }).filter(r => r['Employee Code']);
 
   const g = (r,...keys) => { for(const k of keys) if(r[k]!==undefined&&String(r[k]).trim()) return String(r[k]).trim(); return ''; };
+  const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   log('Processing '+rows.length+' OD/WFH records…','info');
 
-  // Build per-employee aggregates for OD
-  const odMap = {}, wfhMap = {};
-  let od_total=0, od_pending=0, od_auto=0, wfh_total=0;
+  // month_key → emp_code → {name, customer, region, desig, tier, od_days, wfh_days, od_records, wfh_records, approver, od_pending, wfh_pending}
+  const byMonthEmp = {};
+  const monthsSet  = new Set();
 
   rows.forEach(r => {
-    const type   = g(r,'Type');
-    const emp    = g(r,'Employee Code');
-    const name   = g(r,'Employee Name');
-    const status = g(r,'Approval Status');
-    const cust   = g(r,'Customer Name');
-    const region = g(r,'Region');
-    const desig  = g(r,'Designation');
-    const grade  = g(r,'Grade','Claim Grade');
-    const tier   = 'Regular'; // will be enriched later if needed
-    const isAuto = status==='' || status==='Auto Approved';
-    const isMulti= g(r,'Application Type')==='Multiple Days';
+    const type    = g(r,'Type');
+    const status  = g(r,'Approval Status');
+    if (!['Approved','Applied'].includes(status)) return; // skip rejected/cancelled
 
-    if (type==='Outdoor') {
-      od_total++;
-      if (status==='Applied') od_pending++;
-      if (isAuto) od_auto++;
-      if (!odMap[emp]) odMap[emp]={name,count:0,partial:0,multi:0,customer:cust,region,desig,tier,auto:0};
-      odMap[emp].count++;
-      if (isMulti) odMap[emp].multi++; else odMap[emp].partial++;
-      if (isAuto) odMap[emp].auto++;
-    } else if (type==='WFH') {
-      wfh_total++;
-      if (!wfhMap[emp]) wfhMap[emp]={name,count:0,partial:0,multi:0,customer:cust,region,desig,tier,auto:0};
-      wfhMap[emp].count++;
-      if (isMulti) wfhMap[emp].multi++; else wfhMap[emp].partial++;
-      if (isAuto) wfhMap[emp].auto++;
+    const emp     = g(r,'Employee Code');
+    const name    = g(r,'Employee Name');
+    const fromDt  = g(r,'From Date');
+    const toDt    = g(r,'To Date');
+    const appType = g(r,'Application Type');
+    const cust    = g(r,'Customer Name');
+    const region  = g(r,'Region');
+    const desig   = g(r,'Designation');
+    const approver= g(r,'Approver1Code') || g(r,'Updated_By'); // actual manager code
+
+    if (!fromDt) return;
+
+    // Parse month
+    let fd;
+    try { fd = new Date(fromDt.split(' ')[0]); } catch(e) { return; }
+    if (isNaN(fd)) return;
+    const monthKey = MONTHS_SHORT[fd.getMonth()] + ' ' + fd.getFullYear();
+    monthsSet.add(monthKey);
+
+    // Calculate actual days — capped to end of month to avoid cross-month inflation
+    let days = 1;
+    if (toDt && appType === 'Multiple Days') {
+      try {
+        const td   = new Date(toDt.split(' ')[0]);
+        // Month end: last day of fd's month
+        const mEnd = new Date(fd.getFullYear(), fd.getMonth()+1, 0);
+        const effEnd = td < mEnd ? td : mEnd;
+        days = Math.max(1, Math.round((effEnd - fd) / 86400000) + 1);
+      } catch(e) {}
+    }
+
+    if (!byMonthEmp[monthKey]) byMonthEmp[monthKey] = {};
+    if (!byMonthEmp[monthKey][emp]) {
+      byMonthEmp[monthKey][emp] = {
+        name: name.replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').trim(),
+        customer: cust, region, desig, tier:'Regular',
+        od_days:0, wfh_days:0, od_records:0, wfh_records:0,
+        od_pending:0, wfh_pending:0, approver
+      };
+    }
+    const rec = byMonthEmp[monthKey][emp];
+    rec.name     = rec.name || name.replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').trim();
+    rec.customer = rec.customer || cust;
+    rec.approver = rec.approver || approver;
+
+    if (type === 'Outdoor') {
+      rec.od_days    += days;
+      rec.od_records += 1;
+      if (status === 'Applied') rec.od_pending += 1;
+    } else if (type === 'WFH') {
+      rec.wfh_days    += days;
+      rec.wfh_records += 1;
+      if (status === 'Applied') rec.wfh_pending += 1;
     }
   });
 
-  // Sort by count descending
-  const odArr  = Object.values(odMap).sort((a,b)=>b.count-a.count);
-  const wfhArr = Object.values(wfhMap).sort((a,b)=>b.count-a.count);
+  // Convert to arrays per month, sorted by od_days desc
+  const monthArr = {};
+  const months   = Array.from(monthsSet).sort((a,b) => {
+    const pa = new Date('01 '+a), pb = new Date('01 '+b);
+    return pa - pb;
+  });
 
-  CMS_OD_DATA.length  = 0; odArr.forEach(r=>CMS_OD_DATA.push(r));
-  CMS_WFH_DATA.length = 0; wfhArr.forEach(r=>CMS_WFH_DATA.push(r));
+  months.forEach(m => {
+    monthArr[m] = Object.entries(byMonthEmp[m]||{}).map(([emp, data]) => ({emp, ...data}))
+      .sort((a,b) => (b.od_days + b.wfh_days) - (a.od_days + a.wfh_days));
+  });
 
-  CMS_SUMMARY.od_total   = od_total;
-  CMS_SUMMARY.od_pending = od_pending;
-  CMS_SUMMARY.od_auto    = od_auto;
-  CMS_WFH_SUMMARY.total      = wfh_total;
-  CMS_WFH_SUMMARY.employees  = wfhArr.length;
-  CMS_WFH_SUMMARY.pending    = 0;
+  // Build summary per month
+  const monthSummary = {};
+  months.forEach(m => {
+    const arr = monthArr[m] || [];
+    // Working days in month (approx)
+    const firstDay = new Date('01 '+m);
+    const daysInMonth = new Date(firstDay.getFullYear(), firstDay.getMonth()+1, 0).getDate();
+    const workingDays = Math.round(daysInMonth * 5/7);
 
-  // Persist to data_cache
+    monthSummary[m] = {
+      od_records:  arr.reduce((s,r)=>s+r.od_records,0),
+      od_days:     arr.reduce((s,r)=>s+r.od_days,0),
+      wfh_records: arr.reduce((s,r)=>s+r.wfh_records,0),
+      wfh_days:    arr.reduce((s,r)=>s+r.wfh_days,0),
+      od_employees:arr.filter(r=>r.od_days>0).length,
+      wfh_employees:arr.filter(r=>r.wfh_days>0).length,
+      od_pending:  arr.reduce((s,r)=>s+r.od_pending,0),
+      wfh_pending: arr.reduce((s,r)=>s+r.wfh_pending,0),
+      // High OD: employees whose OD days exceed working days (field roles all month)
+      high_od:     arr.filter(r=>r.od_days >= workingDays).length,
+      // WFH policy: employees in any tier with WFH > 4 days/month
+      wfh_excess:  arr.filter(r=>r.wfh_days > 4).length,
+      working_days: workingDays,
+      days_in_month: daysInMonth
+    };
+  });
+
+  // Store in CMS_OD_DATA as {months, monthArr, monthSummary} — new structure
+  // Also keep legacy CMS_OD_DATA as flat array for backward compat (latest month)
+  const latestMonth = months[months.length-1] || '';
+  CMS_OD_DATA.length = 0;
+  (monthArr[latestMonth]||[]).forEach(r=>CMS_OD_DATA.push(r));
+  CMS_WFH_DATA.length = 0;
+  (monthArr[latestMonth]||[]).filter(r=>r.wfh_days>0).forEach(r=>CMS_WFH_DATA.push(r));
+
+  // Store full monthly structure in a global
+  window._OD_MONTHLY = {months, monthArr, monthSummary};
+
+  // Summary for stat cards (latest month)
+  const ls = monthSummary[latestMonth] || {};
+  CMS_SUMMARY.od_total   = ls.od_records || 0;
+  CMS_SUMMARY.od_pending = ls.od_pending || 0;
+  CMS_SUMMARY.od_auto    = 0; // removed — all approvals are manager-approved
+  CMS_WFH_SUMMARY = CMS_WFH_SUMMARY || {};
+  CMS_WFH_SUMMARY.total     = ls.wfh_records || 0;
+  CMS_WFH_SUMMARY.employees = ls.wfh_employees || 0;
+  CMS_WFH_SUMMARY.pending   = ls.wfh_pending || 0;
+
+  // Persist to data_cache — store new monthly structure
+  const odFlat  = monthArr[latestMonth]||[];
+  const wfhFlat = (monthArr[latestMonth]||[]).filter(r=>r.wfh_days>0);
   try {
-    await _sb.from('data_cache').upsert({id:'od',data:odArr,row_count:odArr.length,uploaded_at:new Date().toISOString()},{onConflict:'id'});
-    await _sb.from('data_cache').upsert({id:'wfh',data:wfhArr,row_count:wfhArr.length,uploaded_at:new Date().toISOString()},{onConflict:'id'});
+    await _sb.from('data_cache').upsert({id:'od', data:JSON.parse(JSON.stringify({months,monthArr,monthSummary})), row_count:odFlat.length, uploaded_at:new Date().toISOString()},{onConflict:'id'});
+    await _sb.from('data_cache').upsert({id:'wfh',data:wfhFlat,row_count:wfhFlat.length,uploaded_at:new Date().toISOString()},{onConflict:'id'});
   } catch(e){console.warn('[OD cache]',e.message);}
 
-  log('✓ OD: '+od_total+' records, '+odArr.length+' employees | WFH: '+wfh_total+' records, '+wfhArr.length+' employees','ok');
+  log('✓ Months: '+months.join(', '), 'ok');
+  months.forEach(m => {
+    const s = monthSummary[m];
+    log(m+': '+s.od_records+' OD records ('+s.od_days+' days, '+s.od_employees+' employees) | '+s.wfh_records+' WFH records','ok');
+  });
 
+  // Reset month selector to latest month
+  if (window._OD_MONTHLY && window._OD_MONTHLY.months.length > 0) {
+    window._odMonth = window._OD_MONTHLY.months[window._OD_MONTHLY.months.length-1];
+  }
   if (typeof render === 'function') render();
   const el = document.getElementById('tab-od');
   if (el) el.innerHTML = renderOD();
