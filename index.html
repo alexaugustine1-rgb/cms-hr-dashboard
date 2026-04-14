@@ -3598,7 +3598,7 @@ async function loadProspectiveJoiners() {
   if(!_sbUser) return;
   try {
     var today  = new Date();
-    var fwd30  = new Date(today.getTime() + 60*86400000);
+    var fwd30  = new Date(today.getTime() + 120*86400000);
     var fromDt = new Date(today.getTime() - 45*86400000).toISOString().substring(0,10);
     var toDt   = fwd30.toISOString().substring(0,10);
     var q = _sb.from('prospective_joiners')
@@ -8737,7 +8737,7 @@ async function loadUpcomingJoinersForForm() {
   if (!listEl || !_sbUser) return;
   try {
     var today = new Date().toISOString().substring(0,10);
-    var fwd14 = new Date(Date.now()+14*86400000).toISOString().substring(0,10);
+    var fwd14 = new Date(Date.now()+90*86400000).toISOString().substring(0,10);
     var q = _sb.from('prospective_joiners')
       .select('id,candidate_name,customer,designation,doj,region,offer_status')
       .gte('doj', today).lte('doj', fwd14)
