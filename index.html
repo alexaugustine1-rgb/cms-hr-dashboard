@@ -2705,21 +2705,20 @@ var _hrbpConnectRegion = 'All';
 var _absentFilter = { region: 'All', tier: 'All', status: 'All' };
 
 const ABSENT_STATUSES = [
-  { val: 'Uncontacted',              col: '#f87171', bg: 'rgba(248,113,113,.15)' },
-  { val: 'Under Investigation',      col: '#fbbf24', bg: 'rgba(251,191,36,.15)' },
-  { val: 'Missed Punch',             col: '#60a5fa', bg: 'rgba(96,165,250,.15)' },
-  { val: 'OD Not Regularised',       col: '#60a5fa', bg: 'rgba(96,165,250,.15)' },
-  { val: 'On Leave (Unplanned)',      col: '#60a5fa', bg: 'rgba(96,165,250,.15)' },
-  { val: 'Medical / Emergency',      col: '#2dd4bf', bg: 'rgba(45,212,191,.15)' },
-  { val: 'Warning Letter Issued',    col: '#fb923c', bg: 'rgba(251,146,60,.15)' },
-  { val: 'Show Cause Notice Issued', col: '#f97316', bg: 'rgba(249,115,22,.15)' },
-  { val: 'Absconding — eSep Initiated',       col: '#a78bfa', bg: 'rgba(167,139,250,.15)' },
-  { val: 'Absconding — eSep Not Verified',     col: '#f87171', bg: 'rgba(248,113,113,.2)'  },
-  { val: 'eSep Rejected — Action Needed',      col: '#f97316', bg: 'rgba(249,115,22,.2)'   },
-  { val: 'Resolved — Pending HR Chain',        col: '#fbbf24', bg: 'rgba(251,191,36,.15)'  },
-  { val: 'Pending Verification — Resignation Revoked', col: '#fbbf24', bg: 'rgba(251,191,36,.15)' },
-  { val: 'Resolved — Returned',      col: '#4ade80', bg: 'rgba(74,222,128,.15)' },
-  { val: 'Resolved — Resigned',      col: '#4ade80', bg: 'rgba(74,222,128,.15)' },
+  { val: 'Uncontacted',                           col: '#f87171', bg: 'rgba(248,113,113,.15)' },
+  { val: 'Under Investigation',                   col: '#fbbf24', bg: 'rgba(251,191,36,.15)'  },
+  { val: 'Missed Punch',                          col: '#60a5fa', bg: 'rgba(96,165,250,.15)'  },
+  { val: 'OD Not Regularised',                    col: '#60a5fa', bg: 'rgba(96,165,250,.15)'  },
+  { val: 'On Leave (Unplanned)',                  col: '#60a5fa', bg: 'rgba(96,165,250,.15)'  },
+  { val: 'Medical / Emergency',                   col: '#2dd4bf', bg: 'rgba(45,212,191,.15)'  },
+  { val: 'Warning Letter Issued',                 col: '#fb923c', bg: 'rgba(251,146,60,.15)'  },
+  { val: 'Show Cause Notice Issued',              col: '#f97316', bg: 'rgba(249,115,22,.15)'  },
+  { val: 'Absconding — eSep Initiated',      col: '#a78bfa', bg: 'rgba(167,139,250,.15)' },
+  { val: 'Absconding — eSep Not Verified',   col: '#f87171', bg: 'rgba(248,113,113,.25)', warn: true },
+  { val: 'Absconding — eSep Rejected',       col: '#f97316', bg: 'rgba(249,115,22,.2)',   warn: true },
+  { val: 'Resignation — HR Chain Pending',   col: '#fbbf24', bg: 'rgba(251,191,36,.2)',   warn: true },
+  { val: 'Resolved — Returned',              col: '#4ade80', bg: 'rgba(74,222,128,.15)'  },
+  { val: 'Resolved — Resigned',              col: '#4ade80', bg: 'rgba(74,222,128,.15)'  },
 ];
 
 function absentStatusStyle(s) {
@@ -2734,7 +2733,8 @@ async function loadAbsentCases() {
     const { data, error } = await _sb
       .from('absent_cases')
       .select('*')
-      .not('status', 'in', '("Resolved — Returned","Resolved — Resigned")')
+      // Load all cases — Resolved Returned hidden in render, others always shown
+    .not('status', 'eq', 'Resolved — Returned')
       .order('consecutive_absent', { ascending: false });
     if (error) throw error;
     _absentCases = data || [];
@@ -2892,7 +2892,7 @@ function renderAbsenteeism(el) {
     const tierColor = c.account_tier==='Platinum'?'#a78bfa':c.account_tier==='Gold'?'#f59e0b':'transparent';
     const dayColor = c.consecutive_absent>=30?'#dc2626':c.consecutive_absent>=21?'var(--red)':c.consecutive_absent>=14?'#f97316':'var(--amber)';
     const isAdmin = typeof _sbRole !== 'undefined' && (_sbRole.role === 'admin' || _sbRole.role === 'executive');
-    return `<div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.25);font-size:11px;align-items:center;border-left:2px solid ${tierColor}">
+    return `<div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px 90px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.25);font-size:11px;align-items:center;border-left:2px solid ${tierColor}">
       <div>
         <div style="font-weight:500;color:var(--text)">${esc(c.emp_name.split(' ').slice(0,2).join(' '))}</div>
         <div style="font-size:10px;color:var(--muted2)">${esc(c.emp_code)}</div>
@@ -2907,8 +2907,9 @@ function renderAbsenteeism(el) {
       <div>
         <span style="font-size:10px;padding:3px 8px;border-radius:20px;background:${st.bg};color:${st.col};font-weight:600;white-space:nowrap">${esc(c.status)}</span>
         ${c.status_note?`<div style="font-size:9px;color:var(--muted2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${esc(c.status_note)}</div>`:''}
-        ${(c.esep_initiated && typeof _esepCodeSet!=='undefined' && !_esepCodeSet.has(String(c.emp_code)))?`<div style="font-size:9px;color:#f87171;font-weight:600;margin-top:2px">⚠ Not in ZingHR eSep</div>`:''}
+        
       </div>
+      <div style="display:flex;align-items:center">${c.esep_initiated && c.esep_verified===false?`<span title="eSep marked Initiated but NOT found in ZingHR eSep extract" style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(245,158,11,.15);color:#f59e0b;font-weight:600;cursor:default">⚠ Not verified</span>`:c.esep_initiated && c.esep_verified===true?`<span title="eSep confirmed in latest ZingHR extract" style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(74,222,128,.1);color:#4ade80;font-weight:600;cursor:default">✓ Verified</span>`:`<span style="font-size:10px;color:var(--muted2)">—</span>`}</div>
       <div><button onclick="openAbsentModal('${c.id}')" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:11px;cursor:pointer">Update</button></div>
     </div>`;
   }).join('');
@@ -2933,8 +2934,8 @@ function renderAbsenteeism(el) {
       <span style="font-size:11px;color:var(--muted)">Status:</span>${sf}
     </div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px;padding:7px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">
-        ${['Employee','Account / Role','Manager','Region','Days','Status','Action'].map(h=>`<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">${h}</div>`).join('')}
+      <div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px 90px;padding:7px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">
+        ${['Employee','Account / Role','Manager','Region','Days','Status','eSep','Action'].map(h=>`<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">${h}</div>`).join('')}
       </div>
       ${rows || '<div style="padding:40px;text-align:center;color:var(--muted)">No cases match current filters</div>'}
     </div>
@@ -8354,6 +8355,30 @@ async function processResignationData(wb) {
     await _sb.from('data_cache').upsert({id:'resignation',data:newRows,row_count:newRows.length,uploaded_at:new Date().toISOString()},{onConflict:'id'});
     await _sb.from('data_cache').upsert({id:'summary',data:CMS_SUMMARY,row_count:1,uploaded_at:new Date().toISOString()},{onConflict:'id'});
   } catch(e){console.warn('[Res cache]',e.message);}
+
+  // Auto-update esep_verified on absent_cases based on current eSep file
+  // esep_verified = true  → employee code found in this eSep upload (active eSep exists)
+  // esep_verified = false → esep_initiated=true but code not in this file
+  try {
+    const esepCodes = new Set(newRows.map(r => String(r.emp_code)));
+    const { data: absCases } = await _sb.from('absent_cases')
+      .select('id,emp_code,esep_initiated,esep_verified')
+      .eq('esep_initiated', true);
+    if (absCases && absCases.length) {
+      const toVerify   = absCases.filter(r => esepCodes.has(String(r.emp_code)) && r.esep_verified !== true);
+      const toUnverify = absCases.filter(r => !esepCodes.has(String(r.emp_code)) && r.esep_verified !== false);
+      if (toVerify.length) {
+        await _sb.from('absent_cases').update({esep_verified:true,updated_at:new Date().toISOString()})
+          .in('id', toVerify.map(r => r.id));
+      }
+      if (toUnverify.length) {
+        await _sb.from('absent_cases').update({esep_verified:false,updated_at:new Date().toISOString()})
+          .in('id', toUnverify.map(r => r.id));
+      }
+      if (toVerify.length || toUnverify.length)
+        log('eSep cross-reference: '+toVerify.length+' verified, '+toUnverify.length+' flagged unverified','info');
+    }
+  } catch(e){console.warn('[eSep verify]',e.message);}
 
   log('✓ Resignation: '+newRows.length+' records | R1 pending: '+r1_pending+' | LWD past: '+lwd_past,'ok');
 
