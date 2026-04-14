@@ -3599,16 +3599,22 @@ async function loadProspectiveJoiners() {
   try {
     var today  = new Date();
     var fwd30  = new Date(today.getTime() + 60*86400000);
-    var fromDt = new Date(today.getTime() - 14*86400000).toISOString().substring(0,10);
+    var fromDt = new Date(today.getTime() - 45*86400000).toISOString().substring(0,10);
     var toDt   = fwd30.toISOString().substring(0,10);
     var q = _sb.from('prospective_joiners')
       .select('*')
       .gte('doj', fromDt)
       .lte('doj', toDt)
       .order('doj', {ascending:false});
-    if(_sbRole && _sbRole.role==='hrbp' && _sbRole.function_type==='hrbp'
-       && _sbRole.region && _sbRole.region!=='Pan India') {
-      q = q.eq('region', _sbRole.region);
+    // Region filter: apply only if user has a specific region (not Pan India)
+    // Admins, executives, TA leads (Pan India) and hrops/payroll see all regions
+    var _pjRole = _sbRole.role||'';
+    var _pjFn   = _sbRole.function_type||'';
+    var _pjReg  = _sbRole.region||'';
+    var _pjIsRegional = (_pjRole==='hrbp') && (_pjFn==='hrbp') 
+      && _pjReg && _pjReg!=='Pan India';
+    if(_pjIsRegional) {
+      q = q.eq('region', _pjReg);
     }
     var {data, error} = await q;
     if(error) throw error;
