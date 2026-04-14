@@ -2700,6 +2700,7 @@ function switchTab(id, btn) {
 
 var _absentCases = [];
 var _absentLoaded = false;
+var _esepCodeSet = new Set();
 var _hrbpConnectRegion = 'All';
 var _absentFilter = { region: 'All', tier: 'All', status: 'All' };
 
@@ -2712,7 +2713,11 @@ const ABSENT_STATUSES = [
   { val: 'Medical / Emergency',      col: '#2dd4bf', bg: 'rgba(45,212,191,.15)' },
   { val: 'Warning Letter Issued',    col: '#fb923c', bg: 'rgba(251,146,60,.15)' },
   { val: 'Show Cause Notice Issued', col: '#f97316', bg: 'rgba(249,115,22,.15)' },
-  { val: 'Absconding — eSep Initiated', col: '#a78bfa', bg: 'rgba(167,139,250,.15)' },
+  { val: 'Absconding — eSep Initiated',       col: '#a78bfa', bg: 'rgba(167,139,250,.15)' },
+  { val: 'Absconding — eSep Not Verified',     col: '#f87171', bg: 'rgba(248,113,113,.2)'  },
+  { val: 'eSep Rejected — Action Needed',      col: '#f97316', bg: 'rgba(249,115,22,.2)'   },
+  { val: 'Resolved — Pending HR Chain',        col: '#fbbf24', bg: 'rgba(251,191,36,.15)'  },
+  { val: 'Pending Verification — Resignation Revoked', col: '#fbbf24', bg: 'rgba(251,191,36,.15)' },
   { val: 'Resolved — Returned',      col: '#4ade80', bg: 'rgba(74,222,128,.15)' },
   { val: 'Resolved — Resigned',      col: '#4ade80', bg: 'rgba(74,222,128,.15)' },
 ];
@@ -2734,6 +2739,12 @@ async function loadAbsentCases() {
     if (error) throw error;
     _absentCases = data || [];
     _absentLoaded = true;
+    // Build eSep emp code set for cross-reference flag
+    try {
+      const { data: dc } = await _sb.from('data_cache').select('data').eq('id','resignation').maybeSingle();
+      const esepRows = (dc && Array.isArray(dc.data)) ? dc.data : [];
+      _esepCodeSet = new Set(esepRows.map(function(r){ return String(r.EmployeeCode||r.emp_code||''); }));
+    } catch(e) { _esepCodeSet = new Set(); }
     renderAbsenteeism(el);
     // Refresh Overview KPI so absent count stays in sync
     var _ovEl = document.getElementById('tab-overview');
@@ -2896,6 +2907,7 @@ function renderAbsenteeism(el) {
       <div>
         <span style="font-size:10px;padding:3px 8px;border-radius:20px;background:${st.bg};color:${st.col};font-weight:600;white-space:nowrap">${esc(c.status)}</span>
         ${c.status_note?`<div style="font-size:9px;color:var(--muted2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${esc(c.status_note)}</div>`:''}
+        ${(c.esep_initiated && typeof _esepCodeSet!=='undefined' && !_esepCodeSet.has(String(c.emp_code)))?`<div style="font-size:9px;color:#f87171;font-weight:600;margin-top:2px">⚠ Not in ZingHR eSep</div>`:''}
       </div>
       <div><button onclick="openAbsentModal('${c.id}')" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:11px;cursor:pointer">Update</button></div>
     </div>`;
