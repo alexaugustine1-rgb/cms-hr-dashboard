@@ -3313,31 +3313,46 @@ function renderUploadTab() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px"><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly HR Report</div><div style="font-size:12px;color:var(--muted)">Unified_Weekly_HR_Report_*.xlsx</div></div>
       ${(()=>{
-        const ft = _sbRole&&_sbRole.function_type||'';
-        const isAdmin = _sbRole&&_sbRole.role==='admin';
+        const ft       = _sbRole&&_sbRole.function_type||'';
+        const isAdmin  = _sbRole&&_sbRole.role==='admin';
+        const vf       = (_sbRole&&Array.isArray(_sbRole.visible_functions))
+                           ? _sbRole.visible_functions : [];
+        const hasFnF   = isAdmin || vf.indexOf('fnf_upload')  >= 0;
+        const hasTA    = isAdmin || ft==='payroll' || vf.indexOf('ta_upload') >= 0;
+        const isHROps  = isAdmin || ft==='hrops';
+        const isPay    = isAdmin || ft==='payroll';
         const cards = [];
         const mk=(label,files,color='var(--accent)')=>
           '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'+
           '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:'+color+';margin-bottom:4px">'+label+'</div>'+
           '<div style="font-size:12px;color:var(--muted)">'+files+'</div></div>';
-        if(isAdmin||ft==='hrops'||ft==='payroll')
+        // Weekly HR Report — hrops + payroll
+        if(isHROps||isPay)
           cards.push(mk('Weekly HR Report','Unified_Weekly_HR_Report_*.xlsx'));
-        if(isAdmin||ft==='hrops')
+        // FnF — Sheetal only (fnf_upload flag) + admin
+        if(hasFnF)
           cards.push(mk('FnF Tracker','FnF_*.xlsx → Updates FnF aging bands & liability','#f59e0b'));
-        if(isAdmin||ft==='hrops'||ft==='payroll')
+        // Employee Master — hrops + payroll
+        if(isHROps||isPay)
           cards.push(mk('Employee Master','cmsitn_super_employee_master_*.xlsx → Updates Workforce Intel + ATE'));
-        if(isAdmin||ft==='payroll')
+        // Attendance — payroll only
+        if(isPay)
           cards.push(mk('Attendance Report','attendance_*.xlsx','#f87171'));
-        if(isAdmin||ft==='hrops'||ft==='payroll')
+        // OD/WFH — hrops + payroll
+        if(isHROps||isPay)
           cards.push(mk('OD / WFH Report','cmsitn_outdoor_and_wfh_*.xlsx → Updates OD & WFH tab','#f87171'));
-        if(isAdmin||ft==='hrops'||ft==='payroll')
+        // eSep — hrops + payroll
+        if(isHROps||isPay)
           cards.push(mk('eSep / Resignation','cmsitn_e-sep_transaction_details_*.xlsx → Updates Resignation & Backfill tab','var(--muted2)'));
-        if(isAdmin||ft==='payroll')
+        // Leave — payroll only
+        if(isPay)
           cards.push(mk('Leave Report','leave_*.xlsx','#f87171'));
-        if(isAdmin||ft==='payroll')
-          cards.push(mk('Candidate Transaction','cmsitn_candidate_*.xlsx','#34d399'));
-        if(isAdmin||ft==='payroll')
-          cards.push(mk('TA Requisition Report','cmsitn_requisition_wise_tat_*.xlsx','#34d399'));
+        // Candidate + TA Req — payroll + ta_upload flag (Ramesh)
+        if(hasTA)
+          cards.push(mk('Candidate Transaction','cmsitn_candidate_*.xlsx → Updates TA Pipeline & Gender Funnel','#34d399'));
+        if(hasTA)
+          cards.push(mk('TA Requisition Report','cmsitn_requisition_wise_tat_*.xlsx → Updates TA Pipeline TAT','#34d399'));
+        // CTC Master — admin only
         if(isAdmin)
           cards.push(mk('CTC Master','ctc_master_*.xlsx','var(--muted2)'));
         return cards.join('');
