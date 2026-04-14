@@ -619,7 +619,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <span class="item-icon">⚖️</span><span class="item-label">FnF Tracker</span>
       </button>
       <button class="sidebar-item" id="snav-ate" onclick="snavClick('ate',this)">
-        <span class="item-icon">🎓</span><span class="item-label">ATE Tracker</span>
+        <span class="item-icon">📋</span><span class="item-label">ATE &amp; Contract</span>
       </button>
       <button class="sidebar-item" id="snav-ld" onclick="snavClick('ld',this)">
         <span class="item-icon">📚</span><span class="item-label">L&amp;D</span>
@@ -829,6 +829,7 @@ const _SB_URL='https://mzyrcrkwgbqgwajkjdnp.supabase.co';
 const _SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16eXJjcmt3Z2JxZ3dhamtqZG5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MjM0MzgsImV4cCI6MjA4OTI5OTQzOH0.lXmA5LoBQrWHMSMAaJtn3cwEpDDbMt2EvzyEy5mykbc';
 const _sb=supabase.createClient(_SB_URL,_SB_KEY);
 let _sbUser=null,_sbRole=null;
+var _cwData = null;
 
 const WI = {"active_hc_mar": 2819, "total_wage_bill_cr": 132.25, "female_count": 218, "female_pct": 8.2, "ctc_brackets": {"4-6L": 511, "10-15L": 78, ">15L": 72, "2.5-4L": 1412, "<2.5L": 423, "6-10L": 310}, "tenure_dist": {">10 yrs": 242, "5-10 yrs": 260, "3-5 yrs": 471, "1-3 yrs": 745, "6m-1yr": 419, "<6 months": 669}, "age_dist": {">45": 274, "35-45": 648, "25-30": 865, "30-35": 550, "<25": 469}, "regions": {"North": {"hc": 523, "wage_cr": 27.2, "female_pct": 4.5, "female": 23, "ta_sourced": 36, "ta_joined": 21}, "South": {"hc": 681, "wage_cr": 33.18, "female_pct": 8.5, "female": 57, "ta_sourced": 58, "ta_joined": 40}, "East": {"hc": 509, "wage_cr": 16.4, "female_pct": 3.3, "female": 17, "ta_sourced": 34, "ta_joined": 22}, "West": {"hc": 1095, "wage_cr": 53.81, "female_pct": 10.8, "female": 118, "ta_sourced": 127, "ta_joined": 90}}, "attrition": {"Jan": {"exits": 92, "active_hc": 2810, "rate": 3.3, "ctc_vacated_l": 117.1, "region": {"West": 44, "South": 24, "North": 18, "East": 6}, "acct": {"FIELD SERVICES-SOUTH": 7, "OIL and NATURAL GAS CORPORATION LIMITED": 5, "FIELD SERVICES-NORTH": 5, "HDB FINANCIAL SERVICES LIMITED": 4, "THE INDIAN HOTELS COMPANY LIMITED": 4, "FIELD SERVICES-WEST": 4, "SBI GENERAL INSURANCE COMPANY LIMITED": 3, "ADITYA BIRLA FASHION AND RETAIL LIMITED": 3}}, "Feb": {"exits": 99, "active_hc": 2878, "rate": 3.4, "ctc_vacated_l": 25.9, "region": {"West": 40, "South": 37, "East": 13, "North": 9}, "acct": {"ADITYA BIRLA FASHION AND RETAIL LIMITED": 10, "OIL and NATURAL GAS CORPORATION LIMITED": 6, "SUTHERLAND GLOBAL SERVICES PRIVATE LIMITED": 6, "HDB FINANCIAL SERVICES LIMITED": 5, "INDUS TOWERS LIMITED": 5, "AVENUE SUPERMARTS LIMITED": 4}}, "Mar": {"exits": 85, "active_hc": 2950, "rate": 2.9, "ctc_vacated_l": 246.1, "region": {"West": 39, "South": 33, "North": 7, "East": 6}, "acct": {"SYNGENE INTERNATIONAL LIMITED": 11, "HDB FINANCIAL SERVICES LIMITED": 9, "INDUS TOWERS LIMITED": 7, "AVENUE SUPERMARTS LIMITED": 5, "POONAWALLA FINCORP LIMITED": 4, "SBI GENERAL INSURANCE COMPANY LIMITED": 3}}, "Apr": {"exits": 68, "active_hc": 0, "rate": 0, "ctc_vacated_l": 425.5, "region": {"West": 3, "South": 2}, "acct": {"HDB Financial Services": 2}}, "May": {"exits": 44, "active_hc": 0, "rate": 0, "ctc_vacated_l": 337.9, "region": {"West": 14, "South": 15, "East": 2, "North": 1}, "acct": {"SBI General Insurance": 2, "TCS": 1, "Avenue Supermarts": 3, "HDB Financial Services": 2, "Torrent Power": 1}}}, "ta_monthly": {"Jan": {"sourced": 83, "offered": 75, "joined": 54}, "Feb": {"sourced": 132, "offered": 89, "joined": 68}, "Mar": {"sourced": 40, "offered": 50, "joined": 51}}, "ta_region": {"North": {"sourced": 36, "joined": 21, "accepted": 24}, "South": {"sourced": 58, "joined": 40, "accepted": 46}, "East": {"sourced": 34, "joined": 22, "accepted": 26}, "West": {"sourced": 127, "joined": 90, "accepted": 62}}, "source_stats": {"Internal-Referral": {"total": 88, "offers_made": 67, "accepted": 66, "joined": 65, "acc_rate": 99, "yield_rate": 74}, "Naukri": {"total": 92, "offers_made": 55, "accepted": 55, "joined": 70, "acc_rate": 100, "yield_rate": 76}, "Other Source": {"total": 28, "offers_made": 22, "accepted": 22, "joined": 23, "acc_rate": 100, "yield_rate": 82}, "Job-Portals": {"total": 16, "offers_made": 9, "accepted": 9, "joined": 10, "acc_rate": 100, "yield_rate": 62}, "Consultant": {"total": 3, "offers_made": 3, "accepted": 3, "joined": 3, "acc_rate": 100, "yield_rate": 100}, "Internal-Submission": {"total": 22, "offers_made": 0, "accepted": 0, "joined": 0, "acc_rate": 0, "yield_rate": 0}, "_total": {"total": 256, "offers_made": 159, "accepted": 158, "joined": 173, "acc_rate": 99, "yield_rate": 68}}, "accounts": [{"name": "ADITYA BIRLA FASHION AND RETAIL LIMITED", "tier": "Platinum", "region": "West", "status": "Active", "hc": 155, "female": 8, "female_pct": 5.2, "exits_2026": 14, "attrition_rate_ann": 36.1, "wage_cr": 5.88, "ta_joined": 2}, {"name": "INDIAN HOTELS COMPANY LIMITED", "tier": "Platinum", "region": "West", "status": "Active", "hc": 119, "female": 1, "female_pct": 0.8, "exits_2026": 5, "attrition_rate_ann": 16.8, "wage_cr": 7.67, "ta_joined": 1}, {"name": "HDB FINANCIAL SERVICES LIMITED", "tier": "Platinum", "region": "West", "status": "Active", "hc": 97, "female": 6, "female_pct": 6.2, "exits_2026": 21, "attrition_rate_ann": 86.6, "wage_cr": 3.6, "ta_joined": 3}, {"name": "SBI GIC", "tier": "Platinum", "region": "West", "status": "Active", "hc": 89, "female": 6, "female_pct": 6.7, "exits_2026": 9, "attrition_rate_ann": 40.4, "wage_cr": 4.76, "ta_joined": 2}, {"name": "RELIANCE CORPORATE IT PARK LIMITED", "tier": "Platinum", "region": "West", "status": "Active", "hc": 79, "female": 7, "female_pct": 8.9, "exits_2026": 16, "attrition_rate_ann": 81.0, "wage_cr": 3.33, "ta_joined": 2}, {"name": "Tata AIG General Insurance Company Ltd", "tier": "Platinum", "region": "West", "status": "Active", "hc": 50, "female": 2, "female_pct": 4.0, "exits_2026": 5, "attrition_rate_ann": 40.0, "wage_cr": 2.05, "ta_joined": 1}, {"name": "AVENUE SUPERMARTS LIMITED", "tier": "Platinum", "region": "West", "status": "Active", "hc": 41, "female": 1, "female_pct": 2.4, "exits_2026": 16, "attrition_rate_ann": 156.1, "wage_cr": 1.43, "ta_joined": 6}, {"name": "LIC (WEST)", "tier": "Platinum", "region": "West", "status": "Active", "hc": 25, "female": 1, "female_pct": 4.0, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 1.07, "ta_joined": 0}, {"name": "RELIANCE CAPITAL LTD", "tier": "Gold", "region": "West", "status": "Active", "hc": 39, "female": 3, "female_pct": 7.7, "exits_2026": 5, "attrition_rate_ann": 51.3, "wage_cr": 1.73, "ta_joined": 2}, {"name": "Torrent Power Limited", "tier": "Gold", "region": "West", "status": "Active", "hc": 28, "female": 0, "female_pct": 0.0, "exits_2026": 16, "attrition_rate_ann": 228.6, "wage_cr": 1.02, "ta_joined": 2}, {"name": "Tata Consultancy Services Limited", "tier": "Gold", "region": "West", "status": "Active", "hc": 25, "female": 1, "female_pct": 4.0, "exits_2026": 21, "attrition_rate_ann": 336.0, "wage_cr": 1.25, "ta_joined": 1}, {"name": "Majesco", "tier": "Gold", "region": "West", "status": "Active", "hc": 21, "female": 6, "female_pct": 28.6, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 1.04, "ta_joined": 0}, {"name": "RCOM", "tier": "Gold", "region": "West", "status": "Active", "hc": 19, "female": 3, "female_pct": 15.8, "exits_2026": 1, "attrition_rate_ann": 21.1, "wage_cr": 0.54, "ta_joined": 2}, {"name": "Exide Life Insurance Company Limited", "tier": "Gold", "region": "West", "status": "Active", "hc": 16, "female": 1, "female_pct": 6.2, "exits_2026": 5, "attrition_rate_ann": 125.0, "wage_cr": 0.72, "ta_joined": 2}, {"name": "CEAT LIMITED", "tier": "Gold", "region": "West", "status": "Active", "hc": 15, "female": 0, "female_pct": 0.0, "exits_2026": 16, "attrition_rate_ann": 426.7, "wage_cr": 0.46, "ta_joined": 2}, {"name": "Garfield Health Solutions East Pvt Ltd (Kaiser)", "tier": "Gold", "region": "West", "status": "Active", "hc": 9, "female": 3, "female_pct": 33.3, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 0.54, "ta_joined": 0}, {"name": "AMUL", "tier": "Gold", "region": "West", "status": "Active", "hc": 0, "female": 0, "female_pct": 0, "exits_2026": 0, "attrition_rate_ann": 0, "wage_cr": 0.0, "ta_joined": 0}, {"name": "CLSA INDIA LTD", "tier": "Gold", "region": "West", "status": "Active", "hc": 0, "female": 0, "female_pct": 0, "exits_2026": 0, "attrition_rate_ann": 0, "wage_cr": 0.0, "ta_joined": 0}, {"name": "Synapsewave Innovations Private Limited", "tier": "Gold", "region": "West", "status": "Active", "hc": 0, "female": 0, "female_pct": 0, "exits_2026": 16, "attrition_rate_ann": 0, "wage_cr": 0.0, "ta_joined": 0}, {"name": "STL DIGITAL LIMITED", "tier": "Silver", "region": "West", "status": "Active", "hc": 20, "female": 2, "female_pct": 10.0, "exits_2026": 16, "attrition_rate_ann": 320.0, "wage_cr": 0.71, "ta_joined": 2}, {"name": "LIC (EAST)", "tier": "Regular", "region": "East", "status": "Active", "hc": 81, "female": 0, "female_pct": 0.0, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 1.66, "ta_joined": 1}, {"name": "JINDAL GROUP", "tier": "Regular", "region": "North", "status": "Active", "hc": 55, "female": 4, "female_pct": 7.3, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 2.35, "ta_joined": 3}, {"name": "LARSEN and TOUBRO LIMITED", "tier": "Regular", "region": "North", "status": "Active", "hc": 26, "female": 2, "female_pct": 7.7, "exits_2026": 16, "attrition_rate_ann": 246.2, "wage_cr": 1.62, "ta_joined": 0}, {"name": "UCO BANK", "tier": "Regular", "region": "East", "status": "Active", "hc": 20, "female": 0, "female_pct": 0.0, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 0.76, "ta_joined": 0}, {"name": "Sms India Private Limited", "tier": "Regular", "region": "North", "status": "Active", "hc": 17, "female": 1, "female_pct": 5.9, "exits_2026": 16, "attrition_rate_ann": 376.5, "wage_cr": 0.85, "ta_joined": 1}, {"name": "Tata Medical Centre", "tier": "Regular", "region": "East", "status": "Active", "hc": 16, "female": 1, "female_pct": 6.2, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 0.5, "ta_joined": 1}], "fnf": {"total_cases": 154, "total_liability": 3348872, "by_status": {"Payment not cleared -(Bank account Issue)": {"count": 69, "amount": 418085}, "Priority": {"count": 34, "amount": 1659969}, "Pending": {"count": 51, "amount": 1270818}}, "by_aging": {">1 year": {"count": 64, "amount": 386403}, "180-365 days": {"count": 5, "amount": 1160874}, "90-180 days": {"count": 4, "amount": 75340}, "45-90 days": {"count": 50, "amount": 1052088}, "<45 days": {"count": 31, "amount": 674167}}}, "attrition_by_tenure": {"<3 months": {"total_2026": 10, "jan_mar": 7}, "3m-1yr": {"total_2026": 41, "jan_mar": 21}, "1-2 yrs": {"total_2026": 62, "jan_mar": 18}, "2-5 yrs": {"total_2026": 67, "jan_mar": 32}, ">5 yrs": {"total_2026": 17, "jan_mar": 7}}, "exit_reasons": {"q1_2026": [{"reason": "Higher Salary", "count": 83}, {"reason": "Family Issues", "count": 44}, {"reason": "Job Role Change", "count": 41}, {"reason": "Project End", "count": 41}, {"reason": "Absorption (Conversion)", "count": 21}, {"reason": "Unauthorised Absence", "count": 14}, {"reason": "Health Issues", "count": 12}, {"reason": "Location Constraint", "count": 11}, {"reason": "Early Exit", "count": 10}, {"reason": "Industry Change", "count": 10}], "monthly": {"Jan": {"exits": 100, "top_reasons": [["Higher Salary", 30], ["Project End", 22], ["Family Issues", 15]]}, "Feb": {"exits": 116, "top_reasons": [["Higher Salary", 33], ["Job Role Change", 18], ["Family Issues", 16]]}, "Mar": {"exits": 85, "top_reasons": [["Higher Salary", 20], ["Project End", 17], ["Family Issues", 13]]}}}, "absenteeism": {"pending_cases": 59, "all_time_exits": 1397, "m1_exits": 711, "hr_exits": 686, "ytd_2026": 14, "by_region": {"West": 31, "East": 4, "North": 3, "South": 21}}};
 
@@ -4839,6 +4840,192 @@ async function updateAcct(el) {
   }
 }
 
+
+// ── CONTRACT WORKFORCE SECTION ─────────────────────────────────────────────
+async function loadContractWorkforce() {
+  var el = document.getElementById('tab-ate');
+  if (!el) return;
+
+  var role   = _sbRole ? (_sbRole.role||'') : '';
+  var fnType = _sbRole ? (_sbRole.function_type||'') : '';
+  var region = _sbRole ? (_sbRole.region||'All') : 'All';
+  var isPan  = role==='admin'||role==='executive'||fnType==='hrops'||fnType==='payroll'||region==='Pan India'||region==='All';
+
+  var q = _sb.from('contract_workforce').select('*').order('alert_type').order('tenure_yr',{ascending:false});
+  if (!isPan) q = q.eq('region', region);
+  var {data, error} = await q;
+  if (error || !data) return;
+
+  _cwData = data;
+  renderContractSection();
+}
+
+function renderContractSection() {
+  var el = document.getElementById('cw-section');
+  if (!el || !_cwData) return;
+
+  var role   = _sbRole ? (_sbRole.role||'') : '';
+  var fnType = _sbRole ? (_sbRole.function_type||'') : '';
+  var region = _sbRole ? (_sbRole.region||'All') : 'All';
+  var isPan  = role==='admin'||role==='executive'||fnType==='hrops'||fnType==='payroll'||region==='Pan India'||region==='All';
+
+  var data = _cwData;
+
+  // Apply filters
+  var _cwFilter    = document.getElementById('cw-filter-type')    ? document.getElementById('cw-filter-type').value    : 'All';
+  var _cwAlertF    = document.getElementById('cw-filter-alert')   ? document.getElementById('cw-filter-alert').value   : 'All';
+  var _cwRegionF   = document.getElementById('cw-filter-region')  ? document.getElementById('cw-filter-region').value  : 'All';
+
+  if (_cwFilter  !== 'All') data = data.filter(function(r){return r.emp_type === _cwFilter;});
+  if (_cwAlertF  !== 'All') data = data.filter(function(r){return r.alert_type === _cwAlertF;});
+  if (_cwRegionF !== 'All') data = data.filter(function(r){return r.region === _cwRegionF;});
+
+  var total    = _cwData.length;
+  var critical = _cwData.filter(function(r){return r.alert_type==='critical';}).length;
+  var warning  = _cwData.filter(function(r){return r.alert_type==='warning';}).length;
+  var lwd_c    = _cwData.filter(function(r){return r.lwd_crossed;}).length;
+  var ret_c    = _cwData.filter(function(r){return r.past_superann;}).length;
+  var no_end   = _cwData.filter(function(r){return r.no_end_date;}).length;
+
+  var ACTIONS = ['Pending','Extend Contract','Convert to FTE','Initiate Retirement',
+                 'Initiate Termination','Flag Data Error','Under Review'];
+  var ACTION_COL = {
+    'Pending':'var(--muted)',
+    'Extend Contract':'var(--accent)',
+    'Convert to FTE':'var(--green)',
+    'Initiate Retirement':'var(--amber)',
+    'Initiate Termination':'var(--red)',
+    'Flag Data Error':'#f59e0b',
+    'Under Review':'var(--muted2)'
+  };
+
+  function alertBadge(r) {
+    if (r.lwd_crossed)   return '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(248,113,113,.15);color:var(--red);font-weight:600">LWD Crossed</span>';
+    if (r.past_superann) return '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(248,113,113,.15);color:var(--red);font-weight:600">Past Retirement</span>';
+    if (r.superann_6m)   return '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(245,158,11,.15);color:var(--amber);font-weight:600">Retirement ≤6m</span>';
+    if (r.ftc_18m_risk)  return '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(245,158,11,.15);color:var(--amber);font-weight:600">FTC ≥18m</span>';
+    if (r.dol && r.days_to_dol !== null && r.days_to_dol > 0 && r.days_to_dol <= 60)
+                         return '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(245,158,11,.15);color:var(--amber);font-weight:600">Exp ≤60d</span>';
+    return '<span style="font-size:9px;padding:2px 6px;border-radius:10px;background:rgba(52,211,153,.1);color:var(--green)">OK</span>';
+  }
+
+  function typeTag(et) {
+    var c = et==='ATE'?'var(--accent)':et==='FTC'?'var(--green)':et==='Consultant'?'#a78bfa':'var(--muted2)';
+    return '<span style="font-size:9px;padding:2px 5px;border-radius:3px;border:1px solid '+c+';color:'+c+'">'+et+'</span>';
+  }
+
+  // Table rows
+  var rows = data.map(function(r) {
+    var dolStr = r.dol ? r.dol.substring(0,10)+' <span style="font-size:10px;color:'+(r.lwd_crossed?'var(--red)':'var(--muted)')+'">'+(r.days_to_dol!==null?(r.lwd_crossed?'('+Math.abs(r.days_to_dol)+'d past)':'('+r.days_to_dol+'d)'):'')+'</span>' : '<span style="color:var(--muted2)">Not set</span>';
+    var saStr  = r.superann_date ? r.superann_date.substring(0,10)+' <span style="font-size:10px;color:var(--muted)">'+(r.age?'Age '+r.age:'')+'</span>' : '—';
+    var acCol  = ACTION_COL[r.action_status] || 'var(--muted)';
+    var acOpts = ACTIONS.map(function(a){return '<option value="'+a+'"'+(r.action_status===a?' selected':'')+'>'+a+'</option>';}).join('');
+
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:7px 10px;font-size:11px;color:var(--text)">'+esc(r.name)+'</td>'
+      +'<td style="padding:7px 8px">'+typeTag(r.emp_type)+'</td>'
+      +'<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+esc(r.region)+'</td>'
+      +'<td style="padding:7px 8px;font-size:10px;color:var(--muted)">'+esc((r.customer||'').substring(0,25))+'</td>'
+      +'<td style="padding:7px 8px;font-size:11px;color:var(--text);text-align:center">'+(r.tenure_yr||'—')+'yr</td>'
+      +'<td style="padding:7px 8px;font-size:11px">'+dolStr+'</td>'
+      +'<td style="padding:7px 8px;font-size:10px">'+saStr+'</td>'
+      +'<td style="padding:7px 8px">'+alertBadge(r)+'</td>'
+      +'<td style="padding:7px 8px">'
+        +'<select onchange="cwUpdateAction(\''+r.emp_code+'\',this)" style="font-size:10px;padding:2px 4px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:'+acCol+'">'
+        +acOpts+'</select></td>'
+      +'<td style="padding:7px 8px">'
+        +'<input type="text" placeholder="Notes…" value="'+esc(r.action_notes||'')+'" onblur="cwUpdateNotes(\''+r.emp_code+'\',this.value)" style="width:120px;font-size:10px;padding:2px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
+      +'</td>'
+      +'</tr>';
+  }).join('');
+
+  el.innerHTML =
+    '<div style="padding:24px 28px">'
+    +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:16px">Contract Workforce — ATE, FTC, Consultants &amp; Contract</div>'
+
+    // Alert cards
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'
+    +'<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:12px 16px">'
+      +'<div style="font-size:22px;font-weight:700;color:var(--red)">'+critical+'</div>'
+      +'<div style="font-size:11px;font-weight:600;color:var(--red);margin-bottom:4px">Critical</div>'
+      +'<div style="font-size:10px;color:var(--muted)">LWD crossed: '+lwd_c+' &nbsp;·&nbsp; Past retirement: '+ret_c+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2);margin-top:4px">Immediate action required</div>'
+    +'</div>'
+    +'<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px 16px">'
+      +'<div style="font-size:22px;font-weight:700;color:var(--amber)">'+warning+'</div>'
+      +'<div style="font-size:11px;font-weight:600;color:var(--amber);margin-bottom:4px">Warning</div>'
+      +'<div style="font-size:10px;color:var(--muted)">Retirement ≤6m or expiry approaching</div>'
+      +'<div style="font-size:10px;color:var(--muted2);margin-top:4px">Plan within 30 days</div>'
+    +'</div>'
+    +'<div style="background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);border-radius:8px;padding:12px 16px">'
+      +'<div style="font-size:22px;font-weight:700;color:var(--accent)">'+no_end+'</div>'
+      +'<div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:4px">No Contract End Date</div>'
+      +'<div style="font-size:10px;color:var(--muted)">ContractEndDate blank in ZingHR</div>'
+      +'<div style="font-size:10px;color:var(--muted2);margin-top:4px">Requires ZingHR update</div>'
+    +'</div>'
+    +'</div>'
+
+    // Filters
+    +'<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
+    +'<select id="cw-filter-type" onchange="renderContractSection()" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
+    +'<option>All</option><option>ATE</option><option>FTC</option><option>Consultant</option><option>CONTRACT</option>'
+    +'</select>'
+    +'<select id="cw-filter-alert" onchange="renderContractSection()" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
+    +'<option>All</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="ok">OK</option>'
+    +'</select>'
+    +(isPan ?
+      '<select id="cw-filter-region" onchange="renderContractSection()" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
+      +'<option>All</option><option>North</option><option>South</option><option>East</option><option>West</option>'
+      +'</select>' : '')
+    +'<span style="font-size:11px;color:var(--muted);align-self:center">Showing '+data.length+' of '+total+'</span>'
+    +'</div>'
+
+    // Table
+    +'<div style="overflow-x:auto">'
+    +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
+    +'<thead><tr style="background:var(--surface3)">'
+    +['Name','Type','Region','Customer','Tenure','Contract End','Superannuation','Alert','Action','Notes'].map(function(h){
+      return '<th style="padding:7px 8px;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);text-align:left">'+h+'</th>';
+    }).join('')
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table>'
+    +'</div>'
+    +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Action status and notes save directly to database. Refresh on every Super Emp upload. Critical = immediate decision needed.</div>'
+    +'</div>';
+}
+
+async function cwUpdateAction(empCode, sel) {
+  var val = sel.value;
+  sel.style.color = {
+    'Pending':'var(--muted)', 'Extend Contract':'var(--accent)',
+    'Convert to FTE':'var(--green)', 'Initiate Retirement':'var(--amber)',
+    'Initiate Termination':'var(--red)', 'Flag Data Error':'#f59e0b',
+    'Under Review':'var(--muted2)'
+  }[val] || 'var(--muted)';
+  var res = await _sb.from('contract_workforce').update({
+    action_status: val,
+    action_date:   new Date().toISOString().substring(0,10),
+    action_by:     (_sbRole&&_sbRole.display_name)||'unknown',
+    updated_at:    new Date().toISOString()
+  }).eq('emp_code', empCode);
+  if (res.error) { alert('Save failed: '+res.error.message); return; }
+  // Update local cache
+  var rec = (_cwData||[]).find(function(r){return r.emp_code===empCode;});
+  if (rec) rec.action_status = val;
+}
+
+async function cwUpdateNotes(empCode, notes) {
+  var res = await _sb.from('contract_workforce').update({
+    action_notes: notes,
+    updated_at:   new Date().toISOString()
+  }).eq('emp_code', empCode);
+  if (res.error) console.warn('Notes save failed:', res.error.message);
+  var rec = (_cwData||[]).find(function(r){return r.emp_code===empCode;});
+  if (rec) rec.action_notes = notes;
+}
+
+
 // ── ADMIN & FACILITIES TAB ─────────────────────────────────────────────────
 function renderAdmin(w, weekKey) {
   if (!w) return '<div style="padding:60px 36px;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">🏢</div><div style="font-size:15px;font-weight:500">No admin data yet</div></div>';
@@ -7309,7 +7496,7 @@ function renderATETab(el) {
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">'
     +'<div>'
     +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">HR Operations</div>'
-    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">ATE Tracker</div>'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">ATE &amp; Contract Tracker</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-top:2px">Apprentice Training Employees — Training period: 12 months from DOJ. Govt subsidy: ₹4,500/month.</div>'
     +'</div>'
     +'</div>'
@@ -7346,7 +7533,10 @@ function renderATETab(el) {
     +'</table>'
     +'</div></div>'
     +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Rows sorted by Training End Date (earliest first). Status updates save directly to database.</div>'
-    +'</div>';
+    +'</div>'
+    +'<div id="cw-section"><div style="padding:40px;text-align:center;color:var(--muted)">Loading Contract Workforce…</div></div>';
+  // Load contract workforce async
+  setTimeout(loadContractWorkforce, 200);
 }
 
 function ateFilter(sel, type) {
