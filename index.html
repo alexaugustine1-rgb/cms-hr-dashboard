@@ -2714,8 +2714,9 @@ const ABSENT_STATUSES = [
   { val: 'Warning Letter Issued',                 col: '#fb923c', bg: 'rgba(251,146,60,.15)'  },
   { val: 'Show Cause Notice Issued',              col: '#f97316', bg: 'rgba(249,115,22,.15)'  },
   { val: 'Absconding — eSep Initiated',      col: '#a78bfa', bg: 'rgba(167,139,250,.15)' },
-  { val: 'Absconding — eSep Not Verified',   col: '#f87171', bg: 'rgba(248,113,113,.25)', warn: true },
+  { val: 'Absconding — eSep Not Raised',     col: '#f87171', bg: 'rgba(248,113,113,.25)', warn: true },
   { val: 'Absconding — eSep Rejected',       col: '#f97316', bg: 'rgba(249,115,22,.2)',   warn: true },
+  { val: 'Absconding — eSep Pending',        col: '#f97316', bg: 'rgba(249,115,22,.15)', warn: true },
   { val: 'Resignation — HR Chain Pending',   col: '#fbbf24', bg: 'rgba(251,191,36,.2)',   warn: true },
   { val: 'Resolved — Returned',              col: '#4ade80', bg: 'rgba(74,222,128,.15)'  },
   { val: 'Resolved — Resigned',              col: '#4ade80', bg: 'rgba(74,222,128,.15)'  },
@@ -2884,7 +2885,7 @@ function renderAbsenteeism(el) {
   }
   const rf = ['All','North','South','East','West'].map(v=>fbtn(v,_absentFilter.region===v,'region',v)).join('');
   const tf = ['All','Platinum','Gold','Regular'].map(v=>fbtn(v,_absentFilter.tier===v,'tier',v)).join('');
-  const sf = ['All','Uncontacted','Under Investigation','Warning Letter Issued','Absconding — eSep Initiated'].map(v=>fbtn(v,_absentFilter.status===v,'status',v)).join('');
+  const sf = ['All','Uncontacted','Under Investigation','Warning Letter Issued','Absconding — eSep Initiated','Absconding — eSep Not Raised','Absconding — eSep Rejected','Resignation — HR Chain Pending'].map(v=>fbtn(v,_absentFilter.status===v,'status',v)).join('');
 
   // Rows
   const rows = data.map(c => {
@@ -2892,7 +2893,7 @@ function renderAbsenteeism(el) {
     const tierColor = c.account_tier==='Platinum'?'#a78bfa':c.account_tier==='Gold'?'#f59e0b':'transparent';
     const dayColor = c.consecutive_absent>=30?'#dc2626':c.consecutive_absent>=21?'var(--red)':c.consecutive_absent>=14?'#f97316':'var(--amber)';
     const isAdmin = typeof _sbRole !== 'undefined' && (_sbRole.role === 'admin' || _sbRole.role === 'executive');
-    return `<div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px 90px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.25);font-size:11px;align-items:center;border-left:2px solid ${tierColor}">
+    return `<div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 200px 90px 90px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.25);font-size:11px;align-items:center;border-left:2px solid ${tierColor}">
       <div>
         <div style="font-weight:500;color:var(--text)">${esc(c.emp_name.split(' ').slice(0,2).join(' '))}</div>
         <div style="font-size:10px;color:var(--muted2)">${esc(c.emp_code)}</div>
@@ -2905,8 +2906,8 @@ function renderAbsenteeism(el) {
       <div style="font-size:11px;color:var(--muted)">${esc(c.region)}</div>
       <div style="font-weight:700;color:${dayColor}">${c.consecutive_absent}d</div>
       <div>
-        <span style="font-size:10px;padding:3px 8px;border-radius:20px;background:${st.bg};color:${st.col};font-weight:600;white-space:nowrap">${esc(c.status)}</span>
-        ${c.status_note?`<div style="font-size:9px;color:var(--muted2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${esc(c.status_note)}</div>`:''}
+        <span style="font-size:10px;padding:3px 8px;border-radius:20px;background:${st.bg};color:${st.col};font-weight:600;display:inline-block;max-width:195px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle" title="${esc(c.status)}">${esc(c.status)}</span>
+        ${c.status_note?`<div style="font-size:9px;color:var(--muted2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:195px">${esc(c.status_note)}</div>`:''}
         
       </div>
       <div style="display:flex;align-items:center">${c.esep_initiated && c.esep_verified===false?`<span title="eSep marked Initiated but NOT found in ZingHR eSep extract" style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(245,158,11,.15);color:#f59e0b;font-weight:600;cursor:default">⚠ Not verified</span>`:c.esep_initiated && c.esep_verified===true?`<span title="eSep confirmed in latest ZingHR extract" style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(74,222,128,.1);color:#4ade80;font-weight:600;cursor:default">✓ Verified</span>`:`<span style="font-size:10px;color:var(--muted2)">—</span>`}</div>
@@ -2934,7 +2935,7 @@ function renderAbsenteeism(el) {
       <span style="font-size:11px;color:var(--muted)">Status:</span>${sf}
     </div>
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 160px 90px 90px;padding:7px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">
+      <div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 200px 90px 90px;padding:7px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">
         ${['Employee','Account / Role','Manager','Region','Days','Status','eSep','Action'].map(h=>`<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">${h}</div>`).join('')}
       </div>
       ${rows || '<div style="padding:40px;text-align:center;color:var(--muted)">No cases match current filters</div>'}
