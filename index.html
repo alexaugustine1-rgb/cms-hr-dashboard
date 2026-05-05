@@ -3350,62 +3350,62 @@ function renderUploadTab() {
           cards.push(mk('FnF Settlement Report',
             'ZingHR → Payroll → FnF Settlement Report',
             'FnF_DDMMYYYY.xlsx',
-            'Updates FnF tracker: pending cases, liability amounts (gratuity, leave encashment, net payable), aging bands, and payment dates.',
+            'Download window: Full extract, no date filter. Updates FnF tracker: pending cases, liability amounts (gratuity, leave encashment, net payable), aging bands, and payment dates.',
             '#f59e0b'));
         // Employee Master — hrops + payroll + all
         if(isHROps||isPay)
           cards.push(mk('Employee Master',
             'ZingHR → Reports → Super Employee Master',
             'cmsitn_super_employee_master_DDMMYYYY.xlsx',
-            'Updates Workforce Intel headcount, ATE tracker, and Contract Workforce tracker. Download with all active employees.'));
+            'Download window: Full extract, no date filter. Updates Workforce Intel headcount, ATE tracker, and Contract Workforce tracker.'));
         // Attendance — payroll + all
         if(isPay)
           cards.push(mk('Attendance Consolidation',
             'ZingHR → Attendance → Attendance Consolidation Report',
             'cmsitn_attendance_consolidation_DDMMYYYY.xlsx',
-            'Updates OD/WFH compliance data. Download for current month, all employees.',
+            'Download window: Current month only (01-MMM to today). Updates OD/WFH compliance data.',
             '#f87171'));
         // OD/WFH — hrops + payroll + all
         if(isHROps||isPay)
           cards.push(mk('OD / WFH Report',
             'ZingHR → Reports → Outdoor Duty & WFH Report',
             'cmsitn_outdoor_and_wfh_details_DDMMYYYY.xlsx',
-            'Updates OD/WFH compliance tab. Shows employees who applied OD or WFH in the period.',
+            'Download window: 1st of last month to today (~60 days). Updates OD/WFH compliance tab. Shows employees who applied OD or WFH in the period.',
             '#f87171'));
         // eSep — hrops + payroll + all
         if(isHROps||isPay)
           cards.push(mk('eSep / Resignation',
             'ZingHR → eSep → Transaction Details Report',
             'cmsitn_e-sep_transaction_details_DDMMYYYY.xlsx',
-            'Updates Resignation & Backfill tab. Also refreshes Long Absenteeism eSep verification. Download full extract — no date filter.',
+            'Download window: Full extract, no date filter. The dashboard filters internally — downloading with a date filter will hide pending cases. Updates Resignation & Backfill and Long Absenteeism eSep verification.',
             'var(--muted2)'));
         // Leave — payroll + all
         if(isPay)
           cards.push(mk('Leave Report',
             'ZingHR → Leave → Leave Balance Report',
             'leave_MMYYYY.xlsx',
-            'Updates leave balance and utilisation data.',
+            'Download window: Current month only. Updates leave balance and utilisation data.',
             '#f87171'));
         // Candidate — payroll + ta_upload + all
         if(hasTA)
           cards.push(mk('Candidate Transactional Report',
             'ZingHR → Recruitment → Candidate Transactional Report',
             'cmsitn_candidate_transactional_report_DDMMYYYY.xlsx',
-            'Updates TA Pipeline, prospective joiners tracker, source mix, and gender hiring funnel.',
+            'Download window: 01-Jan-2026 to today (full FY). Updates TA Pipeline, prospective joiners, source mix, and gender hiring funnel.',
             '#34d399'));
         // TA Req — payroll + ta_upload + all
         if(hasTA)
           cards.push(mk('Requisition Wise TAT Report',
             'ZingHR → Recruitment → Requisition Wise TAT Report',
             'cmsitn_requisition_wise_tat_report_DDMMYYYY.xlsx',
-            'Updates open requisitions list and time-to-fill (TAT) per requirement.',
+            'Download window: 01-Jan-2026 to today (full FY). Updates open requisitions and time-to-fill (TAT) per requirement.',
             '#34d399'));
         // CTC Master — admin only
         if(isAdmin)
           cards.push(mk('CTC Master',
             'Payroll system export',
             'ctc_master_DDMMYYYY.xlsx',
-            'Updates CTC data used for cost analysis. Restricted — admin only.',
+            'Download window: Full extract, no date filter. Updates CTC data used for cost analysis. Restricted — admin only.',
             'var(--muted2)'));
         return cards.join('');
       })()}
