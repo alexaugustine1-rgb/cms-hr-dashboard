@@ -7298,7 +7298,7 @@ async function sbLogin(){
 
 async function sbBoot(user){
   _sbUser=user;
-  const{data:profile}=await _sb.from('user_profiles').select('role,region,function_type,tab_scope,display_name').eq('id',user.id).single();
+  const{data:profile}=await _sb.from('user_profiles').select('role,region,function_type,tab_scope,display_name,visible_functions').eq('id',user.id).single();
   _sbRole=profile||{role:'viewer',region:null};
   // Load customer_accounts from Supabase — live tier data
   try {
