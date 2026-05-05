@@ -659,12 +659,17 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <span class="item-icon">✏️</span><span class="item-label">Submit Weekly Report</span>
     </button>
 
-    <!-- Admin only -->
-    <div id="snav-admin-group" class="sidebar-group" style="display:none">
-      <div class="sidebar-group-label">Admin</div>
+    <!-- Upload — shown for hrops/payroll/ta/admin -->
+    <div id="snav-upload-group" class="sidebar-group" style="display:none">
+      <div class="sidebar-group-label">Data</div>
       <button class="sidebar-item" id="snav-upload" onclick="snavClick('upload',this)">
         <span class="item-icon">⬆</span><span class="item-label">Upload Data</span>
       </button>
+    </div>
+
+    <!-- Admin only -->
+    <div id="snav-admin-group" class="sidebar-group" style="display:none">
+      <div class="sidebar-group-label">Admin</div>
       <button class="sidebar-item" id="snav-users" onclick="snavClick('users',this)">
         <span class="item-icon">👥</span><span class="item-label">User Management</span>
       </button>
@@ -7403,10 +7408,10 @@ async function sbBoot(user){
   document.getElementById('authOverlay').style.display='none';
   document.getElementById('dashApp').style.display='block';
   const st2=document.getElementById('tab-btn-submit');if(st2)st2.style.display='';
-  if(_sbRole.role==='admin'){const upl=document.getElementById('tab-btn-upload'),usr=document.getElementById('tab-btn-users');if(upl)upl.style.display='';if(usr)usr.style.display='';}
+  if(_sbRole.role==='admin'){const ag=document.getElementById('snav-admin-group');if(ag)ag.style.display='';}
   showSidebarAfterLogin(_sbRole.role);
   // HR Ops (Sheetal, Kesavan) also get Upload Data access
-  if(_sbRole.role==='hrbp'&&(_sbRole.function_type==='hrops'||_sbRole.function_type==='payroll'||_sbRole.function_type==='ta')){const upl=document.getElementById('tab-btn-upload');if(upl)upl.style.display='';}
+  if(_sbRole.role==='hrbp'&&(_sbRole.function_type==='hrops'||_sbRole.function_type==='payroll'||_sbRole.function_type==='ta')||_sbRole.role==='admin'){const ug=document.getElementById('snav-upload-group');if(ug)ug.style.display='';}
   const hr=document.querySelector('.header-right');
   if(hr&&!document.getElementById('sbSignOutBtn')){
     const b=document.createElement('button');b.id='sbSignOutBtn';b.textContent='Sign out';b.className='btn-outline';b.style.cssText='margin-left:12px;font-size:12px;cursor:pointer';b.onclick=sbSignOut;hr.appendChild(b);
