@@ -7309,16 +7309,17 @@ async function sbBoot(user){
     setTimeout(function(){snavClick('admin');},150);
   }  const{data:weeks,error}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
   console.log('[sbBoot] weekly_reports:', error?'ERROR:'+error.message:weeks?.length+' rows loaded');
-  if(!error&&weeks&&weeks.length>0){WEEKS_DATA={};weeks.forEach(w=>{WEEKS_DATA[w.week_key]=w;});WEEK_ORDER=weeks.map(w=>w.week_key);weeks.forEach(w=>{WEEK_LABELS[w.week_key]=w.label||'';WEEK_NAMES[w.week_key]='Week '+w.week_num+(w.week_key===WEEK_ORDER[WEEK_ORDER.length-1]?' (Latest)':'');});window.WEEK_ORDER_LIVE=WEEK_ORDER;// Default to the week with most submissions (not just last added)
+  if(!error&&weeks&&weeks.length>0){WEEKS_DATA={};weeks.forEach(w=>{WEEKS_DATA[w.week_key]=w;});WEEK_ORDER=weeks.map(w=>w.week_key);weeks.forEach(w=>{WEEK_LABELS[w.week_key]=w.label||'';WEEK_NAMES[w.week_key]='Week '+w.week_num+(w.week_key===WEEK_ORDER[WEEK_ORDER.length-1]?' (Latest)':'');});window.WEEK_ORDER_LIVE=WEEK_ORDER;// Default to current live week; fall back to week with most submissions
   var _liveWk=typeof getCurrentWeekKey==='function'?getCurrentWeekKey():null;
   var _bestWk=WEEK_ORDER[WEEK_ORDER.length-1];
   var _bestCount=0;
   WEEK_ORDER.forEach(function(k){
-    if(k===_liveWk) return; // skip current submission week
+    if(k===_liveWk) return;
     var _c=(WEEKS_DATA[k]&&WEEKS_DATA[k].total_respondents)||0;
     if(_c>_bestCount){_bestCount=_c;_bestWk=k;}
   });
-  currentWeek=_bestWk;
+  // Prefer current live week if it exists in DB, else fall to most-submissions week
+  currentWeek=(_liveWk&&WEEK_ORDER.includes(_liveWk))?_liveWk:_bestWk;
   console.log('[HR] weeks loaded:',WEEK_ORDER.length,'defaulting to',currentWeek);}
   else{console.warn('[HR] No weekly data yet');}
   // Check if current week has submissions but no weekly_reports row
