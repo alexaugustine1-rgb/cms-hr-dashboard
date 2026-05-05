@@ -3991,7 +3991,7 @@ async function loadWeeksIntoDOM(){
   const{data:weeks}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
   if(weeks&&weeks.length){WEEKS_DATA={};weeks.forEach(w=>{WEEKS_DATA[w.week_key]=w;});WEEK_ORDER=weeks.map(w=>w.week_key);weeks.forEach(w=>{WEEK_LABELS[w.week_key]=w.label||'';WEEK_NAMES[w.week_key]='Week '+w.week_num+(w.week_key===WEEK_ORDER[WEEK_ORDER.length-1]?' (Latest)':'');});window.WEEK_ORDER_LIVE=WEEK_ORDER;currentWeek=WEEK_ORDER[WEEK_ORDER.length-1];}
   const container=document.getElementById('weekBtns');
-  if(container){container.innerHTML='';WEEK_ORDER.filter(k=>WEEKS_DATA[k]).forEach(key=>{const w=WEEKS_DATA[key];const btn=document.createElement('button');btn.className='week-btn'+(key===currentWeek?' active latest':'');btn.textContent=(WEEK_NAMES[key]||key)+'  '+w.label;btn.onclick=()=>{currentWeek=key;document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');render();};container.appendChild(btn);});}
+  if(container){container.innerHTML='';WEEK_ORDER.filter(k=>WEEKS_DATA[k]).forEach(key=>{const w=WEEKS_DATA[key];const btn=document.createElement('button');btn.className='week-btn'+(key===currentWeek?' active latest':'');btn.textContent=(WEEK_NAMES[key]||key)+'  '+w.label;btn.onclick=()=>{currentWeek=key;document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');render();if(currentTab==='hrbp'&&typeof loadHRBPSiteVisitsForTab==='function'){setTimeout(loadHRBPSiteVisitsForTab,150);}};container.appendChild(btn);});}
   render();
   const wl=document.getElementById('weeksList');if(wl)wl.innerHTML=weeksListHTML();
 }
@@ -4717,7 +4717,7 @@ async function rebuildWeekFromSubmissions(weekKey){
         btn.id='wbtn-'+weekKey;
         btn.className='week-btn active latest';
         btn.textContent='Week '+_wkNum+' (Latest)  '+_wkLabel;
-        btn.onclick=function(){currentWeek=weekKey;document.querySelectorAll('.week-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');render();};
+        btn.onclick=function(){currentWeek=weekKey;document.querySelectorAll('.week-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');render();if(currentTab==='hrbp'&&typeof loadHRBPSiteVisitsForTab==='function'){setTimeout(loadHRBPSiteVisitsForTab,150);}};
         // Remove 'latest' from other buttons
         wBtns.querySelectorAll('.week-btn.latest').forEach(function(b){b.classList.remove('latest');b.textContent=b.textContent.replace(' (Latest)','');});
         wBtns.appendChild(btn);
