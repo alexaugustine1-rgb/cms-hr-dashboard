@@ -3332,44 +3332,81 @@ function renderUploadTab() {
         const isAdmin  = _sbRole&&_sbRole.role==='admin';
         const vf       = (_sbRole&&Array.isArray(_sbRole.visible_functions))
                            ? _sbRole.visible_functions : [];
+        const hasAll   = isAdmin || vf.indexOf('all_upload')  >= 0;
         const hasFnF   = isAdmin || vf.indexOf('fnf_upload')  >= 0;
-        const hasTA    = isAdmin || ft==='payroll' || vf.indexOf('ta_upload') >= 0;
-        const isHROps  = isAdmin || ft==='hrops';
-        const isPay    = isAdmin || ft==='payroll';
+        const hasTA    = hasAll  || ft==='payroll' || vf.indexOf('ta_upload') >= 0;
+        const isHROps  = hasAll  || ft==='hrops';
+        const isPay    = hasAll  || ft==='payroll';
         const cards = [];
-        const mk=(label,files,color='var(--accent)')=>
+        const mk=(label,src,file,desc,color='var(--accent)')=>
           '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'+
-          '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:'+color+';margin-bottom:4px">'+label+'</div>'+
-          '<div style="font-size:12px;color:var(--muted)">'+files+'</div></div>';
-        // Weekly HR Report — hrops + payroll
-        if(isHROps||isPay)
-          cards.push(mk('Weekly HR Report','Unified_Weekly_HR_Report_*.xlsx'));
-        // FnF — Sheetal only (fnf_upload flag) + admin
+          '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:'+color+';margin-bottom:6px">'+label+'</div>'+
+          '<div style="font-size:11px;color:var(--text);margin-bottom:3px"><span style="color:var(--muted2)">File: </span>'+file+'</div>'+
+          '<div style="font-size:11px;color:var(--muted2);margin-bottom:3px"><span style="color:var(--muted2)">From: </span>'+src+'</div>'+
+          '<div style="font-size:11px;color:var(--muted)">'+desc+'</div>'+
+          '</div>';
+        // FnF Settlement — Sheetal only (fnf_upload flag)
         if(hasFnF)
-          cards.push(mk('FnF Tracker','FnF_*.xlsx → Updates FnF aging bands & liability','#f59e0b'));
-        // Employee Master — hrops + payroll
+          cards.push(mk('FnF Settlement Report',
+            'ZingHR → Payroll → FnF Settlement Report',
+            'FnF_DDMMYYYY.xlsx',
+            'Updates FnF tracker: pending cases, liability amounts (gratuity, leave encashment, net payable), aging bands, and payment dates.',
+            '#f59e0b'));
+        // Employee Master — hrops + payroll + all
         if(isHROps||isPay)
-          cards.push(mk('Employee Master','cmsitn_super_employee_master_*.xlsx → Updates Workforce Intel + ATE'));
-        // Attendance — payroll only
+          cards.push(mk('Employee Master',
+            'ZingHR → Reports → Super Employee Master',
+            'cmsitn_super_employee_master_DDMMYYYY.xlsx',
+            'Updates Workforce Intel headcount, ATE tracker, and Contract Workforce tracker. Download with all active employees.'));
+        // Attendance — payroll + all
         if(isPay)
-          cards.push(mk('Attendance Report','attendance_*.xlsx','#f87171'));
-        // OD/WFH — hrops + payroll
+          cards.push(mk('Attendance Consolidation',
+            'ZingHR → Attendance → Attendance Consolidation Report',
+            'cmsitn_attendance_consolidation_DDMMYYYY.xlsx',
+            'Updates OD/WFH compliance data. Download for current month, all employees.',
+            '#f87171'));
+        // OD/WFH — hrops + payroll + all
         if(isHROps||isPay)
-          cards.push(mk('OD / WFH Report','cmsitn_outdoor_and_wfh_*.xlsx → Updates OD & WFH tab','#f87171'));
-        // eSep — hrops + payroll
+          cards.push(mk('OD / WFH Report',
+            'ZingHR → Reports → Outdoor Duty & WFH Report',
+            'cmsitn_outdoor_and_wfh_details_DDMMYYYY.xlsx',
+            'Updates OD/WFH compliance tab. Shows employees who applied OD or WFH in the period.',
+            '#f87171'));
+        // eSep — hrops + payroll + all
         if(isHROps||isPay)
-          cards.push(mk('eSep / Resignation','cmsitn_e-sep_transaction_details_*.xlsx → Updates Resignation & Backfill tab','var(--muted2)'));
-        // Leave — payroll only
+          cards.push(mk('eSep / Resignation',
+            'ZingHR → eSep → Transaction Details Report',
+            'cmsitn_e-sep_transaction_details_DDMMYYYY.xlsx',
+            'Updates Resignation & Backfill tab. Also refreshes Long Absenteeism eSep verification. Download full extract — no date filter.',
+            'var(--muted2)'));
+        // Leave — payroll + all
         if(isPay)
-          cards.push(mk('Leave Report','leave_*.xlsx','#f87171'));
-        // Candidate + TA Req — payroll + ta_upload flag (Ramesh)
+          cards.push(mk('Leave Report',
+            'ZingHR → Leave → Leave Balance Report',
+            'leave_MMYYYY.xlsx',
+            'Updates leave balance and utilisation data.',
+            '#f87171'));
+        // Candidate — payroll + ta_upload + all
         if(hasTA)
-          cards.push(mk('Candidate Transaction','cmsitn_candidate_*.xlsx → Updates TA Pipeline & Gender Funnel','#34d399'));
+          cards.push(mk('Candidate Transactional Report',
+            'ZingHR → Recruitment → Candidate Transactional Report',
+            'cmsitn_candidate_transactional_report_DDMMYYYY.xlsx',
+            'Updates TA Pipeline, prospective joiners tracker, source mix, and gender hiring funnel.',
+            '#34d399'));
+        // TA Req — payroll + ta_upload + all
         if(hasTA)
-          cards.push(mk('TA Requisition Report','cmsitn_requisition_wise_tat_*.xlsx → Updates TA Pipeline TAT','#34d399'));
+          cards.push(mk('Requisition Wise TAT Report',
+            'ZingHR → Recruitment → Requisition Wise TAT Report',
+            'cmsitn_requisition_wise_tat_report_DDMMYYYY.xlsx',
+            'Updates open requisitions list and time-to-fill (TAT) per requirement.',
+            '#34d399'));
         // CTC Master — admin only
         if(isAdmin)
-          cards.push(mk('CTC Master','ctc_master_*.xlsx','var(--muted2)'));
+          cards.push(mk('CTC Master',
+            'Payroll system export',
+            'ctc_master_DDMMYYYY.xlsx',
+            'Updates CTC data used for cost analysis. Restricted — admin only.',
+            'var(--muted2)'));
         return cards.join('');
       })()}
     </div>
@@ -5275,13 +5312,14 @@ function renderFnF() {
 
     <!-- Table -->
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">
-      <div style="display:grid;grid-template-columns:160px 1fr 100px 80px 90px 100px 80px;background:var(--surface3);border-bottom:1px solid var(--border);padding:10px 14px">
+      <div style="display:grid;grid-template-columns:160px 1fr 100px 80px 90px 100px 110px 80px;background:var(--surface3);border-bottom:1px solid var(--border);padding:10px 14px">
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Employee</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Customer</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Region</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">DOL</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);cursor:pointer" onclick="_fnfSort='days_desc';document.getElementById('tab-fnf').innerHTML=renderFnF()">Days ↓</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);cursor:pointer" onclick="_fnfSort='band';document.getElementById('tab-fnf').innerHTML=renderFnF()">Aging Band</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Payment Date</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Status</div>
       </div>
       ${data.length===0?'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>':
@@ -5290,7 +5328,7 @@ function renderFnF() {
           const statusLabel = r.paid ? 'Paid' : r.status.includes('Bank') ? 'Bank Issue' : r.status.trim();
           const statusCol = r.paid?'var(--green)':r.status==='Priority'?'var(--red)':r.status.includes('Bank')?'#f59e0b':'var(--amber)';
           const rowBg = r.band==='1year&above'||r.band==='180-365days'?'rgba(248,113,113,.04)':'';
-          return `<div style="display:grid;grid-template-columns:160px 1fr 100px 80px 90px 100px 80px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:${rowBg};font-size:12px">
+          return `<div style="display:grid;grid-template-columns:160px 1fr 100px 80px 90px 100px 110px 80px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:${rowBg};font-size:12px">
             <div>
               <div style="font-weight:500;color:var(--text)">${esc(r.name)}</div>
               <div style="font-size:10px;color:var(--muted2);margin-top:1px">${r.emp_code}</div>
@@ -5301,6 +5339,11 @@ function renderFnF() {
             <div style="font-weight:600;color:${bandCol}">${r.days}</div>
             <div>
               <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:${bandCol}20;color:${bandCol}">${BAND_LABEL[r.band]||r.band}</span>
+            </div>
+            <div style="font-size:11px;color:${r.payment_date?'var(--green)':'var(--muted2)'}">
+              ${r.payment_date
+                ? '<span style="font-weight:600">✓ '+esc(r.payment_date)+'</span>'
+                : '<span style="color:var(--muted2)">—</span>'}
             </div>
             <div>
               <span style="font-size:10px;font-weight:600;color:${statusCol}">${esc(statusLabel)}</span>
@@ -8202,8 +8245,13 @@ async function processFnFData(wb) {
       other:        parseFloat(String(g(r,'Otherthan Gratuity & Leave encashment')).replace(/,/g,'')) || 0,
       net_salary:   net,
       status:       status,
-      paid:         status === 'Paid' || g(r,'Payment done case') === 'Yes',
-      payment_date: '',
+      paid:         status === 'Paid' || (g(r,'Payment done case') && g(r,'Payment done case') !== 'None' && g(r,'Payment done case') !== 'Yes') || g(r,'Payment done case') === 'Yes',
+      payment_date: (function(){
+        var _pd = g(r,'Payment done case');
+        if (!_pd || _pd === 'None' || _pd === 'Yes' || _pd === 'No') return '';
+        try { var _d = new Date(String(_pd).split(' ')[0]); return isNaN(_d)?'':_d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+        catch(e) { return ''; }
+      })(),
       region:       g(r,'Region'),
       billable:     g(r,'Billable/Non- Billable','Billable'),
       customer:     g(r,'Customer'),
