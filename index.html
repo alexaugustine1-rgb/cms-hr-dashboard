@@ -7294,7 +7294,7 @@ async function sbBoot(user){
   if(_sbRole.role==='admin'){const upl=document.getElementById('tab-btn-upload'),usr=document.getElementById('tab-btn-users');if(upl)upl.style.display='';if(usr)usr.style.display='';}
   showSidebarAfterLogin(_sbRole.role);
   // HR Ops (Sheetal, Kesavan) also get Upload Data access
-  if(_sbRole.role==='hrbp'&&(_sbRole.function_type==='hrops'||_sbRole.function_type==='payroll')){const upl=document.getElementById('tab-btn-upload');if(upl)upl.style.display='';}
+  if(_sbRole.role==='hrbp'&&(_sbRole.function_type==='hrops'||_sbRole.function_type==='payroll'||_sbRole.function_type==='ta')){const upl=document.getElementById('tab-btn-upload');if(upl)upl.style.display='';}
   const hr=document.querySelector('.header-right');
   if(hr&&!document.getElementById('sbSignOutBtn')){
     const b=document.createElement('button');b.id='sbSignOutBtn';b.textContent='Sign out';b.className='btn-outline';b.style.cssText='margin-left:12px;font-size:12px;cursor:pointer';b.onclick=sbSignOut;hr.appendChild(b);
