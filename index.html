@@ -3316,8 +3316,11 @@ function init() {
       btn.onclick = () => { currentWeek=key; document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); var _c=document.getElementById('weekBtns');if(_c){var _ab=_c.querySelector('.week-btn.active');if(_ab)_c.scrollLeft=_ab.offsetLeft-_c.offsetWidth/2+_ab.offsetWidth/2;} if(currentTab==='hrbp'&&typeof loadHRBPSiteVisitsForTab==='function'){setTimeout(loadHRBPSiteVisitsForTab,150);} };
       container.appendChild(btn);
     });
-    // Auto-scroll to latest week
-    setTimeout(function(){var _c=container;var _ab=_c.querySelector('.week-btn.active.latest,.week-btn.active');if(_ab)_c.scrollLeft=_ab.offsetLeft-_c.offsetWidth/2+_ab.offsetWidth/2;},80);
+    // Auto-scroll to latest week — multiple attempts for slow paint
+    var _doScroll=function(){var _c=document.getElementById('weekBtns');if(!_c)return;var _ab=_c.querySelector('.week-btn.active.latest,.week-btn.active');if(_ab){_c.scrollLeft=_ab.offsetLeft-_c.offsetWidth/2+_ab.offsetWidth/2;_ab.scrollIntoView({behavior:'instant',block:'nearest',inline:'center'});}};
+    setTimeout(_doScroll,100);
+    setTimeout(_doScroll,400);
+    setTimeout(_doScroll,900);
   }
   render();
 }
@@ -3332,7 +3335,34 @@ function switchTab(id, btn) {
   currentTab=id;
   if(id==='upload') { if(el){el.innerHTML=renderUploadTab(); document.getElementById('weeksList').innerHTML=weeksListHTML();} }
   if(id==='hrbp' && typeof _sbUser !== 'undefined' && _sbUser) {
-    setTimeout(loadHRBPSiteVisitsForTab, 150);
+    setTimeout(async function(){
+      await loadHRBPSiteVisitsForTab();
+      // If current week has no visits, auto-switch to most recent week that does
+      if(!_hrbpSVCache||!_hrbpSVCache.length){
+        var _wkList=([...WEEK_ORDER]).reverse();
+        for(var _wi=0;_wi<_wkList.length;_wi++){
+          var _wt=_wkList[_wi];
+          if(_wt===currentWeek)continue;
+          var _chk=await _sb.from('hrbp_site_visits').select('id').eq('week_key',_wt).limit(1);
+          if(_chk.data&&_chk.data.length>0){
+            currentWeek=_wt;
+            document.querySelectorAll('.week-btn').forEach(function(b){b.classList.remove('active');});
+            var _nb=document.getElementById('wbtn-'+_wt);
+            if(_nb)_nb.classList.add('active');
+            else{document.querySelectorAll('.week-btn').forEach(function(b){
+              if((b.textContent||'').includes(_wt))b.classList.add('active');
+            });}
+            await loadHRBPSiteVisitsForTab();
+            // Scroll to the newly active button
+            setTimeout(function(){var _c=document.getElementById('weekBtns');
+              if(_c){var _ab=_c.querySelector('.week-btn.active');
+              if(_ab)_c.scrollLeft=_ab.offsetLeft-_c.offsetWidth/2+_ab.offsetWidth/2;}
+            },100);
+            break;
+          }
+        }
+      }
+    }, 150);
   }
 
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadActionTasks, 100); }
