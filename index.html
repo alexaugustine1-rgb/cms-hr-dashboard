@@ -1668,7 +1668,7 @@ async function loadHRBPSiteVisitsForTab() {
       _hrbpSVCache = data;
       // Re-render the HRBP tab with the new data
       var el = document.getElementById('tab-hrbp');
-      if (el && currentTab === 'hrbp') {
+      if (el) {
         var w = WEEKS_DATA[currentWeek];
         var wkKeys = Object.keys(WEEKS_DATA||{}).sort();
         var wkIdx = wkKeys.indexOf(currentWeek);
