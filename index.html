@@ -3318,7 +3318,8 @@ function init() {
       const btn = document.createElement('button');
       btn.className = 'week-btn' + (key === latestKey ? ' active latest' : '');
       btn.textContent = (WEEK_NAMES[key]||key) + '  ' + w.label;
-      btn.onclick = () => { currentWeek=key; document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); var _c=document.getElementById('weekBtns');if(_c){var _ab=_c.querySelector('.week-btn.active');if(_ab)_c.scrollLeft=_ab.offsetLeft-_c.offsetWidth/2+_ab.offsetWidth/2;} if(currentTab==='hrbp'&&typeof loadHRBPSiteVisitsForTab==='function'){setTimeout(loadHRBPSiteVisitsForTab,150);} };
+      btn.onclick = () => { currentWeek=key; document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); var _c=document.getElementById('weekBtns');if(_c){var _ab=_c.querySelector('.week-btn.active');if(_ab)_c.scrollLeft=_ab.offsetLeft-_c.offsetWidth/2+_ab.offsetWidth/2;} if(currentTab==='hrbp'&&typeof loadHRBPSiteVisitsForTab==='function'){setTimeout(loadHRBPSiteVisitsForTab,150);}// Always re-fetch selected week from DB to ensure fresh data
+if(_sb&&_sbUser){(async function(){try{var _wr=await _sb.from('weekly_reports').select('*').eq('week_key',key).single();if(!_wr.error&&_wr.data){WEEKS_DATA[key]=_wr.data;render();}}catch(e){console.warn('[weekRefresh]',e.message);}})();} };
       container.appendChild(btn);
     });
     // Auto-scroll to latest week — multiple attempts for slow paint
@@ -4057,7 +4058,7 @@ async function loadWeeksIntoDOM(){
   const{data:weeks}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
   if(weeks&&weeks.length){WEEKS_DATA={};weeks.forEach(w=>{WEEKS_DATA[w.week_key]=w;});WEEK_ORDER=weeks.map(w=>w.week_key);weeks.forEach(w=>{WEEK_LABELS[w.week_key]=w.label||'';WEEK_NAMES[w.week_key]='Week '+w.week_num+(w.week_key===WEEK_ORDER[WEEK_ORDER.length-1]?' (Latest)':'');});window.WEEK_ORDER_LIVE=WEEK_ORDER;currentWeek=WEEK_ORDER[WEEK_ORDER.length-1];}
   const container=document.getElementById('weekBtns');
-  if(container){container.innerHTML='';WEEK_ORDER.filter(k=>WEEKS_DATA[k]).forEach(key=>{const w=WEEKS_DATA[key];const btn=document.createElement('button');btn.className='week-btn'+(key===currentWeek?' active latest':'');btn.textContent=(WEEK_NAMES[key]||key)+'  '+w.label;btn.onclick=()=>{currentWeek=key;document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');render();if(currentTab==='hrbp'&&typeof loadHRBPSiteVisitsForTab==='function'){setTimeout(loadHRBPSiteVisitsForTab,150);}};container.appendChild(btn);});}
+  if(container){container.innerHTML='';WEEK_ORDER.filter(k=>WEEKS_DATA[k]).forEach(key=>{const w=WEEKS_DATA[key];const btn=document.createElement('button');btn.className='week-btn'+(key===currentWeek?' active latest':'');btn.textContent=(WEEK_NAMES[key]||key)+'  '+w.label;btn.onclick=()=>{currentWeek=key;document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');render();if(currentTab==='hrbp'&&typeof loadHRBPSiteVisitsForTab==='function'){setTimeout(loadHRBPSiteVisitsForTab,150);}if(_sb&&_sbUser){(async function(){try{var _wr=await _sb.from('weekly_reports').select('*').eq('week_key',weekKey).single();if(!_wr.error&&_wr.data){WEEKS_DATA[weekKey]=_wr.data;render();}}catch(e){console.warn('[weekRefresh]',e.message);}})();}};container.appendChild(btn);});}
   render();
   const wl=document.getElementById('weeksList');if(wl)wl.innerHTML=weeksListHTML();
 }
