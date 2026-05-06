@@ -8336,7 +8336,7 @@ async function processFnFData(wb) {
       })(),
       region:       g(r,'Region'),
       billable:     g(r,'Billable/Non- Billable','Billable'),
-      customer:     g(r,'Customer'),
+      customer: (function(c,b){var _int=['HR','SALES','Business Finance','Field Services','FIELD SERVICES','LEGAL','Learning & Development','Non Billable','FINANCE'];if(!c||c==='0'||c==='None')return 'CMS IT Services';if(b&&b.toLowerCase().includes('non')&&_int.some(function(d){return c.toUpperCase().includes(d.toUpperCase());}))return 'CMS IT Services';return c;})(g(r,'Customer'),g(r,'Billable/Non- Billable','Billable')),
       year:         g(r,'Year')
     };
   });
