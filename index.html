@@ -2957,7 +2957,7 @@ function renderAbsenteeism(el) {
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Employee Conduct Intelligence</div>
         <div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">Long Absenteeism Tracker — No eSep Raised</div>
       </div>
-      <div style="font-size:11px;color:var(--muted2)">Source: ZingHR Attendance · Feb 1 – Mar 25 2026 · Active employees only · ≥7 consecutive working days</div>
+      <div style="font-size:11px;color:var(--muted2)">Source: ZingHR Attendance · Employee Master last updated (function(d){if(!d)return'--';var _dt=new Date(d);return _dt.getDate().toString().padStart(2,'0')+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_dt.getMonth()]+' '+_dt.getFullYear();})(window.WI_CACHE_DATE||null) · Active employees only · ≥7 consecutive working days</div>
     </div>
     ${kpiHTML}
     <div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:var(--amber)">
@@ -5311,7 +5311,7 @@ function renderFnF() {
         <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">FnF Settlement Tracker</div>
         <div style="font-family:Bebas_Neue,sans-serif;font-size:28px;letter-spacing:1px;color:var(--text);margin-top:2px">Full & Final Settlements</div>
       </div>
-      <div style="font-size:11px;color:var(--muted)">As of 23 Mar 2026 · 204 total cases</div>
+      <div style="font-size:11px;color:var(--muted)">Data as of ${(function(d){if(!d)return'--';var _dt=new Date(d);return _dt.getDate().toString().padStart(2,'0')+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_dt.getMonth()]+' '+_dt.getFullYear();})(window.FNF_CACHE_DATE||null)} · ${FNF_DATA.length} total cases</div>
     </div>
 
     <!-- KPI Strip -->
@@ -5579,7 +5579,7 @@ function renderResignation(){
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">'
     +'<div><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Resignation &amp; Backfill Intelligence</div>'
     +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:28px;letter-spacing:1px;color:var(--text);margin-top:2px">Active Resignations &#x2192; Hire Status</div></div>'
-    +'<div style="font-size:11px;color:var(--muted)">As of 25 Mar 2026 &middot; '+S.total_res+' active resignations</div></div>'
+    +'<div style="font-size:11px;color:var(--muted)">Data as of '+(function(d){if(!d)return'--';var _dt=new Date(d);return _dt.getDate().toString().padStart(2,'0')+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_dt.getMonth()]+' '+_dt.getFullYear();})(window.RES_CACHE_DATE||null)+'  &middot; '+S.total_res+' active resignations</div></div>'
     // R1 process failure alert
     +(r1FailPast.length>0 ? '<div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">'
       +'<span style="font-size:18px">⚠️</span>'
@@ -5655,7 +5655,8 @@ function renderOD(){
     '<div style="display:flex;gap:0;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:3px;width:fit-content">'
     +'<button onclick="_odView=\'OD\';document.getElementById(\'tab-od\').innerHTML=renderOD()" style="padding:7px 24px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:'+(!isWFH?'var(--accent)':'transparent')+';color:'+(!isWFH?'var(--bg)':'var(--muted)')+';font-family:\'DM Mono\',monospace;letter-spacing:.5px">Outdoor Duty</button>'
     +'<button onclick="_odView=\'WFH\';document.getElementById(\'tab-od\').innerHTML=renderOD()" style="padding:7px 24px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:'+(isWFH?'var(--accent)':'transparent')+';color:'+(isWFH?'var(--bg)':'var(--muted)')+';font-family:\'DM Mono\',monospace;letter-spacing:.5px">WFH</button>'
-    +'</div>';
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--muted2);margin-bottom:12px">Data as of '+(function(d){if(!d)return'--';var _dt=new Date(d);return _dt.getDate().toString().padStart(2,'0')+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_dt.getMonth()]+' '+_dt.getFullYear();})(window.OD_CACHE_DATE||null)+'</div>';
 
   // ── MoM comparison (if 2 months available)
   let momPanel = '';
@@ -7343,13 +7344,13 @@ async function sbBoot(user){
   } catch(e){ console.warn('[sbBoot] WI fallback to hardcoded:', e.message); }
   // Load persisted upload data from data_cache
   try {
-    const {data:dcRows} = await _sb.from('data_cache').select('id,data,row_count');
+    const {data:dcRows} = await _sb.from('data_cache').select('id,data,row_count,uploaded_at');
     if (dcRows && dcRows.length) {
       dcRows.forEach(function(row) {
         if (!row.data) return;
-        if (row.id==='fnf'        && row.row_count>0) { FNF_DATA        = row.data; console.log('[sbBoot] FNF_DATA:',row.row_count,'rows'); }
-        if (row.id==='resignation' && row.row_count>0) { CMS_RES_DATA   = row.data; console.log('[sbBoot] CMS_RES_DATA:',row.row_count,'rows'); }
-        if (row.id==='od' && row.row_count>0) {
+        if (row.id==='fnf'        && row.row_count>0) { FNF_DATA        = row.data; window.FNF_CACHE_DATE        = row.uploaded_at||null; console.log('[sbBoot] FNF_DATA:',row.row_count,'rows'); }
+        if (row.id==='resignation' && row.row_count>0) { CMS_RES_DATA   = row.data; window.RES_CACHE_DATE         = row.uploaded_at||null; console.log('[sbBoot] CMS_RES_DATA:',row.row_count,'rows'); }
+        if (row.id==='od' && row.row_count>0) { window.OD_CACHE_DATE=row.uploaded_at||null;
           // New structure: {months, monthArr, monthSummary} — or legacy flat array
           if (row.data && row.data.months) {
             window._OD_MONTHLY = row.data;
@@ -7382,6 +7383,12 @@ async function sbBoot(user){
     });
     setTimeout(function(){snavClick('admin');},150);
   }  const{data:weeks,error}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
+  // Fetch WI updated_at for freshness display
+  try{
+    const{data:_wiMeta}=await _sb.from('workforce_intel').select('updated_at').eq('id','current').single();
+    if(_wiMeta&&_wiMeta.updated_at) window.WI_CACHE_DATE=_wiMeta.updated_at;
+  }catch(e){}
+
   console.log('[sbBoot] weekly_reports:', error?'ERROR:'+error.message:weeks?.length+' rows loaded');
   if(!error&&weeks&&weeks.length>0){WEEKS_DATA={};weeks.forEach(w=>{WEEKS_DATA[w.week_key]=w;});WEEK_ORDER=weeks.map(w=>w.week_key);weeks.forEach(w=>{WEEK_LABELS[w.week_key]=w.label||'';WEEK_NAMES[w.week_key]='Week '+w.week_num+(w.week_key===WEEK_ORDER[WEEK_ORDER.length-1]?' (Latest)':'');});window.WEEK_ORDER_LIVE=WEEK_ORDER;// Default to current live week; fall back to week with most submissions
   var _liveWk=typeof getCurrentWeekKey==='function'?getCurrentWeekKey():null;
@@ -8249,7 +8256,7 @@ async function _mergeWI(patch) {
     if (error) throw error;
     // Update in-memory WI so dashboard refreshes without reload
     Object.assign(WI, merged);
-    log('✓ Workforce Intel updated in Supabase', 'ok');
+    window.WI_CACHE_DATE = new Date().toISOString(); log('✓ Workforce Intel updated in Supabase', 'ok');
     log('Refresh the Workforce Intel tab to see changes', 'ok');
   } catch(e) {
     log('Error saving to Supabase: ' + e.message, 'err');
