@@ -7383,11 +7383,14 @@ async function sbBoot(user){
     });
     setTimeout(function(){snavClick('admin');},150);
   }  const{data:weeks,error}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
-  // Fetch WI updated_at for freshness display
+  // Fetch WI data from DB at boot — overrides hardcoded const
   try{
-    const{data:_wiMeta}=await _sb.from('workforce_intel').select('updated_at').eq('id','current').single();
-    if(_wiMeta&&_wiMeta.updated_at) window.WI_CACHE_DATE=_wiMeta.updated_at;
-  }catch(e){}
+    const{data:_wiLive}=await _sb.from('workforce_intel').select('data,updated_at').eq('id','current').single();
+    if(_wiLive){
+      if(_wiLive.updated_at) window.WI_CACHE_DATE=_wiLive.updated_at;
+      if(_wiLive.data && typeof _wiLive.data === 'object') Object.assign(WI, _wiLive.data);
+    }
+  }catch(e){ console.warn('[WI boot]',e.message); }
 
   console.log('[sbBoot] weekly_reports:', error?'ERROR:'+error.message:weeks?.length+' rows loaded');
   if(!error&&weeks&&weeks.length>0){WEEKS_DATA={};weeks.forEach(w=>{WEEKS_DATA[w.week_key]=w;});WEEK_ORDER=weeks.map(w=>w.week_key);weeks.forEach(w=>{WEEK_LABELS[w.week_key]=w.label||'';WEEK_NAMES[w.week_key]='Week '+w.week_num+(w.week_key===WEEK_ORDER[WEEK_ORDER.length-1]?' (Latest)':'');});window.WEEK_ORDER_LIVE=WEEK_ORDER;// Default to current live week; fall back to week with most submissions
@@ -7860,6 +7863,7 @@ async function processWISuperEmp(wb) {
   const today = new Date();
 
   let active = 0, female = 0;
+  const attrByMonth = {};
   const regions = {North:{hc:0,female:0,wage_cr:0}, South:{hc:0,female:0,wage_cr:0},
                    East:{hc:0,female:0,wage_cr:0},  West:{hc:0,female:0,wage_cr:0}};
   const tenure_dist = {'<6 months':0,'6m-1yr':0,'1-3 yrs':0,'3-5 yrs':0,'5-10 yrs':0,'>10 yrs':0};
@@ -7889,7 +7893,22 @@ async function processWISuperEmp(wb) {
   rows.forEach(r => {
     const empStatusRaw = g(r, 'Employee Status'); // col 2: Existing/NewJoinee/FnF etc
     const empStatus    = g(r, 'EmployeeStatus');  // col 6: Active/Inactive
-    if (empStatus !== 'Active') return;
+
+    // Track inactive employees with LWD in current year for attrition
+    if (empStatus !== 'Active') {
+      const lwdRaw = g(r, 'LWD', 'Date_Of_Leaving', 'DateOfLeaving', 'Last Working Day');
+      if (lwdRaw) {
+        var lwdD = new Date(lwdRaw);
+        if (!isNaN(lwdD) && lwdD.getFullYear() === new Date().getFullYear()) {
+          var monKey = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][lwdD.getMonth()];
+          attrByMonth[monKey] = attrByMonth[monKey] || {exits:0, region:{}};
+          attrByMonth[monKey].exits++;
+          var regA = g(r,'Region','region') || '';
+          if (regA) attrByMonth[monKey].region[regA] = (attrByMonth[monKey].region[regA]||0)+1;
+        }
+      }
+      return;
+    }
     active++;
 
     // Track NewJoinee employees — flag by week using DOJ
@@ -7980,9 +7999,15 @@ async function processWISuperEmp(wb) {
     else ctc_brackets['<2.5L'] += cnt; // ATE, CON etc
   });
 
+  // Compute YTD joiners and exiters from the Super Emp data
+  const joiners_ytd = Object.values(joiners_by_week).reduce((s,v)=>s+v,0);
+  const curYear = new Date().getFullYear();
+
   const patch = {
     active_hc: active,
     active_hc_current: active,
+    joiners_ytd,
+    exiters_ytd: Object.values(attrByMonth).reduce((s,m)=>s+(m.exits||0),0),
     joiners_by_week, joiners_by_week_region,
     female_count: female,
     female_pct: active > 0 ? Math.round(female * 100 / active * 10) / 10 : 0,
@@ -7994,6 +8019,18 @@ async function processWISuperEmp(wb) {
   log('Active HC: ' + active + ' | Female: ' + female + ' (' + patch.female_pct + '%)', 'ok');
   log('Regions: ' + JSON.stringify(Object.fromEntries(Object.entries(regionData).map(([k,v])=>[k,v.hc]))), 'ok');
 
+  // Build attrition object with rates using active_hc from WI
+  if (Object.keys(attrByMonth).length > 0) {
+    const existAttr = (WI && WI.attrition) || {};
+    const attrPatch = {};
+    Object.entries(attrByMonth).forEach(function([mon, md]) {
+      const hc = (existAttr[mon] && existAttr[mon].active_hc) || active || 2800;
+      attrPatch[mon] = { exits: md.exits, active_hc: hc, region: md.region,
+        rate: hc > 0 ? Math.round(md.exits / hc * 12 * 100 * 10) / 10 : 0 };
+    });
+    patch.attrition = attrPatch;
+    log('Attrition by month: ' + JSON.stringify(Object.fromEntries(Object.entries(attrPatch).map(([k,v])=>[k,v.exits]))), 'ok');
+  }
   await _mergeWI(patch);
 
   // Update weekly_reports ta_closed (joiners) per week from NewJoinee data
@@ -8518,6 +8555,46 @@ async function processResignationData(wb) {
   } catch(e){console.warn('[eSep verify]',e.message);}
 
   log('✓ Resignation: '+newRows.length+' records | R1 pending: '+r1_pending+' | LWD past: '+lwd_past,'ok');
+
+  // Compute attrition by month from eSep data and patch WI
+  try {
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const exitsByMonth = {};
+    const exitsByMonthRegion = {};
+    newRows.forEach(function(r) {
+      // Use LWD as the exit date
+      var lwdStr = r.lwd || '';
+      if (!lwdStr) return;
+      var lwd = new Date(lwdStr);
+      if (isNaN(lwd)) return;
+      if (lwd.getFullYear() !== new Date().getFullYear()) return; // current year only
+      var mon = MONTHS[lwd.getMonth()];
+      exitsByMonth[mon] = (exitsByMonth[mon]||0) + 1;
+      if (!exitsByMonthRegion[mon]) exitsByMonthRegion[mon] = {};
+      var reg = r.region || '';
+      if (reg) exitsByMonthRegion[mon][reg] = (exitsByMonthRegion[mon][reg]||0) + 1;
+    });
+    if (Object.keys(exitsByMonth).length > 0) {
+      // Merge with existing attrition data (preserve active_hc from WI)
+      var existingAttr = (WI && WI.attrition) || {};
+      var newAttr = {};
+      MONTHS.forEach(function(mon) {
+        if (!exitsByMonth[mon] && !existingAttr[mon]) return;
+        var exits = exitsByMonth[mon] || 0;
+        var hc = (existingAttr[mon] && existingAttr[mon].active_hc) || (WI && (WI.active_hc_current || WI.active_hc)) || 2800;
+        var rate = hc > 0 ? Math.round(exits / hc * 12 * 100 * 10) / 10 : 0;
+        newAttr[mon] = Object.assign({}, existingAttr[mon]||{}, {
+          exits: exits,
+          active_hc: hc,
+          rate: rate,
+          region: exitsByMonthRegion[mon] || (existingAttr[mon] && existingAttr[mon].region) || {}
+        });
+      });
+      await _mergeWI({ attrition: newAttr });
+      Object.assign(WI, { attrition: newAttr });
+      log('✓ Attrition by month updated: ' + JSON.stringify(Object.fromEntries(Object.entries(newAttr).map(([k,v])=>[k,v.exits+' exits']))), 'ok');
+    }
+  } catch(e) { console.warn('[attrition patch]', e.message); }
 
   if (typeof render === 'function') render();
   const el = document.getElementById('tab-resignation');
