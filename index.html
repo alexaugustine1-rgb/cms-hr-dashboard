@@ -1036,7 +1036,7 @@ function renderOverview(w, pw) {
   }
 
   var cmdStrip = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'
-    +cmdKpi('👥', ((W.active_hc_current||W.active_hc_mar||W.active_hc||0)).toLocaleString(), 'Total Headcount', 'var(--accent)', 'Active as on Mar 26')
+    +cmdKpi('👥', ((W.active_hc_current||W.active_hc_mar||W.active_hc||0)).toLocaleString(), 'Total Headcount', 'var(--accent)', 'Active as on '+(W._super_emp_updated?new Date(W._super_emp_updated).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'latest upload'))
     +cmdKpi('📋', openReqs, 'Open Positions', openReqs>200?'var(--red)':'var(--amber)', critReqs+' critical (>45d)')
     +cmdKpi('✅', mJoiners, 'W'+w.week_num+' Joiners', mJoiners>5?'var(--green)':'var(--muted)', w.ta_offers+' offers released')
     +cmdKpi('📈', q1attr+'%', 'Annualised Attrition (Q1)', q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)', q1exits+' exits Jan–Mar')
