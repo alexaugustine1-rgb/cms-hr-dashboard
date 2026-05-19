@@ -3507,6 +3507,65 @@ function log(msg, type) {
   el.scrollTop=el.scrollHeight;
 }
 
+// ── L&D Upcoming Sessions structured entry ───────────────────────────
+var _ldUpcomingEntries = [];
+
+function addLDUpcoming() {
+  var prog = document.getElementById('ldUpProgram');
+  var date = document.getElementById('ldUpDate');
+  var aud  = document.getElementById('ldUpAudience');
+  var mode = document.getElementById('ldUpMode');
+  if (!prog || !prog.value.trim()) { alert('Please enter a programme name'); return; }
+  _ldUpcomingEntries.push({
+    programme: prog.value.trim(),
+    date:      date ? date.value.trim() : '',
+    audience:  aud  ? aud.value.trim()  : '',
+    mode:      mode ? mode.value        : 'In-person'
+  });
+  renderLDUpcoming();
+  prog.value = ''; if(date) date.value = ''; if(aud) aud.value = '';
+  if(mode) mode.value = 'In-person';
+}
+
+function renderLDUpcoming() {
+  var el = document.getElementById('ldUpcomingList');
+  var hidden = document.getElementById('f_ld_upcoming');
+  if (!el) return;
+  if (!_ldUpcomingEntries.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--muted2);padding:4px 0">No upcoming sessions added yet.</div>';
+    if (hidden) hidden.value = '';
+    return;
+  }
+  // Render cards
+  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">'
+    + _ldUpcomingEntries.map(function(e, i) {
+        return '<div style="display:flex;align-items:center;gap:8px;background:var(--surface3);'
+          + 'border:1px solid var(--border);border-radius:7px;padding:7px 10px">'
+          + '<div style="flex:1">'
+          + '<span style="font-size:13px;font-weight:600;color:var(--text)">' + esc(e.programme) + '</span>'
+          + (e.date ? '<span style="font-size:11px;color:var(--accent);margin-left:8px">' + esc(e.date) + '</span>' : '')
+          + (e.audience ? '<span style="font-size:11px;color:var(--muted);margin-left:8px">· ' + esc(e.audience) + '</span>' : '')
+          + (e.mode && e.mode !== 'In-person' ? '<span style="font-size:10px;color:var(--muted2);margin-left:6px;padding:1px 6px;border-radius:6px;background:var(--surface2)">'
+             + esc(e.mode) + '</span>' : '')
+          + '</div>'
+          + '<button type="button" onclick="_ldUpcomingEntries.splice(' + i + ',1);renderLDUpcoming()"'
+          + ' style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:14px;padding:0 4px">✕</button>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+  // Update hidden field with JSON array stored as newline-separated strings for backward compatibility
+  var lines = _ldUpcomingEntries.map(function(e) {
+    return e.programme + (e.date ? ' -- ' + e.date : '') + (e.audience ? ' -- ' + e.audience : '') + (e.mode && e.mode !== 'In-person' ? ' (' + e.mode + ')' : '');
+  });
+  if (hidden) hidden.value = lines.join('\n');
+}
+
+// Clear LD upcoming entries when submit tab reloads
+function resetLDUpcoming() {
+  _ldUpcomingEntries = [];
+  renderLDUpcoming();
+}
+
 async function handleUploadFile(file) {
   if(!file)return;
   const el=document.getElementById('parseLog'); if(el){el.style.display='block';el.innerHTML='';}
@@ -4628,7 +4687,7 @@ if(t==='hrbp'){
       +'<div class="wform-row"><textarea id="f_anything_else" placeholder="Any other gap, risk or follow-up item…" style="min-height:54px"></textarea></div></div>'
       +buildActionsSection();
   }
-  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Upcoming Trainings (Next 2–4 Weeks)</label><textarea id="f_ld_upcoming" style="min-height:90px" placeholder="Program name, schedule, target audience…"></textarea></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>'
+  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Upcoming Trainings (Next 2–4 Weeks)</label><div id="ldUpcomingList" style="margin-bottom:8px"></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input type="text" id="ldUpProgram" placeholder="Programme name" style="flex:2;min-width:180px;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"><input type="text" id="ldUpDate" placeholder="Date (e.g. 23 May)" style="width:120px;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"><input type="text" id="ldUpAudience" placeholder="Target audience" style="flex:1;min-width:120px;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"><select id="ldUpMode" style="padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px"><option value="In-person">In-person</option><option value="Online">Online</option><option value="OEM Facilitated">OEM Facilitated</option><option value="Self-paced">Self-paced</option></select><button type="button" onclick="addLDUpcoming()" style="padding:8px 16px;background:var(--accent);color:var(--bg);border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">+ Add</button></div><input type="hidden" id="f_ld_upcoming"></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>'
   +buildActionsSection();
   if(t==='admin')return'<div class="wform-section"><div class="wform-section-title">Admin & Facilities</div><div class="wform-row"><label>Facility Issues & Resolution Details</label><textarea id="f_admin_issues" style="min-height:110px" placeholder="AC issues, power supply, internet, office setup…"></textarea></div><div class="wform-row"><label>Cost Optimisation / Savings Initiatives</label><textarea id="f_admin_savings" placeholder="Vendor negotiations, energy savings…"></textarea></div></div>'
   +buildActionsSection();
@@ -4652,7 +4711,7 @@ async function submitWeeklyForm(fnType,region){
     var wkDt=WEEKS_DATA[_formWeekKey];
     var vRecs=_visitEntries.map(function(v){return{week_key:_formWeekKey,week_label:wkDt?wkDt.label:_formWeekKey,submitted_by:_sbUser.id,submitter_name:record.submitter_name,region:region||_sbRole.region||'',account_name:v.account,account_tier:v.tier,visit_date:new Date().toISOString().split('T')[0],visit_notes:v.notes||'',visit_type:v.visit_type||'Connect'};});
     await _sb.from('hrbp_site_visits').insert(vRecs);
-    _visitEntries=[];if(typeof renderVisitEntries==='function')renderVisitEntries();
+    _visitEntries=[];if(typeof renderVisitEntries==='function')renderVisitEntries();if(typeof renderLDUpcoming==='function'){_ldUpcomingEntries=[];renderLDUpcoming();}
   }
   if(_formPhotos.length>0){st.innerHTML='<div style="font-size:12px;color:var(--muted)">Uploading photos…</div>';for(let i=0;i<_formPhotos.length;i++){const{file,caption,event_type}=_formPhotos[i];const ext=file.name.split('.').pop();const path=_formWeekKey+'/'+Date.now()+'_'+i+'.'+ext;const{error:upErr}=await _sb.storage.from('hrbp-photos').upload(path,file,{contentType:file.type});if(!upErr){const{data:urlData}=_sb.storage.from('hrbp-photos').getPublicUrl(path);await _sb.from('hrbp_photos').insert({week_key:_formWeekKey,week_num:wData?.week_num||0,uploaded_by:_sbUser.id,uploader_name:record.submitter_name,uploader_region:region||_sbRole.region||'',photo_url:urlData.publicUrl,caption,event_type:event_type||'site_visit'});}}_formPhotos=[];}
   await rebuildWeekFromSubmissions(_formWeekKey);
