@@ -8515,7 +8515,7 @@ async function _mergeWI(patch) {
     // Update in-memory WI so dashboard refreshes without reload
     Object.assign(WI, merged);
     window.WI_CACHE_DATE = new Date().toISOString(); log('✓ Workforce Intel updated in Supabase', 'ok');
-    log('Refresh the Workforce Intel tab to see changes', 'ok');
+    if (typeof render === 'function') render();
   } catch(e) {
     log('Error saving to Supabase: ' + e.message, 'err');
   }
