@@ -1972,43 +1972,62 @@ const _allConnects=w.hrbp_connects||[];
         +'<div style="display:flex;gap:6px;flex-wrap:wrap">'+_vtSummary+'</div>'
         +'</div>'
         +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">'
-        +_svFiltered.map(function(sv){
-          var tc = _tierCol2[sv.account_tier]||'var(--muted2)';
-          var vt = sv.visit_type||'Connect';
-          var vc = _vtypeCol[vt]||'var(--muted2)';
-          var vi = _vtypeIcon[vt]||'📌';
-          var dFmt = sv.visit_date ? new Date(sv.visit_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '';
-          return '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+tc+';border-radius:8px;padding:12px 14px">'
-            // Account name — prominent
-            +'<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;line-height:1.3">'+esc(sv.account_name||'')+'</div>'
-            // Badges row
-            +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center">'
-            +'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:'+tc+'20;color:'+tc+'">'+esc(sv.account_tier||'')+'</span>'
-            +'<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:8px;background:'+vc+'18;color:'+vc+';border:1px solid '+vc+'30">'+vi+' '+esc(vt)+'</span>'
-            +'<span style="font-size:10px;color:var(--muted);margin-left:auto">'+esc(dFmt)+'</span>'
-            +'</div>'
-            // HRBP name + region
-            +'<div style="font-size:11px;color:var(--muted2);margin-bottom:6px">'
-            +esc(sv.submitter_name||'')
-            +(sv.region?'<span style="color:var(--muted);margin-left:4px">· '+esc(sv.region)+'</span>':'')
-            +'</div>'
-            // Notes
-            +(sv.visit_notes?'<div style="font-size:11px;color:var(--muted);line-height:1.5;border-top:1px solid var(--border);padding-top:7px;margin-top:4px">'+esc(sv.visit_notes)+'</div>':'')
-            +'</div>';
-        }).join('')
+        +(function(){
+          // Group visits by account so multiple visits to the same account don't look like duplicates
+          var _grouped = {};
+          _svFiltered.forEach(function(sv){
+            var key = (sv.account_name||'Unknown').toUpperCase().trim();
+            if(!_grouped[key]) _grouped[key] = [];
+            _grouped[key].push(sv);
+          });
+          return Object.values(_grouped).map(function(visits){
+            var sv = visits[0];
+            var tc = _tierCol2[sv.account_tier]||'var(--muted2)';
+            var isMulti = visits.length > 1;
+            var html = '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+tc+';border-radius:8px;padding:12px 14px">';
+            // Account name + multi-visit badge
+            html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+            html += '<div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3">'+esc(sv.account_name||'')+'</div>';
+            if(isMulti) html += '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(96,165,250,.15);color:#60a5fa;border:1px solid rgba(96,165,250,.3)">'+visits.length+' visits</span>';
+            html += '</div>';
+            // Tier badge + HRBP
+            html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">'
+              +'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:'+tc+'20;color:'+tc+'">'+esc(sv.account_tier||'')+'</span>'
+              +'<span style="font-size:10px;color:var(--muted2)">'+esc(sv.submitter_name||'')+(sv.region?' · '+esc(sv.region):'')+'</span>'
+              +'</div>';
+            // Each visit as a sub-row
+            visits.forEach(function(v, vi_idx){
+              var vt = v.visit_type||'Connect';
+              var vc = _vtypeCol[vt]||'var(--muted2)';
+              var vi2 = _vtypeIcon[vt]||'📌';
+              var dFmt = v.visit_date ? new Date(v.visit_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '';
+              html += '<div style="'+(vi_idx>0?'margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);':'')+'">';
+              html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">'
+                +'<span style="font-size:10px;font-weight:600;padding:1px 7px;border-radius:6px;background:'+vc+'18;color:'+vc+';border:1px solid '+vc+'30">'+vi2+' '+esc(vt)+'</span>'
+                +'<span style="font-size:10px;color:var(--muted);margin-left:auto">'+esc(dFmt)+'</span>'
+                +'</div>';
+              if(v.visit_notes) html += '<div style="font-size:11px;color:var(--muted);line-height:1.5">'+esc(v.visit_notes)+'</div>';
+              html += '</div>';
+            });
+            html += '</div>';
+            return html;
+          }).join('');
+        })()
         +'</div></div>';
     }
   }
   const connectItems=`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">${_rTabs}</div>`+(_filteredConnects.length?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${_filteredConnects.map((c,i)=>buildConnectCard(c,i)).join('')}</div>`:'<div class="empty-state">No connects logged this week.</div>')+_svCards;
 
-  // Count actual site visits (multi-site submissions count each site)
-  const actualVisits = w.hrbp_connects.reduce((total, c) => {
+  // Count actual site visits — use hrbp_site_visits table count when available, else fall back to connects
+  const _svVisitCount = (typeof _hrbpSVCache !== 'undefined' && _hrbpSVCache.length) ? _hrbpSVCache.length : 0;
+  const _connectVisitCount = w.hrbp_connects.reduce((total, c) => {
     const detail = c.detail || c.activities || '';
     if (/site name\s*[-–:]/i.test(detail)) {
       return total + (detail.match(/site name\s*[-–:]/gi) || []).length;
     }
     return total + 1;
   }, 0) || w.hrbp_visits;
+  const actualVisits = _svVisitCount || _connectVisitCount;
 
   // Discipline: factual core, attributed by position
   const disciplineItems=(w.hrbp_discipline||[]).filter(function(d){const txt=typeof d==='object'?d.text:d;return txt&&!isNil(txt)&&txt.length>5;}).map(function(d){const txt=typeof d==='object'?d.text:d;const by=typeof d==='object'?d.by:'';const reg=typeof d==='object'?d.region:'';return `<div class="attr-row"><div class="attr-icon">⚠️</div><div class="attr-body"><div class="attr-text">${esc(trim(txt,180))}</div>`+(by?`<div class="attr-meta">${esc(by)} ${rtag(reg)}</div>`:'')+`</div></div>`;}).join('')||'<div class="empty-state">No discipline cases this week.</div>';
