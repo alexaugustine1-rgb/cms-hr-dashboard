@@ -1748,30 +1748,65 @@ function buildJourneyPlanPanel() {
     });
   });
 
+  // Load visit plans from localStorage
+  var visitPlans = {};
+  try { visitPlans = JSON.parse(localStorage.getItem('cms_hrbp_visit_plans')||'{}'); } catch(e){}
+
   var today = new Date();
   var tierCol = {Platinum:'#a78bfa',Gold:'#f59e0b'};
 
-  // Split into overdue (>30d or never) and visited this month
-  var overdue = [], recent = [];
-  pgAccounts.forEach(function(c){
+  // Reset global map for onclick references
+  window._jpMap = {};
+
+  // Helper: format a plan date badge
+  function planBadge(planObj) {
+    if (!planObj||!planObj.date) return '';
+    var pd = new Date(planObj.date);
+    if (isNaN(pd)) return '';
+    var diffDays = Math.round((pd - today) / 86400000);
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var label = pd.getDate()+' '+months[pd.getMonth()];
+    var diffStr = diffDays < 0 ? '(overdue)' : '('+diffDays+'d)';
+    var col = diffDays < 0 ? 'var(--red)' : '#60a5fa';
+    return '<span style="font-size:9px;font-weight:600;color:'+col+';background:rgba(96,165,250,0.12);border:1px solid '+col+';border-radius:4px;padding:1px 5px;white-space:nowrap">📅 '+label+' '+diffStr+'</span>';
+  }
+
+  // Split into 3 sections: planned, overdue, recent
+  var plannedCards = [], overdueCards = [], recentCards = [];
+
+  pgAccounts.forEach(function(c, idx){
     var key = c.n.toUpperCase().trim();
     var lv = lastVisitMap[key];
+    var plan = visitPlans[key]||null;
     var daysSince = null;
     if (lv && lv.date) {
       var lvDate = new Date(lv.date);
       if (!isNaN(lvDate)) daysSince = Math.floor((today-lvDate)/86400000);
     }
     var tc = tierCol[c.t]||'var(--muted2)';
+
+    // Store in global map for onclick
+    window._jpMap[idx] = {acct: c, lv: lv, plan: plan, key: key};
+
+    // Plan button / badge
+    var planBtn = plan
+      ? '<button onclick="openPlanVisitModal('+idx+')" style="font-size:9px;font-weight:600;background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid #60a5fa;border-radius:4px;padding:2px 7px;cursor:pointer">Edit Plan</button>'
+      : '<button onclick="openPlanVisitModal('+idx+')" style="font-size:9px;font-weight:600;background:rgba(99,102,241,0.15);color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:2px 7px;cursor:pointer">+ Plan Visit</button>';
+
+    var pb = planBadge(plan);
+
     var card = '<div style="background:var(--surface3);border:1px solid var(--border);border-left:3px solid '+tc+';border-radius:6px;padding:8px 10px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
-      +'<div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">'
+      +'<div style="min-width:0">'
       +'<div style="font-size:11px;font-weight:600;color:var(--text)">'+esc(c.n)+'</div>'
-      +'<div style="display:flex;gap:6px;margin-top:2px">'
+      +'<div style="display:flex;gap:6px;margin-top:2px;flex-wrap:wrap">'
       +'<span style="font-size:9px;font-weight:700;color:'+tc+'">'+c.t+'</span>'
       +'<span style="font-size:9px;color:var(--muted2)">'+c.r+'</span>'
       +(c.hc?'<span style="font-size:9px;color:var(--muted2)">'+c.hc+' HC</span>':'')
-      +'</div></div>'
-      +'<div style="text-align:right;flex-shrink:0">'
+      +'</div>'
+      +(pb?'<div style="margin-top:4px">'+pb+'</div>':'')
+      +'</div>'
+      +'<div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
       +(daysSince===null
         ?'<div style="font-size:10px;color:var(--red);font-weight:600">Never visited</div>'
         :daysSince>30
@@ -1780,22 +1815,129 @@ function buildJourneyPlanPanel() {
             ?'<div style="font-size:10px;color:var(--amber);font-weight:600">'+daysSince+'d ago</div>'
             :'<div style="font-size:10px;color:var(--green);font-weight:600">'+daysSince+'d ago</div>')
       +(lv?'<div style="font-size:9px;color:var(--muted2)">'+esc(lv.submitter)+'</div>':'')
+      +planBtn
       +'</div></div></div>';
-    if (daysSince===null||daysSince>30) overdue.push(card);
-    else recent.push(card);
+
+    // Determine section
+    if (plan) {
+      // Check if plan date is overdue
+      var pd2 = plan.date ? new Date(plan.date) : null;
+      if (pd2 && !isNaN(pd2) && pd2 < today) {
+        overdueCards.push({card:card, planDate:plan.date});
+      } else {
+        plannedCards.push({card:card, planDate:(plan&&plan.date)||''});
+      }
+    } else if (daysSince!==null && daysSince<=30) {
+      recentCards.push({card:card});
+    } else {
+      overdueCards.push({card:card, planDate:''});
+    }
   });
 
-  return '<div style="margin-bottom:16px">'
-    +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">🗺️ Journey Plan — Platinum &amp; Gold Accounts</div>'
-    +(overdue.length
-      ?'<div style="font-size:10px;font-weight:600;color:var(--red);margin-bottom:6px">⚠️ Visit Overdue ('+overdue.length+')</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:12px">'+overdue.join('')+'</div>'
-      :'')
-    +(recent.length
-      ?'<div style="font-size:10px;font-weight:600;color:var(--green);margin-bottom:6px">✓ Visited Recently ('+recent.length+')</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">'+recent.join('')+'</div>'
-      :'')
-    +'</div>';
+  // Sort planned by date ascending
+  plannedCards.sort(function(a,b){ return (a.planDate||'') < (b.planDate||'') ? -1 : 1; });
+
+  var html = '<div style="margin-bottom:16px">'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">🗺️ Journey Plan — Platinum &amp; Gold Accounts</div>';
+
+  if (plannedCards.length) {
+    html += '<div style="font-size:10px;font-weight:600;color:#60a5fa;margin-bottom:6px">Planned ('+plannedCards.length+')</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:12px">'
+      +plannedCards.map(function(x){return x.card;}).join('')
+      +'</div>';
+  }
+
+  if (overdueCards.length) {
+    html += '<div style="font-size:10px;font-weight:600;color:var(--red);margin-bottom:6px">⚠️ Overdue ('+overdueCards.length+')</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:12px">'
+      +overdueCards.map(function(x){return x.card;}).join('')
+      +'</div>';
+  }
+
+  if (recentCards.length) {
+    html += '<div style="font-size:10px;font-weight:600;color:var(--green);margin-bottom:6px">✓ Visited Recently ('+recentCards.length+')</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">'
+      +recentCards.map(function(x){return x.card;}).join('')
+      +'</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ── JOURNEY PLAN MODAL FUNCTIONS ────────────────────────────────────────────
+function openPlanVisitModal(ci) {
+  var entry = (window._jpMap||{})[ci];
+  if (!entry) return;
+  var acct = entry.acct;
+  var plan = entry.plan||null;
+
+  // Remove any existing modal
+  var existing = document.getElementById('_jpModalOverlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = '_jpModalOverlay';
+  overlay.setAttribute('style','position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center');
+  overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
+
+  var typeOptions = ['Connect','Town Hall','R&R','Induction','Other'].map(function(t){
+    return '<option value="'+t+'"'+(plan&&plan.type===t?' selected':'')+'>'+t+'</option>';
+  }).join('');
+
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px 24px;min-width:320px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.4)" onclick="event.stopPropagation()">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:16px">📅 Plan Visit — ${acct.n}</div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Visit Date</label>
+        <input id="_pvDate" type="date" value="${plan&&plan.date?plan.date:''}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;box-sizing:border-box"/>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Visit Type</label>
+        <select id="_pvType" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;box-sizing:border-box">${typeOptions}</select>
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Notes</label>
+        <textarea id="_pvNotes" rows="2" placeholder="Optional notes..." style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;resize:vertical;box-sizing:border-box">${plan&&plan.notes?plan.notes:''}</textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        ${plan?`<button onclick="_cancelPlan(${ci})" style="font-size:11px;padding:6px 14px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer">Remove Plan</button>`:''}
+        <button onclick="document.getElementById('_jpModalOverlay').remove()" style="font-size:11px;padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer">Cancel</button>
+        <button onclick="_savePlanAndClose(${ci})" style="font-size:11px;padding:6px 14px;border-radius:6px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer">Save</button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+}
+
+function _savePlanAndClose(ci) {
+  var entry = (window._jpMap||{})[ci];
+  if (!entry) return;
+  var dateVal = (document.getElementById('_pvDate')||{}).value||'';
+  if (!dateVal) { alert('Please select a visit date.'); return; }
+  var typeVal = (document.getElementById('_pvType')||{}).value||'Connect';
+  var notesVal = (document.getElementById('_pvNotes')||{}).value||'';
+  var key = entry.key;
+  var plans = {};
+  try { plans = JSON.parse(localStorage.getItem('cms_hrbp_visit_plans')||'{}'); } catch(e){}
+  plans[key] = {date:dateVal, type:typeVal, notes:notesVal, savedAt:new Date().toISOString()};
+  localStorage.setItem('cms_hrbp_visit_plans', JSON.stringify(plans));
+  var overlay = document.getElementById('_jpModalOverlay');
+  if (overlay) overlay.remove();
+  render();
+}
+
+function _cancelPlan(ci) {
+  var entry = (window._jpMap||{})[ci];
+  if (!entry) return;
+  var key = entry.key;
+  var plans = {};
+  try { plans = JSON.parse(localStorage.getItem('cms_hrbp_visit_plans')||'{}'); } catch(e){}
+  delete plans[key];
+  localStorage.setItem('cms_hrbp_visit_plans', JSON.stringify(plans));
+  var overlay = document.getElementById('_jpModalOverlay');
+  if (overlay) overlay.remove();
+  render();
 }
 
 // ─── RENDER HRBP ──────────────────────────────────────────────
@@ -2070,9 +2212,42 @@ const _allConnects=w.hrbp_connects||[];
       </div>
       <div class="card">
         <div class="card-header">
-          <div class="card-title">⚡ Key Activities This Week</div>
+          <div class="card-title">📊 Coverage Scorecard</div>
         </div>
-        <div class="card-body">${activityItems || '<div class="empty-state">No activities logged.</div>'}</div>
+        <div class="card-body">${(function(){
+          var fnType2 = (_sbRole&&_sbRole.function_type)||'';
+          var role2   = (_sbRole&&_sbRole.role)||'';
+          var isPanIndia2 = role2==='admin'||role2==='executive'||fnType2==='hrops'||fnType2==='payroll'
+            ||!_hcR||_hcR==='All'||_hcR==='Pan India';
+          var totalAccounts = (CUSTOMER_LIST||[]).filter(function(c){
+            return (c.t==='Platinum'||c.t==='Gold') && (isPanIndia2 || c.r===_hcR);
+          }).length;
+          var visitedSet = {};
+          (_hrbpSVCache||[]).forEach(function(sv){ if(sv.account_name) visitedSet[sv.account_name.toUpperCase().trim()]=1; });
+          var visitedCount = Object.keys(visitedSet).length;
+          var overdueCount = Math.max(0, totalAccounts - visitedCount);
+          var visitPlans2 = {};
+          try { visitPlans2 = JSON.parse(localStorage.getItem('cms_hrbp_visit_plans')||'{}'); } catch(e){}
+          var plannedCount = Object.keys(visitPlans2).length;
+          return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+            +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
+            +'<div style="font-size:22px;font-weight:700;color:var(--accent)">'+totalAccounts+'</div>'
+            +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Total Plat/Gold</div>'
+            +'</div>'
+            +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
+            +'<div style="font-size:22px;font-weight:700;color:var(--green)">'+visitedCount+'</div>'
+            +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Visited</div>'
+            +'</div>'
+            +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
+            +'<div style="font-size:22px;font-weight:700;color:var(--red)">'+overdueCount+'</div>'
+            +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Overdue</div>'
+            +'</div>'
+            +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
+            +'<div style="font-size:22px;font-weight:700;color:#60a5fa">'+plannedCount+'</div>'
+            +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Planned</div>'
+            +'</div>'
+            +'</div>';
+        })()}</div>
       </div>
     </div>
 
