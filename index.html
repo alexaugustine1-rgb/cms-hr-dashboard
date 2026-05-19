@@ -1691,14 +1691,28 @@ async function loadHRBPSiteVisitsForTab() {
   try {
     var wk = currentWeek || '';
     // Fetch site visits AND fresh weekly_reports row in parallel
-    var [svRes, wrRes] = await Promise.all([
+    var [svRes, wrRes, subRes] = await Promise.all([
       _sb.from('hrbp_site_visits').select('*').eq('week_key', wk).order('visit_date', {ascending: false}),
-      _sb.from('weekly_reports').select('*').eq('week_key', wk).single()
+      _sb.from('weekly_reports').select('*').eq('week_key', wk).single(),
+      _sb.from('weekly_submissions').select('submitter_name,region,function_type,hrbp_connect_details,hrbp_activities,hrbp_issues,hrbp_discipline,hrbp_site_visited').eq('week_key', wk).eq('function_type','hrbp')
     ]);
     if (!svRes.error && svRes.data) _hrbpSVCache = svRes.data;
     // Refresh WEEKS_DATA with latest DB row (fixes stale in-memory data)
     if (!wrRes.error && wrRes.data) {
       WEEKS_DATA[wk] = wrRes.data;
+    }
+    // Always merge fresh weekly_submissions — ensures HRBP form data appears even if weekly_reports row is stale
+    if (!subRes.error && subRes.data && subRes.data.length) {
+      var _wMerge = WEEKS_DATA[wk] = WEEKS_DATA[wk] || {hrbp_connects:[], week_key:wk};
+      _wMerge.hrbp_connects = Array.isArray(_wMerge.hrbp_connects) ? _wMerge.hrbp_connects : [];
+      var _existingNames = new Set(_wMerge.hrbp_connects.map(function(c){return (c.name||'').toLowerCase().trim();}));
+      subRes.data.forEach(function(s){
+        var _nm = (s.submitter_name||'').toLowerCase().trim();
+        if (!_existingNames.has(_nm)) {
+          var _d = s.hrbp_connect_details || s.hrbp_activities || '';
+          _wMerge.hrbp_connects.push({name:s.submitter_name||'', region:s.region||'', detail:_d, issues:s.hrbp_issues||'', er_cases:s.hrbp_discipline||'', site_visited:!!s.hrbp_site_visited});
+        }
+      });
     }
     var el = document.getElementById('tab-hrbp');
     if (el) {
@@ -5123,6 +5137,9 @@ function buildFunctionSections(t){
 if(t==='hrbp'){
     // ── Pending tasks checklist (injected after form loads) ──
     var pendingHTML='<div id="pendingTasksSection"></div>';
+    // ── Journey Plan — coverage view while submitting ──────────────────────
+    var _jpHTML=buildJourneyPlanPanel();
+    var jpPanelHTML=_jpHTML?'<div style="margin-bottom:20px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden"><div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface3);border-bottom:1px solid var(--border);cursor:pointer" onclick="var jp=document.getElementById(\'jpSubmitPanel\');if(jp){jp.style.display=jp.style.display===\'none\'?\'block\':\'none\';}"><div style="display:flex;align-items:center;gap:8px"><span style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Coverage Plan</span><span style="font-size:11px;color:var(--muted)">— click to expand</span></div><span style="font-size:12px;color:var(--muted)">▾</span></div><div id="jpSubmitPanel" style="display:none;padding:16px">'+_jpHTML+'</div></div>':'';
     // ── Site Visits — structured dropdown entry ──────────────
     var visitHTML=''
       +'<div class="wform-section">'
@@ -5235,7 +5252,7 @@ if(t==='hrbp'){
       +'<div class="wform-row"><label>Anything else to flag?</label>'
       +'<textarea id="f_anything_else" placeholder="Any other observation, risk, or escalation not covered above…" style="min-height:54px"></textarea></div>'
       +'</div>';
-    return pendingHTML + visitHTML + erHTML + issHTML + buildActionsSection();
+    return pendingHTML + jpPanelHTML + visitHTML + erHTML + issHTML + buildActionsSection();
   }
   if(t==='payroll'){
     var pendingHTML='<div id="pendingTasksSection"></div>';
