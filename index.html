@@ -4127,6 +4127,48 @@ const FUNCTION_TYPES={ta:{label:'Talent Acquisition',icon:'🎯'},hrbp:{label:'H
 function detectFunction(role){if(role==='hrbp')return'hrbp';return null;}
 let _formWeekKey=null,_formPhotos=[],_existingSub=null,_visitYes=false;
 var _ldUpcomingEntries=[];
+var _issueEntries=[];
+function toggleRRFields(type){
+  var f=document.getElementById('visitRRFields');
+  if(f)f.style.display=(type==='R&R')?'':'none';
+}
+function addIssueEntry(){
+  var desc=document.getElementById('issueDesc');
+  var acct=document.getElementById('issueAccount');
+  var stat=document.getElementById('issueStatus');
+  var pri=document.getElementById('issuePriority');
+  if(!desc||!desc.value.trim()){alert('Please describe the issue');return;}
+  _issueEntries.push({description:desc.value.trim(),account:acct?acct.value.trim():'',status:stat?stat.value:'Open',priority:pri?pri.value:'High'});
+  renderIssueEntries();
+  if(desc)desc.value='';if(acct)acct.value='';
+  if(stat)stat.value='Open';if(pri)pri.value='High';
+}
+function removeIssueEntry(i){_issueEntries.splice(i,1);renderIssueEntries();}
+function renderIssueEntries(){
+  var c=document.getElementById('issueEntries');
+  var hidden=document.getElementById('f_hrbp_issues');
+  if(!c)return;
+  var priCol={High:'var(--red)',Medium:'var(--amber)',Low:'var(--muted)'};
+  c.innerHTML=_issueEntries.length===0
+    ?'<div style="color:var(--muted2);font-size:12px;padding:8px 0">No issues logged yet</div>'
+    :_issueEntries.map(function(e,i){
+        var pc=priCol[e.priority]||'var(--muted)';
+        var isOpen=e.status==='Open';
+        var bord=isOpen?'var(--red)':'var(--green)';
+        return'<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:var(--surface3);border-radius:8px;margin-bottom:6px;border-left:3px solid '+bord+'">'
+          +'<div style="flex:1">'
+          +'<div style="display:flex;gap:6px;align-items:center;margin-bottom:3px;flex-wrap:wrap">'
+          +'<span style="font-size:11px;padding:1px 8px;border-radius:10px;background:'+(isOpen?'rgba(248,113,113,.15)':'rgba(52,211,153,.15)')+';color:'+(isOpen?'var(--red)':'var(--green)')+';font-weight:600">'+e.status+'</span>'
+          +'<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:rgba(0,0,0,.15);color:'+pc+'">'+e.priority+'</span>'
+          +(e.account?'<span style="font-size:11px;color:var(--muted)">@ '+esc(e.account)+'</span>':'')
+          +'</div>'
+          +'<div style="font-size:12px;color:var(--text)">'+esc(e.description)+'</div>'
+          +'</div>'
+          +'<button onclick="removeIssueEntry('+i+')" style="padding:2px 8px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted);font-size:11px;cursor:pointer">✕</button>'
+          +'</div>';
+      }).join('');
+  if(hidden)hidden.value=JSON.stringify(_issueEntries);
+}
 function addLdUpcomingRow(name,date,region,mode,pax){
   _ldUpcomingEntries.push({name:name||'',date:date||'',region:region||'Pan-India',mode:mode||'Classroom',pax:pax||''});
   renderLdUpcomingRows();
@@ -4567,7 +4609,8 @@ if(t==='hrbp'){
       +'<div id="visitDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:100;'
       +'background:var(--surface2);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto"></div>'
       +'</div>'
-      +'<select id="visitTypeInput" style="padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;min-width:130px">'
+      +'<input type="date" id="visitDateInput" required title="Date of visit — required" style="padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;min-width:140px">'
+      +'<select id="visitTypeInput" onchange="toggleRRFields(this.value)" style="padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;min-width:130px">'
       +'<option value="Connect">Employee Connect</option>'
       +'<option value="Town Hall">Town Hall</option>'
       +'<option value="R&R">R&R</option>'
@@ -4578,7 +4621,22 @@ if(t==='hrbp'){
       +'style="flex:2;min-width:180px;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px">'
       +'<button type="button" onclick="addVisitEntry()" style="padding:8px 16px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">+ Add Visit</button>'
       +'</div></div>'
-      +'<div id="visitEntries" style="margin-top:6px"></div>'
+      +'<div id="visitRRFields" style="display:none;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:8px">'
+      +'<div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:8px;text-transform:uppercase;letter-spacing:.8px">🎉 R&amp;R Details</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Venue</label>'
+      +'<select id="visitRRVenue" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'
+      +'<option value="Client Site">Client Site</option><option value="CMS Office">CMS Office</option><option value="Offsite Venue">Offsite Venue</option>'
+      +'</select></div>'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Headcount</label>'
+      +'<input type="number" id="visitRRHeadcount" min="0" placeholder="No. of employees" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Employee Feedback / Highlights</label>'
+      +'<textarea id="visitRRFeedback" rows="2" placeholder="Key themes, employee sentiment, standout moments…" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Estimated Cost (₹)</label>'
+      +'<input type="text" id="visitRRCost" placeholder="e.g. ₹25,000" style="width:220px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<div id="visitEntries" style="margin-top:8px"></div>'
       +'</div>';
     // Engagement & Events section removed — now captured via visit_type on site visit cards
     // ── Employee Relations — structured cases ─────────────────
@@ -4614,10 +4672,29 @@ if(t==='hrbp'){
     var issHTML=''
       +'<div class="wform-section">'
       +'<div class="wform-section-title">Issues &amp; Priorities</div>'
-      +'<div class="wform-row">'
-      +'<label>Open issues needing leadership support <span style="font-size:10px;color:var(--red);font-weight:500">(creates Action Centre task)</span></label>'
-      +'<textarea id="f_hrbp_issues" placeholder="Increment pending for 3 HDBFS employees — Finance approval stuck…" style="min-height:54px"></textarea></div>'
-      +'<div class="wform-row"><label>Key activities &amp; achievements this week</label>'
+      +'<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Open issues auto-create an Action Centre task. Addressed issues are saved for the weekly report.</div>'
+      +'<input type="hidden" id="f_hrbp_issues">'
+      +'<div id="issueEntries" style="margin-bottom:10px"></div>'
+      +'<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
+      +'<div style="font-size:11px;font-weight:600;color:var(--muted2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.8px">Log an Issue</div>'
+      +'<div style="margin-bottom:8px"><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Issue Description</label>'
+      +'<textarea id="issueDesc" rows="2" placeholder="Increment pending for 3 HDBFS employees — Finance approval stuck…" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Account (optional)</label>'
+      +'<input type="text" id="issueAccount" placeholder="Account name…" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Status</label>'
+      +'<select id="issueStatus" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'
+      +'<option value="Open">Open — needs leadership support</option>'
+      +'<option value="Addressed">Addressed this week</option>'
+      +'</select></div>'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Priority</label>'
+      +'<select id="issuePriority" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'
+      +'<option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option>'
+      +'</select></div>'
+      +'</div>'
+      +'<button type="button" onclick="addIssueEntry()" style="padding:7px 16px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:12px;font-weight:600;cursor:pointer">+ Log Issue</button>'
+      +'</div>'
+      +'<div class="wform-row" style="margin-top:14px"><label>Key activities &amp; achievements this week</label>'
       +'<textarea id="f_hrbp_activities" style="min-height:72px" placeholder="Onboarding induction · R&amp;R at Grey Orange · Geo-tagging rollout…"></textarea></div>'
       +'<div class="wform-row"><label>Anything else to flag?</label>'
       +'<textarea id="f_anything_else" placeholder="Any other observation, risk, or escalation not covered above…" style="min-height:54px"></textarea></div>'
@@ -4680,7 +4757,14 @@ if(t==='hrbp'){
 function setVisit(val){_visitYes=val;const y=document.getElementById('visitYesBtn'),n=document.getElementById('visitNoBtn');if(y)y.className='wform-visit-btn'+(val?' active-yes':'');if(n)n.className='wform-visit-btn'+(!val?' active-no':'');}
 async function selectFormWeek(k){_formWeekKey=k;await renderSubmitTab(document.getElementById('tab-submit'));}
 function populateForm(sub){
-  ['ta_opened','ta_closed','ta_offers','ta_dropouts','ta_dropout_reason','ta_aging','ta_constraints','ta_joining_plan','hrbp_connect_details','hrbp_discipline','hrbp_abscond','hrbp_retention','hrbp_issues','hrbp_activities','hrbp_rr_details','anything_else','payroll_hc','payroll_errors','payroll_month','payroll_risks','payroll_pending','payroll_statutory','hrops_onboard','hrops_fnf','hrops_compliance','hrops_gaps','hrops_esc_count','hrops_esc_details','ld_sessions','ld_coverage','ld_details','ld_gaps','ld_risks','admin_issues','admin_savings','anything_else','hrbp_abscond'].forEach(f=>{const el=document.getElementById('f_'+f);if(el&&sub[f]!=null)el.value=sub[f];});
+  ['ta_opened','ta_closed','ta_offers','ta_dropouts','ta_dropout_reason','ta_aging','ta_constraints','ta_joining_plan','hrbp_connect_details','hrbp_discipline','hrbp_abscond','hrbp_retention','hrbp_activities','hrbp_rr_details','anything_else','payroll_hc','payroll_errors','payroll_month','payroll_risks','payroll_pending','payroll_statutory','hrops_onboard','hrops_fnf','hrops_compliance','hrops_gaps','hrops_esc_count','hrops_esc_details','ld_sessions','ld_coverage','ld_details','ld_gaps','ld_risks','admin_issues','admin_savings','anything_else','hrbp_abscond'].forEach(f=>{const el=document.getElementById('f_'+f);if(el&&sub[f]!=null)el.value=sub[f];});
+  // hrbp_issues — structured JSON or legacy plain text
+  _issueEntries=[];
+  if(sub.hrbp_issues){
+    try{var pi=JSON.parse(sub.hrbp_issues);if(Array.isArray(pi))_issueEntries=pi;}
+    catch(e){if(sub.hrbp_issues.trim())_issueEntries=[{description:sub.hrbp_issues.trim(),account:'',status:'Open',priority:'High'}];}
+  }
+  renderIssueEntries();
   // Populate structured upcoming programs
   _ldUpcomingEntries=[];
   if(sub.ld_upcoming){
@@ -4707,7 +4791,14 @@ async function submitWeeklyForm(fnType,region){
   if(error){st.innerHTML='<div style="color:var(--red);font-size:13px">&#x2717; '+error.message+'</div>';btn.disabled=false;btn.textContent='Submit Report';return;}
   if(fnType==='hrbp'&&typeof _visitEntries!=='undefined'&&_visitEntries.length>0){
     var wkDt=WEEKS_DATA[_formWeekKey];
-    var vRecs=_visitEntries.map(function(v){return{week_key:_formWeekKey,week_label:wkDt?wkDt.label:_formWeekKey,submitted_by:_sbUser.id,submitter_name:record.submitter_name,region:region||_sbRole.region||'',account_name:v.account,account_tier:v.tier,visit_date:new Date().toISOString().split('T')[0],visit_notes:v.notes||'',visit_type:v.visit_type||'Connect'};});
+    var vRecs=_visitEntries.map(function(v){
+      var notes=v.notes||'';
+      if(v.visit_type==='R&R'){
+        var rrMeta='[[RR]]'+JSON.stringify({venue:v.rr_venue||'',headcount:v.rr_headcount||'',feedback:v.rr_feedback||'',cost:v.rr_cost||''});
+        notes=rrMeta+(notes?'\n'+notes:'');
+      }
+      return{week_key:_formWeekKey,week_label:wkDt?wkDt.label:_formWeekKey,submitted_by:_sbUser.id,submitter_name:record.submitter_name,region:region||_sbRole.region||'',account_name:v.account,account_tier:v.tier,visit_date:v.date||new Date().toISOString().split('T')[0],visit_notes:notes,visit_type:v.visit_type||'Connect'};
+    });
     await _sb.from('hrbp_site_visits').insert(vRecs);
     _visitEntries=[];if(typeof renderVisitEntries==='function')renderVisitEntries();
   }
@@ -4775,8 +4866,15 @@ async function submitWeeklyForm(fnType,region){
     }
     if(!_skip(_fv('f_ta_constraints'))) _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'TA',severity:'Medium',title:'TA constraint — '+_wk,description:_fv('f_ta_constraints')}));
     // HRBP
-    if(!_skip(_fv('f_hrbp_risks')))    _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'HRBP',severity:'High',title:'HRBP risk — '+_wk,description:_fv('f_hrbp_risks')}));
-    if(!_skip(_fv('f_hrbp_issues')))   _tb.push(Object.assign({},_base,{task_type:'escalation',function_area:'HRBP',severity:'High',title:'Leadership issue — '+_wk,description:_fv('f_hrbp_issues')}));
+    if(!_skip(_fv('f_hrbp_risks'))) _tb.push(Object.assign({},_base,{task_type:'risk',function_area:'HRBP',severity:'High',title:'HRBP risk — '+_wk,description:_fv('f_hrbp_risks')}));
+    // Per-issue tasks — Open issues only; Addressed issues are recorded but don't create tasks
+    (_issueEntries||[]).filter(function(ie){return ie.status==='Open';}).forEach(function(ie){
+      _tb.push(Object.assign({},_base,{
+        task_type:'escalation',function_area:'HRBP',severity:ie.priority||'High',
+        title:'Issue'+(ie.account?' @ '+ie.account:'')+' — '+ie.description.substring(0,60)+(ie.description.length>60?'…':''),
+        description:ie.description
+      }));
+    });
     // Payroll — errors create Critical/High tasks; risks and pending corrections create tasks
     var _payErr = parseInt((document.getElementById('f_payroll_errors')||{}).value)||0;
     if(_payErr > 0) _tb.push(Object.assign({},_base,{task_type:'payroll_error',function_area:'Payroll',
@@ -4812,6 +4910,7 @@ async function submitWeeklyForm(fnType,region){
       await _sb.from('action_tasks').insert(_tb);
       _caseEntries=[];if(typeof renderCaseEntries==='function')renderCaseEntries();
       _ldUpcomingEntries=[];if(typeof renderLdUpcomingRows==='function')renderLdUpcomingRows();
+      _issueEntries=[];if(typeof renderIssueEntries==='function')renderIssueEntries();
       _actionEntries=[];if(typeof renderActionEntries==='function')renderActionEntries();
       _taAgingEntries=[];if(typeof renderTaAgingEntries==='function')renderTaAgingEntries();
       _taJoinerEntries=[];if(typeof renderTaJoinerEntries==='function')renderTaJoinerEntries();
@@ -6124,14 +6223,28 @@ function addVisitEntry(){
   var tierSel=document.getElementById('visitTierSelected');
   var notesInp=document.getElementById('visitNotesInput');
   var typeSel=document.getElementById('visitTypeInput');
+  var dateInp=document.getElementById('visitDateInput');
   var account=accSel?accSel.value:(accInp?accInp.value:'');
   if(!account){alert('Please select an account from the dropdown');return;}
-  _visitEntries.push({account:account,tier:tierSel?tierSel.value:'Regular',
+  if(!dateInp||!dateInp.value){alert('Visit date is required');return;}
+  var entry={account:account,tier:tierSel?tierSel.value:'Regular',
+    date:dateInp.value,
     notes:notesInp?notesInp.value:'',
-    visit_type:typeSel?typeSel.value:'Connect'});
+    visit_type:typeSel?typeSel.value:'Connect'};
+  if(entry.visit_type==='R&R'){
+    entry.rr_venue=(document.getElementById('visitRRVenue')||{}).value||'';
+    entry.rr_headcount=(document.getElementById('visitRRHeadcount')||{}).value||'';
+    entry.rr_feedback=(document.getElementById('visitRRFeedback')||{}).value||'';
+    entry.rr_cost=(document.getElementById('visitRRCost')||{}).value||'';
+  }
+  _visitEntries.push(entry);
   renderVisitEntries();
   if(accInp)accInp.value='';if(accSel)accSel.value='';if(notesInp)notesInp.value='';
-  if(typeSel)typeSel.value='Connect';
+  if(typeSel)typeSel.value='Connect';if(dateInp)dateInp.value='';
+  ['visitRRVenue','visitRRHeadcount','visitRRFeedback','visitRRCost'].forEach(function(id){
+    var el=document.getElementById(id);if(el)el.value=el.tagName==='SELECT'?el.options[0].value:'';
+  });
+  toggleRRFields('Connect');
 }
 function removeVisitEntry(i){_visitEntries.splice(i,1);renderVisitEntries();}
 
@@ -6191,10 +6304,27 @@ function renderVisitEntries(){
   var tierCol={'Platinum':'#a78bfa','Gold':'#f59e0b','Silver':'#94a3b8','Bronze':'#d97706','Regular':'var(--muted)','Internal':'#34d399'};
   container.innerHTML=_visitEntries.map(function(e,i){
     var col=tierCol[e.tier]||'var(--muted)';
-    return'<div style="display:flex;gap:8px;align-items:flex-start;background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:8px 10px">'
-      +'<div style="flex:1"><span style="font-size:12px;font-weight:500;color:var(--text)">'+esc(e.account)+'</span>'
-      +'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;background:'+col+'20;color:'+col+';margin-left:6px">'+esc(e.tier)+'</span>'+'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--muted);margin-left:4px">'+esc(e.visit_type||'Connect')+'</span>'
-      +(e.notes?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(e.notes)+'</div>':'')+'</div>'
+    var dateStr=e.date?new Date(e.date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'No date';
+    var rrDetails='';
+    if(e.visit_type==='R&R'){
+      rrDetails='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">'
+        +(e.rr_venue?'<span style="font-size:10px;color:var(--muted2)">📍 '+esc(e.rr_venue)+'</span>':'')
+        +(e.rr_headcount?'<span style="font-size:10px;color:var(--muted2)">👥 '+esc(e.rr_headcount)+' employees</span>':'')
+        +(e.rr_cost?'<span style="font-size:10px;color:var(--muted2)">💰 '+esc(e.rr_cost)+'</span>':'')
+        +'</div>'
+        +(e.rr_feedback?'<div style="font-size:11px;color:var(--muted);margin-top:3px;font-style:italic">"'+esc(e.rr_feedback.substring(0,120))+'"</div>':'');
+    }
+    return'<div style="display:flex;gap:8px;align-items:flex-start;background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:6px">'
+      +'<div style="flex:1">'
+      +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+      +'<span style="font-size:12px;font-weight:500;color:var(--text)">'+esc(e.account)+'</span>'
+      +'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;background:'+col+'20;color:'+col+'">'+esc(e.tier)+'</span>'
+      +'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--muted)">'+esc(e.visit_type||'Connect')+'</span>'
+      +'<span style="font-size:10px;color:var(--muted2);font-family:DM Mono,monospace">'+dateStr+'</span>'
+      +'</div>'
+      +(e.notes?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(e.notes)+'</div>':'')
+      +rrDetails
+      +'</div>'
       +'<button onclick="removeVisitEntry('+i+')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px">&times;</button>'
       +'</div>';
   }).join('');
