@@ -2131,14 +2131,14 @@ function renderLD(w, pw) {
   }
 
   // Deduplicate and group by region
-  const seen = new Set();
+  const seenGrouped = new Set();
   const grouped = {};
   const REGION_ORDER = ['North','South','East','West','Pan-India'];
   REGION_ORDER.forEach(r => grouped[r] = []);
   programs.forEach(p => {
     const key = p.name.toLowerCase().trim();
-    if (seen.has(key)) return;
-    seen.add(key);
+    if (seenGrouped.has(key)) return;
+    seenGrouped.add(key);
     const region = inferRegion(p.name);
     grouped[region].push(p);
   });
