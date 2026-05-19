@@ -1718,14 +1718,16 @@ function buildJourneyPlanPanel() {
   var fnType = (_sbRole&&_sbRole.function_type)||'';
   var region = (_sbRole&&_sbRole.region)||'All';
   var role   = (_sbRole&&_sbRole.role)||'';
-  // Pan India: admin, executive, hrops, or Pan India region
-  var isPanIndia = role==='admin'||role==='executive'||fnType==='hrops'||fnType==='payroll'
-    ||!region||region==='All'||region==='Pan India';
+  // For admin/exec, respect the region filter tab selection (_hrbpConnectRegion)
+  var _jpRegion = (role==='admin'||role==='executive') && typeof _hrbpConnectRegion!=='undefined' && _hrbpConnectRegion && _hrbpConnectRegion!=='All' ? _hrbpConnectRegion : region;
+  // Pan India: admin/exec with no region filter, hrops, payroll, or explicit Pan India
+  var isPanIndia = ((role==='admin'||role==='executive') && (!_jpRegion||_jpRegion==='All'||_jpRegion==='Pan India'))
+    ||fnType==='hrops'||fnType==='payroll'||!_jpRegion||_jpRegion==='All'||_jpRegion==='Pan India';
   if (fnType !== 'hrbp' && role !== 'admin' && role !== 'executive') return '';
 
-  // Get Plat/Gold accounts for this HRBP's region
+  // Get Plat/Gold accounts for this HRBP's region (or admin's selected region)
   var pgAccounts = CUSTOMER_LIST.filter(function(c){
-    return (c.t==='Platinum'||c.t==='Gold') && (isPanIndia || c.r===region);
+    return (c.t==='Platinum'||c.t==='Gold') && (isPanIndia || c.r===_jpRegion);
   }).sort(function(a,b){
     var tOrd = {Platinum:0,Gold:1};
     return (tOrd[a.t]||2)-(tOrd[b.t]||2) || (b.hc||0)-(a.hc||0);
@@ -2398,9 +2400,10 @@ function renderHRBP(w, pw) {
     </div>`;
   }
 const _allConnects=w.hrbp_connects||[];
-  const _hcR=(typeof _hrbpConnectRegion!=='undefined'&&_hrbpConnectRegion!=='All')?_hrbpConnectRegion:(typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India'?_sbRole.region:'All');
+  const _isHRBP=typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.role==='hrbp';
+  const _hcR=_isHRBP?(_sbRole.region||'All'):((typeof _hrbpConnectRegion!=='undefined'&&_hrbpConnectRegion&&_hrbpConnectRegion!=='All')?_hrbpConnectRegion:(typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India'?_sbRole.region:'All'));
   const _filteredConnects=_hcR==='All'?_allConnects:_allConnects.filter(function(c){return (c.region||getHRBPRegion(c.name||''))===_hcR;});
-  const _rTabs=['All','North','South','East','West'].map(function(r){const active=(r==='All'&&_hcR==='All')||(r===_hcR);const cnt=r==='All'?_allConnects.length:_allConnects.filter(function(c){return (c.region||getHRBPRegion(c.name||''))===r;}).length;if(r!=='All'&&cnt===0)return '';return `<button onclick="_hrbpConnectRegion='${r}';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:${active?'var(--accent)':'var(--surface2)'};color:${active?'#fff':'var(--muted)'}">${r}${r!=='All'&&cnt>0?' ('+cnt+')':''}</button>`;}).join('');
+  const _rTabs=_isHRBP?'<span style="font-size:11px;font-weight:700;padding:3px 14px;border-radius:20px;background:rgba(96,165,250,.12);color:var(--accent);border:1px solid rgba(96,165,250,.3)">'+esc(_hcR)+' Region</span>':['All','North','South','East','West'].map(function(r){const active=(r==='All'&&_hcR==='All')||(r===_hcR);const cnt=r==='All'?_allConnects.length:_allConnects.filter(function(c){return (c.region||getHRBPRegion(c.name||''))===r;}).length;if(r!=='All'&&cnt===0)return '';return '<button onclick="_hrbpConnectRegion=\''+r+'\';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#fff':'var(--muted)')+'">'+r+(r!=='All'&&cnt>0?' ('+cnt+')':'')+'</button>';}).join('');
   // Merge hrbp_site_visits for this week into the connects display
   // ── Site Visit Cards — redesigned ────────────────────────────────────
   var _svCards = '';
@@ -4646,7 +4649,7 @@ function showPhotoUpload(){const p=document.getElementById('photoUploadPanel');i
 function openGalleryUploadForAccount(acct){_galPreAcct=acct||'';var _gNav=document.getElementById('snav-gallery');if(_gNav)_gNav.click();else switchTab('gallery');setTimeout(function(){var p=document.getElementById('photoUploadPanel');if(p)p.style.display='block';var dz=document.getElementById('photoDropZone');if(dz){dz.style.transition='box-shadow .3s';dz.style.boxShadow='0 0 0 2px var(--accent)';}},500);}
 function handlePhotoDrop(e){e.preventDefault();document.getElementById('photoDropZone').classList.remove('drag');handlePhotoFiles(e.dataTransfer.files);}
 let _stagedPhotos=[];
-function handlePhotoFiles(files){if(!files||!files.length)return;_stagedPhotos=Array.from(files);console.log('[Photos] staged:',_stagedPhotos.length,'files');const area=document.getElementById('photoStagingArea');if(!area)return;area.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">'+files.length+' photo(s) — add details below</div><div id="stageCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:16px"></div><button onclick="submitPhotos()" style="background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer">Upload All Photos</button>';const cards=document.getElementById('stageCards');var _galActOpts='<option value="">Account / Site (optional)</option>'+['Platinum','Gold','Silver','Regular','Internal'].map(function(tier){var grp=(CUSTOMER_LIST||[]).filter(function(c){return c.t===tier;}).sort(function(a,b){return a.n.localeCompare(b.n);});if(!grp.length)return'';return'<optgroup label="'+tier+'">'+grp.map(function(c){var _sel=c.n===_galPreAcct?' selected':'';return'<option value="'+esc(c.n)+'"'+_sel+'>'+esc(c.n)+'</option>';}).join('')+'</optgroup>';}).join('');_stagedPhotos.forEach((file,idx)=>{const reader=new FileReader();reader.onload=ev=>{const card=document.createElement('div');card.style.cssText='background:var(--surface3);border:1px solid var(--border);border-radius:10px;overflow:hidden';card.innerHTML='<img src="'+ev.target.result+'" style="width:100%;height:120px;object-fit:cover;display:block"><div style="padding:10px"><input placeholder="Caption…" id="cap_'+idx+'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;margin-bottom:8px"><select id="evt_'+idx+'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;margin-bottom:8px">'+EVENT_TYPES.map(e=>'<option value="'+e.v+'">'+e.l+'</option>').join('')+'</select><select id="acct_'+idx+'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px">'+_galActOpts+'</select></div>';cards.appendChild(card);};reader.readAsDataURL(file);});}
+function handlePhotoFiles(files){if(!files||!files.length)return;_stagedPhotos=Array.from(files);console.log('[Photos] staged:',_stagedPhotos.length,'files');const area=document.getElementById('photoStagingArea');if(!area)return;area.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">'+files.length+' photo(s) — add details below</div><div id="stageCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:16px"></div><button onclick="submitPhotos()" style="background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer">Upload All Photos</button>';const cards=document.getElementById('stageCards');var _galActOpts='<option value="">Account / Site (optional)</option><option value="CMS Office">🏢 CMS Office (Internal)</option>'+['Platinum','Gold','Silver','Regular','Internal'].map(function(tier){var grp=(CUSTOMER_LIST||[]).filter(function(c){return c.t===tier;}).sort(function(a,b){return a.n.localeCompare(b.n);});if(!grp.length)return'';return'<optgroup label="'+tier+'">'+grp.map(function(c){var _sel=c.n===_galPreAcct?' selected':'';return'<option value="'+esc(c.n)+'"'+_sel+'>'+esc(c.n)+'</option>';}).join('')+'</optgroup>';}).join('');_stagedPhotos.forEach((file,idx)=>{const reader=new FileReader();reader.onload=ev=>{const card=document.createElement('div');card.style.cssText='background:var(--surface3);border:1px solid var(--border);border-radius:10px;overflow:hidden';card.innerHTML='<img src="'+ev.target.result+'" style="width:100%;height:120px;object-fit:cover;display:block"><div style="padding:10px"><input placeholder="Caption…" id="cap_'+idx+'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;outline:none;margin-bottom:8px"><select id="evt_'+idx+'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;margin-bottom:8px">'+EVENT_TYPES.map(e=>'<option value="'+e.v+'">'+e.l+'</option>').join('')+'</select><select id="acct_'+idx+'" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px">'+_galActOpts+'</select></div>';cards.appendChild(card);};reader.readAsDataURL(file);});}
 async function submitPhotos(){
   const prog=document.getElementById('photoUploadProgress');
   if(!_stagedPhotos.length){alert('No photos selected');return;}
@@ -5151,10 +5154,9 @@ if(t==='hrbp'){
       +'</select>'
       +'<input type="text" id="visitNotesInput" placeholder="Key discussion points…" '
       +'style="flex:2;min-width:180px;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px">'
-      +'<button type="button" onclick="addVisitEntry()" style="padding:8px 16px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">+ Add Visit</button>'
-      +'</div></div>'
-      +'<div id="visitRRFields" style="display:none;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:8px">'
-      +'<div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:8px;text-transform:uppercase;letter-spacing:.8px">🎉 R&amp;R Details</div>'
+      +'</div>'
+      +'<div id="visitRRFields" style="display:none;background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.3);border-left:3px solid #f59e0b;border-radius:10px;padding:12px 14px;margin-top:10px">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="font-size:11px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:.8px">🎉 R&amp;R Details</span><span style="font-size:11px;color:var(--muted)">— will be logged with this visit</span></div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
       +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Venue</label>'
       +'<select id="visitRRVenue" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'
@@ -5167,6 +5169,8 @@ if(t==='hrbp'){
       +'<textarea id="visitRRFeedback" rows="2" placeholder="Key themes, employee sentiment, standout moments…" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
       +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Estimated Cost (₹)</label>'
       +'<input type="text" id="visitRRCost" placeholder="e.g. ₹25,000" style="width:220px;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<div style="margin-top:12px;display:flex;justify-content:flex-end"><button type="button" onclick="addVisitEntry()" style="padding:8px 20px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap">+ Add Visit</button></div>'
       +'</div>'
       +'<div id="visitEntries" style="margin-top:8px"></div>'
       +'</div>';
