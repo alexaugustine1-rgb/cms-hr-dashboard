@@ -4173,8 +4173,28 @@ async function renderSubmitTab(mc){
     };
     WEEK_NAMES[liveWkKey] = liveWkKey + ' (Current)';
     WEEK_LABELS[liveWkKey] = liveLabel;
-    // Ensure WEEKS_DATA has a label for the current week button
     if (WEEKS_DATA[liveWkKey]) WEEKS_DATA[liveWkKey].label = liveLabel;
+    // ── PERMANENT FIX: Auto-insert the week row to DB so everyone sees it ──
+    if (_sb && _sbUser) {
+      _sb.from('weekly_reports')
+        .select('week_key').eq('week_key', liveWkKey).single()
+        .then(function(chk) {
+          if (chk.error) {
+            // Row doesn't exist — insert it
+            var _wn = parseInt(liveWkKey.replace('W',''))||0;
+            _sb.from('weekly_reports').insert({
+              week_key: liveWkKey,
+              week_num: _wn,
+              label: liveLabel,
+              from_label: '',
+              to_label: '',
+              total_respondents: 0
+            }).then(function(ins) {
+              if (!ins.error) console.log('[autoWeek] Created', liveWkKey, 'in weekly_reports');
+            });
+          }
+        });
+    }
   }
   const availWeeks = [...new Set([liveWkKey, ...WEEK_ORDER.slice(-4)])].slice(0,4).sort((a,b)=>{
     const na=parseInt(a.replace('W',''))||0, nb=parseInt(b.replace('W',''))||0; return nb-na;
