@@ -991,14 +991,22 @@ function renderOverview(w, pw) {
   var wReg  = W.regions||{};
 
   // ── 1. COMMAND STRIP ──────────────────────────────────────────────────
-  var q1exits = (wAttr.Jan&&wAttr.Jan.exits||0)+(wAttr.Feb&&wAttr.Feb.exits||0)+(wAttr.Mar&&wAttr.Mar.exits||0);
-  var _ytdMonths=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var _curMon=new Date().getMonth();
+  // Dynamic: last 3 complete months with exit data (rolls forward each month — no hardcoded Jan–Mar)
+  var _MONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var _curMon=new Date().getMonth(); // 0=Jan
+  var _dynMons=[];
+  for(var _mi=0;_mi<12;_mi++){var _midx=(_curMon-1-_mi+12)%12;var _mn=_MONS[_midx];if(wAttr[_mn]&&(wAttr[_mn].exits||0)>0){_dynMons.unshift(_mn);if(_dynMons.length>=3)break;}}
+  if(!_dynMons.length){for(var _mi=0;_mi<3;_mi++)_dynMons.unshift(_MONS[(_curMon-1-_mi+12)%12]);}
+  var _attrPeriodLabel=_dynMons[0]+(_dynMons.length>1?'&ndash;'+_dynMons[_dynMons.length-1]:'');
+  var _attrMonCount=_dynMons.length||3;
+  var _fhc=(W&&(W.active_hc_current||W.active_hc))||2800;
+  var q1exits=_dynMons.reduce(function(s,m){return s+(wAttr[m]&&wAttr[m].exits||0);},0);
+  var q1hc=(function(){var _s=0,_c=0;_dynMons.forEach(function(m){_s+=(wAttr[m]&&wAttr[m].active_hc>0?wAttr[m].active_hc:_fhc);_c++;});return _c>0?(_s/_c)||1:_fhc||1;})();
+  var _ytdMonths=_MONS;
   var _ytdExits=0;
   _ytdMonths.slice(0,_curMon+1).forEach(function(m){_ytdExits+=(wAttr[m]&&wAttr[m].exits||0);});
-  var q1hc = (function(){var _fhc=(W&&(W.active_hc_current||W.active_hc))||2800;var _j=wAttr.Jan&&wAttr.Jan.active_hc>0?wAttr.Jan.active_hc:_fhc;var _f=wAttr.Feb&&wAttr.Feb.active_hc>0?wAttr.Feb.active_hc:_fhc;var _m=wAttr.Mar&&wAttr.Mar.active_hc>0?wAttr.Mar.active_hc:_fhc;return(_j+_f+_m)/3||1;})()
   // Voluntary attrition only — excludes Absorption (Conversion) and Dismissal types
-  var q1attr = Math.round(q1exits/q1hc*4*100*10)/10;
+  var q1attr = q1exits>0 ? Math.round(q1exits/q1hc*(12/_attrMonCount)*100*10)/10 : 0;
   // Use live Supabase count if loaded, else fall back to static weekly_reports value
   var absCases = (typeof _absentCases!=='undefined'&&_absentCases.length>0)
     ? _absentCases.length
@@ -1039,7 +1047,7 @@ function renderOverview(w, pw) {
     +cmdKpi('👥', ((W.active_hc_current||W.active_hc_mar||W.active_hc||0)).toLocaleString(), 'Total Headcount', 'var(--accent)', 'Active as on '+(W._super_emp_updated?new Date(W._super_emp_updated).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'latest upload'))
     +cmdKpi('📋', openReqs, 'Open Positions', openReqs>200?'var(--red)':'var(--amber)', critReqs+' critical (>45d)')
     +cmdKpi('✅', mJoiners, 'W'+w.week_num+' Joiners', mJoiners>5?'var(--green)':'var(--muted)', w.ta_offers+' offers released')
-    +cmdKpi('📈', q1attr+'%', 'Annualised Attrition (Q1)', q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)', q1exits+' exits Jan–Mar')
+    +cmdKpi('📈', q1attr+'%', 'Annualised Attrition', q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)', q1exits+' exits '+_attrPeriodLabel)
     +cmdKpi('🚨', absCases, 'Long Absent Cases', absCases>20?'var(--red)':absCases>10?'var(--amber)':'var(--muted)', 'Pending action / no eSep')
     +'</div>';
 
@@ -1049,12 +1057,12 @@ function renderOverview(w, pw) {
     var rd = wReg[reg]||{hc:0,wage_cr:0,ta_sourced:0,ta_joined:0,female_pct:0};
     var regAttr = 0;
     var regExits = 0;
-    ['Jan','Feb','Mar'].forEach(function(m){
+    _dynMons.forEach(function(m){
       var ra = wAttr[m]&&wAttr[m].region&&wAttr[m].region[reg]||0;
       regExits += ra;
     });
     var regHC = rd.hc||1;
-    regAttr = regExits > 0 ? Math.round(regExits/regHC*4*100*10)/10 : 0;
+    regAttr = regExits > 0 ? Math.round(regExits/regHC*(12/_attrMonCount)*100*10)/10 : 0;
     var fillRate = rd.ta_sourced>0?Math.round(rd.ta_joined/rd.ta_sourced*100):0;
     var attrCol = regAttr>0?(regAttr>25?'var(--red)':regAttr>15?'var(--amber)':'var(--green)'):'var(--muted)';
     var regCritical = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.region===reg&&r.tat>45;}).length : 0;
@@ -1063,8 +1071,8 @@ function renderOverview(w, pw) {
       +'<div style="font-family:Bebas_Neue,sans-serif;font-size:18px;color:'+regColor+';letter-spacing:1px;margin-bottom:8px">'+reg+'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
       +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">'+rd.hc.toLocaleString()+'</div><div style="font-size:10px;color:var(--muted)">Headcount</div></div>'
-      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+attrCol+'">'+(regAttr>0?regAttr+'%':'—')+'</div><div style="font-size:10px;color:var(--muted)">Annualised Attrition (Q1)</div></div>'
-      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">'+(rd.ta_joined||'—')+'</div><div style="font-size:10px;color:var(--muted)">Joined Q1</div></div>'
+      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+attrCol+'">'+(regAttr>0?regAttr+'%':'—')+'</div><div style="font-size:10px;color:var(--muted)">Attrition ('+_attrPeriodLabel+')</div></div>'
+      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">'+(rd.ta_joined||'—')+'</div><div style="font-size:10px;color:var(--muted)">Joined FY26</div></div>'
       +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+(regCritical>5?'var(--red)':'var(--amber)')+'">'+regCritical+'</div><div style="font-size:10px;color:var(--muted)">Critical Reqs</div></div>'
       +'</div>'
       +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Fill rate: '+fillRate+'% &nbsp;|&nbsp; Wage: &#8377;'+(rd.wage_cr||'—')+'Cr</div>'
@@ -2246,21 +2254,27 @@ function renderWorkforce() {
   o+='<div class="wi-card"><div class="wi-card-title">Active Headcount</div><div class="wi-val">'+_hcVal.toLocaleString()+'</div><div class="wi-sub">Active + Serving Notice Period</div></div>';
   o+='<div class="wi-card"><div class="wi-card-title">Annual Wage Bill</div><div class="wi-val" style="font-size:26px;color:var(--accent)">&#8377;'+W.total_wage_bill_cr+' Cr</div><div class="wi-sub">CTC snapshot</div></div>';
 
-  // Q1 attrition — exits/avg_hc*4 (same formula as Overview tab for consistency)
-  var q1x=0, q1rCount=0;
-  var _q1hcSum=0;
+  // Rolling attrition — last 3 complete months with data (same dynamic logic as Overview tab)
+  var _wiMONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var _wiCurMon=new Date().getMonth();
+  var _wiDynMons=[];
+  for(var _wmi=0;_wmi<12;_wmi++){var _wmidx=(_wiCurMon-1-_wmi+12)%12;var _wmn=_wiMONS[_wmidx];if(W.attrition[_wmn]&&(W.attrition[_wmn].exits||0)>0){_wiDynMons.unshift(_wmn);if(_wiDynMons.length>=3)break;}}
+  if(!_wiDynMons.length){for(var _wmi=0;_wmi<3;_wmi++)_wiDynMons.unshift(_wiMONS[(_wiCurMon-1-_wmi+12)%12]);}
+  var _wiPeriodLabel=_wiDynMons[0]+(_wiDynMons.length>1?'&ndash;'+_wiDynMons[_wiDynMons.length-1]:'');
+  var _wiMonCount=_wiDynMons.length||3;
+  var q1x=0,_q1hcSum=0,q1rCount=0;
   var _fhc=(W&&(W.active_hc_current||W.active_hc))||0;
-  ['Jan','Feb','Mar'].forEach(function(m){
+  _wiDynMons.forEach(function(m){
     if(W.attrition[m]){
       q1x += W.attrition[m].exits||0;
-      _q1hcSum += (W.attrition[m].active_hc>0 ? W.attrition[m].active_hc : _fhc)||0;
+      _q1hcSum += (W.attrition[m].active_hc>0?W.attrition[m].active_hc:_fhc)||0;
       q1rCount++;
     }
   });
   var _q1hc = q1rCount>0 ? (_q1hcSum/q1rCount)||_fhc||1 : _fhc||1;
-  var ann = q1x>0 ? (Math.round(q1x/_q1hc*4*100*10)/10).toFixed(1) : '&mdash;';
+  var ann = q1x>0 ? (Math.round(q1x/_q1hc*(12/_wiMonCount)*100*10)/10).toFixed(1) : '&mdash;';
   var annCol = parseFloat(ann)>25?'var(--red)':parseFloat(ann)>15?'var(--amber)':'var(--green)';
-  o+='<div class="wi-card"><div class="wi-card-title">Annualised Attrition (Q1)</div><div class="wi-val" style="color:'+annCol+'">'+ann+'%</div><div class="wi-sub">'+q1x+' voluntary exits Jan&ndash;Mar</div></div>';
+  o+='<div class="wi-card"><div class="wi-card-title">Annualised Attrition</div><div class="wi-val" style="color:'+annCol+'">'+ann+'%</div><div class="wi-sub">'+q1x+' voluntary exits '+_wiPeriodLabel+'</div></div>';
 
   // Gender diversity — stock vs hiring rate
   var _femStk = W.female_pct||0;
