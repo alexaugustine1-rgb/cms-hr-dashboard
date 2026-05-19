@@ -2246,18 +2246,21 @@ function renderWorkforce() {
   o+='<div class="wi-card"><div class="wi-card-title">Active Headcount</div><div class="wi-val">'+_hcVal.toLocaleString()+'</div><div class="wi-sub">Active + Serving Notice Period</div></div>';
   o+='<div class="wi-card"><div class="wi-card-title">Annual Wage Bill</div><div class="wi-val" style="font-size:26px;color:var(--accent)">&#8377;'+W.total_wage_bill_cr+' Cr</div><div class="wi-sub">CTC snapshot</div></div>';
 
-  // Q1 attrition — average of monthly annualised rates
-  var q1x=0, q1rSum=0, q1rCount=0;
+  // Q1 attrition — exits/avg_hc*4 (same formula as Overview tab for consistency)
+  var q1x=0, q1rCount=0;
+  var _q1hcSum=0;
+  var _fhc=(W&&(W.active_hc_current||W.active_hc))||0;
   ['Jan','Feb','Mar'].forEach(function(m){
     if(W.attrition[m]){
       q1x += W.attrition[m].exits||0;
-      q1rSum += W.attrition[m].rate||0;
+      _q1hcSum += (W.attrition[m].active_hc>0 ? W.attrition[m].active_hc : _fhc)||0;
       q1rCount++;
     }
   });
-  var ann = q1rCount>0 ? (q1rSum/q1rCount).toFixed(1) : '&mdash;';
+  var _q1hc = q1rCount>0 ? (_q1hcSum/q1rCount)||_fhc||1 : _fhc||1;
+  var ann = q1x>0 ? (Math.round(q1x/_q1hc*4*100*10)/10).toFixed(1) : '&mdash;';
   var annCol = parseFloat(ann)>25?'var(--red)':parseFloat(ann)>15?'var(--amber)':'var(--green)';
-  o+='<div class="wi-card"><div class="wi-card-title">Annualised Attrition (Q1 avg)</div><div class="wi-val" style="color:'+annCol+'">'+ann+'%</div><div class="wi-sub">Q1 voluntary exits: '+q1x+'</div></div>';
+  o+='<div class="wi-card"><div class="wi-card-title">Annualised Attrition (Q1)</div><div class="wi-val" style="color:'+annCol+'">'+ann+'%</div><div class="wi-sub">'+q1x+' voluntary exits Jan&ndash;Mar</div></div>';
 
   // Gender diversity — stock vs hiring rate
   var _femStk = W.female_pct||0;
