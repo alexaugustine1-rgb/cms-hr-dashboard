@@ -2086,38 +2086,38 @@ function renderLD(w, pw) {
   const _ldArr = Array.isArray(w.ld_details) ? w.ld_details : (w.ld_details ? [w.ld_details] : []);
   const details = _ldArr.join('\n\n');
 
-  // Parse upcoming programs from raw text
-  const rawUpcoming = (w.ld_upcoming||[]).join('\n');
+  // Parse upcoming programs — structured JSON first, legacy free-text fallback
   const programs = [];
-  rawUpcoming.split('\n').forEach(line => {
-    const l = line.trim();
-    if (!l || l.match(/^(serial|name of|#|\d+\s+name)/i)) return;
-    // Tab-separated: N\tProgName\tDate
-    const parts = l.split('\t');
-    if (parts.length >= 3) {
-      const name = parts[1].trim();
-      const date = parts[2].trim();
-      if (name && !name.match(/^name/i)) programs.push({name, date});
-      return;
-    }
-    // Newline-separated Name\tDate
-    if (parts.length === 2 && parts[1].match(/\d{2}-\d{2}-\d{4}|online|self.paced/i)) {
-      programs.push({name: parts[0].trim(), date: parts[1].trim()});
-      return;
-    }
-    // Plain line with a date pattern
-    const dateM = l.match(/(\d{2}-\d{2}-\d{4})/);
-    if (dateM) {
-      const name = l.replace(dateM[0],'').replace(/^[\d\.\s\t]+/,'').trim();
-      if (name && !name.match(/^name/i)) programs.push({name, date: dateM[0]});
-    } else if (l.match(/online|self.paced/i)) {
-      const name = l.replace(/online.*/i,'').replace(/^[\d\.\s\t]+/,'').trim();
-      if (name) programs.push({name, date: 'Online / Self-Paced'});
-    } else if (l.length > 3) {
-      // Fallback: plain text line with no recognisable date — show as-is
-      const name = l.replace(/^[\d\.\s\t\-\.]+/,'').trim();
-      if (name && !name.match(/^name/i)) programs.push({name, date: '—'});
-    }
+  const seen = new Set();
+  (w.ld_upcoming||[]).forEach(function(item){
+    if(!item) return;
+    // Try structured JSON (new format)
+    try {
+      var parsed = JSON.parse(item);
+      if(Array.isArray(parsed)){
+        parsed.forEach(function(p){
+          if(!p||!p.name) return;
+          var key = p.name.toLowerCase().trim();
+          if(seen.has(key)) return;
+          seen.add(key);
+          var dateStr = p.date ? new Date(p.date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+          programs.push({name:p.name, date:dateStr, region:p.region||'Pan-India', mode:p.mode||'', pax:p.pax||''});
+        });
+        return;
+      }
+    } catch(e) {}
+    // Legacy free-text fallback — split on newlines and show as-is
+    String(item).split('\n').forEach(function(line){
+      var l = line.trim();
+      if(!l || l.match(/^(serial|name of|#|\d+\s+name)/i)) return;
+      var key = l.toLowerCase();
+      if(seen.has(key)) return;
+      seen.add(key);
+      var dateM = l.match(/(\d{2}-\d{2}-\d{4})/);
+      var name = dateM ? l.replace(dateM[0],'').replace(/^[\d\.\s\t\-]+/,'').trim() : l.replace(/^[\d\.\s\t\-]+/,'').trim();
+      var date = dateM ? dateM[0] : (l.match(/online|self.paced/i) ? 'Online / Self-Paced' : '—');
+      if(name && !name.match(/^name/i)) programs.push({name:name, date:date, region:'—', mode:'', pax:''});
+    });
   });
 
   // Assign region from program name keywords
@@ -2150,7 +2150,11 @@ function renderLD(w, pw) {
       const rows = grouped[r].map(p => `
         <div class="ld-prog">
           <div class="ld-prog-name">${esc(p.name)}</div>
-          <div class="ld-prog-date">${esc(p.date)}</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">
+            <div class="ld-prog-date">${esc(p.date)}</div>
+            ${p.mode?`<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:rgba(96,165,250,.1);color:var(--accent)">${esc(p.mode)}</span>`:''}
+            ${p.pax?`<span style="font-size:10px;color:var(--muted)">👥 ${esc(p.pax)} pax</span>`:''}
+          </div>
         </div>`).join('');
       return `
         <div class="ld-rblock">
@@ -4122,6 +4126,34 @@ async function submitPhotos(){
 const FUNCTION_TYPES={ta:{label:'Talent Acquisition',icon:'🎯'},hrbp:{label:'HR Business Partner',icon:'🤝'},payroll:{label:'Payroll',icon:'💰'},hrops:{label:'HR Operations',icon:'⚙️'},ld:{label:'L&D',icon:'📚'},admin:{label:'Admin & Facilities',icon:'🏢'}};
 function detectFunction(role){if(role==='hrbp')return'hrbp';return null;}
 let _formWeekKey=null,_formPhotos=[],_existingSub=null,_visitYes=false;
+var _ldUpcomingEntries=[];
+function addLdUpcomingRow(name,date,region,mode,pax){
+  _ldUpcomingEntries.push({name:name||'',date:date||'',region:region||'Pan-India',mode:mode||'Classroom',pax:pax||''});
+  renderLdUpcomingRows();
+}
+function removeLdUpcomingRow(i){_ldUpcomingEntries.splice(i,1);renderLdUpcomingRows();}
+function renderLdUpcomingRows(){
+  var cont=document.getElementById('ld-upcoming-rows');
+  var hidden=document.getElementById('f_ld_upcoming');
+  if(!cont)return;
+  if(!_ldUpcomingEntries.length){
+    cont.innerHTML='<div style="font-size:11px;color:var(--muted);padding:6px 0;font-style:italic">No programs added yet — click + Add Program below.</div>';
+  } else {
+    cont.innerHTML=_ldUpcomingEntries.map(function(e,i){
+      var regionOpts=['North','South','East','West','Pan-India'].map(function(r){return'<option value="'+r+'"'+(e.region===r?' selected':'')+'>'+r+'</option>';}).join('');
+      var modeOpts=['Classroom','Online','Hybrid'].map(function(m){return'<option value="'+m+'"'+(e.mode===m?' selected':'')+'>'+m+'</option>';}).join('');
+      return'<div style="display:grid;grid-template-columns:1fr 140px 110px 100px 70px 30px;gap:6px;margin-bottom:7px;align-items:center">'
+        +'<input type="text" value="'+esc(e.name)+'" oninput="_ldUpcomingEntries['+i+'].name=this.value;document.getElementById(\'f_ld_upcoming\').value=JSON.stringify(_ldUpcomingEntries)" placeholder="Program name" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'
+        +'<input type="date" value="'+esc(e.date)+'" oninput="_ldUpcomingEntries['+i+'].date=this.value;document.getElementById(\'f_ld_upcoming\').value=JSON.stringify(_ldUpcomingEntries)" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'
+        +'<select oninput="_ldUpcomingEntries['+i+'].region=this.value;document.getElementById(\'f_ld_upcoming\').value=JSON.stringify(_ldUpcomingEntries)" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+regionOpts+'</select>'
+        +'<select oninput="_ldUpcomingEntries['+i+'].mode=this.value;document.getElementById(\'f_ld_upcoming\').value=JSON.stringify(_ldUpcomingEntries)" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+modeOpts+'</select>'
+        +'<input type="number" value="'+esc(e.pax)+'" min="0" oninput="_ldUpcomingEntries['+i+'].pax=this.value;document.getElementById(\'f_ld_upcoming\').value=JSON.stringify(_ldUpcomingEntries)" placeholder="Pax" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;text-align:center">'
+        +'<button type="button" onclick="removeLdUpcomingRow('+i+')" style="background:none;border:1px solid var(--red);border-radius:6px;color:var(--red);cursor:pointer;font-size:15px;padding:2px 6px;line-height:1">&times;</button>'
+        +'</div>';
+    }).join('');
+  }
+  if(hidden)hidden.value=JSON.stringify(_ldUpcomingEntries);
+}
 
 
 // ── WEEK KEY HELPERS (global) ─────────────────────────────────────────────
@@ -4638,7 +4670,7 @@ if(t==='hrbp'){
       +'<div class="wform-row"><textarea id="f_anything_else" placeholder="Any other gap, risk or follow-up item…" style="min-height:54px"></textarea></div></div>'
       +buildActionsSection();
   }
-  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Upcoming Trainings (Next 2–4 Weeks)</label><textarea id="f_ld_upcoming" style="min-height:90px" placeholder="Program name, schedule, target audience…"></textarea></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>'
+  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Upcoming Programs (Next 2–4 Weeks)</label><input type="hidden" id="f_ld_upcoming"><div style="display:grid;grid-template-columns:1fr 140px 110px 100px 70px 30px;gap:6px;margin-bottom:6px"><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Program Name</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Date</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Region</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Mode</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Pax</span><span></span></div><div id="ld-upcoming-rows"></div><button type="button" onclick="addLdUpcomingRow()" style="margin-top:4px;padding:5px 14px;border:1px dashed var(--accent);border-radius:6px;background:none;color:var(--accent);font-size:12px;cursor:pointer">+ Add Program</button></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>'
   +buildActionsSection();
   if(t==='admin')return'<div class="wform-section"><div class="wform-section-title">Admin & Facilities</div><div class="wform-row"><label>Facility Issues & Resolution Details</label><textarea id="f_admin_issues" style="min-height:110px" placeholder="AC issues, power supply, internet, office setup…"></textarea></div><div class="wform-row"><label>Cost Optimisation / Savings Initiatives</label><textarea id="f_admin_savings" placeholder="Vendor negotiations, energy savings…"></textarea></div></div>'
   +buildActionsSection();
@@ -4647,7 +4679,22 @@ if(t==='hrbp'){
 
 function setVisit(val){_visitYes=val;const y=document.getElementById('visitYesBtn'),n=document.getElementById('visitNoBtn');if(y)y.className='wform-visit-btn'+(val?' active-yes':'');if(n)n.className='wform-visit-btn'+(!val?' active-no':'');}
 async function selectFormWeek(k){_formWeekKey=k;await renderSubmitTab(document.getElementById('tab-submit'));}
-function populateForm(sub){['ta_opened','ta_closed','ta_offers','ta_dropouts','ta_dropout_reason','ta_aging','ta_constraints','ta_joining_plan','hrbp_connect_details','hrbp_discipline','hrbp_abscond','hrbp_retention','hrbp_issues','hrbp_activities','hrbp_rr_details','anything_else','payroll_hc','payroll_errors','payroll_month','payroll_risks','payroll_pending','payroll_statutory','hrops_onboard','hrops_fnf','hrops_compliance','hrops_gaps','hrops_esc_count','hrops_esc_details','ld_sessions','ld_coverage','ld_details','ld_upcoming','ld_gaps','ld_risks','admin_issues','admin_savings','anything_else','hrbp_abscond'].forEach(f=>{const el=document.getElementById('f_'+f);if(el&&sub[f]!=null)el.value=sub[f];});if(sub.hrbp_site_visited)setVisit(true);}
+function populateForm(sub){
+  ['ta_opened','ta_closed','ta_offers','ta_dropouts','ta_dropout_reason','ta_aging','ta_constraints','ta_joining_plan','hrbp_connect_details','hrbp_discipline','hrbp_abscond','hrbp_retention','hrbp_issues','hrbp_activities','hrbp_rr_details','anything_else','payroll_hc','payroll_errors','payroll_month','payroll_risks','payroll_pending','payroll_statutory','hrops_onboard','hrops_fnf','hrops_compliance','hrops_gaps','hrops_esc_count','hrops_esc_details','ld_sessions','ld_coverage','ld_details','ld_gaps','ld_risks','admin_issues','admin_savings','anything_else','hrbp_abscond'].forEach(f=>{const el=document.getElementById('f_'+f);if(el&&sub[f]!=null)el.value=sub[f];});
+  // Populate structured upcoming programs
+  _ldUpcomingEntries=[];
+  if(sub.ld_upcoming){
+    try{
+      var parsed=JSON.parse(sub.ld_upcoming);
+      if(Array.isArray(parsed))_ldUpcomingEntries=parsed;
+    }catch(e){
+      // Legacy free-text — show as single row with no date
+      if(sub.ld_upcoming.trim())_ldUpcomingEntries=[{name:sub.ld_upcoming.trim(),date:'',region:'Pan-India',mode:'Classroom',pax:''}];
+    }
+  }
+  renderLdUpcomingRows();
+  if(sub.hrbp_site_visited)setVisit(true);
+}
 function getFormValues(fnType){const g=id=>{const el=document.getElementById('f_'+id);return el?el.value:'';};const gi=id=>parseInt(g(id))||0;return{function_type:fnType,hrbp_site_visited:_visitYes,ta_opened:gi('ta_opened'),ta_closed:gi('ta_closed'),ta_offers:gi('ta_offers'),ta_dropouts:gi('ta_dropouts'),ta_dropout_reason:g('ta_dropout_reason'),ta_aging:g('ta_aging'),ta_constraints:g('ta_constraints'),ta_joining_plan:g('ta_joining_plan'),hrbp_connect_details:g('hrbp_connect_details'),hrbp_discipline:g('hrbp_discipline'),hrbp_retention:g('hrbp_retention'),hrbp_issues:g('hrbp_issues'),hrbp_risks:g('hrbp_risks'),hrbp_activities:g('hrbp_activities'),payroll_hc:gi('payroll_hc'),payroll_errors:gi('payroll_errors'),payroll_month:g('payroll_month'),payroll_risks:g('payroll_risks'),payroll_pending:g('payroll_pending'),payroll_statutory:g('payroll_statutory'),hrops_onboard:gi('hrops_onboard'),hrops_fnf:g('hrops_fnf'),hrops_compliance:g('hrops_compliance'),hrops_gaps:g('hrops_gaps'),hrops_esc_count:gi('hrops_esc_count'),hrops_esc_details:g('hrops_esc_details'),ld_sessions:gi('ld_sessions'),ld_coverage:g('ld_coverage'),ld_details:g('ld_details'),ld_upcoming:g('ld_upcoming'),ld_gaps:g('ld_gaps'),ld_risks:g('ld_risks'),admin_issues:g('admin_issues'),admin_savings:g('admin_savings'),anything_else:g('anything_else'),hrbp_abscond:g('hrbp_abscond'),hrbp_case_entries:JSON.stringify(_caseEntries||[])};}
 
 async function submitWeeklyForm(fnType,region){
@@ -4764,6 +4811,7 @@ async function submitWeeklyForm(fnType,region){
     if(_tb.length>0){
       await _sb.from('action_tasks').insert(_tb);
       _caseEntries=[];if(typeof renderCaseEntries==='function')renderCaseEntries();
+      _ldUpcomingEntries=[];if(typeof renderLdUpcomingRows==='function')renderLdUpcomingRows();
       _actionEntries=[];if(typeof renderActionEntries==='function')renderActionEntries();
       _taAgingEntries=[];if(typeof renderTaAgingEntries==='function')renderTaAgingEntries();
       _taJoinerEntries=[];if(typeof renderTaJoinerEntries==='function')renderTaJoinerEntries();
