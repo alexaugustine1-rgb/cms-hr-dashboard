@@ -991,17 +991,17 @@ function renderOverview(w, pw) {
   var wReg  = W.regions||{};
 
   // ── 1. COMMAND STRIP ──────────────────────────────────────────────────
-  // Dynamic: last 3 complete months with exit data (rolls forward each month — no hardcoded Jan–Mar)
+  // YTD: all complete months with exit data (no cap — gives full picture, not just trailing 3)
   var _MONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var _curMon=new Date().getMonth(); // 0=Jan
-  var _dynMons=[];
-  for(var _mi=0;_mi<12;_mi++){var _midx=(_curMon-1-_mi+12)%12;var _mn=_MONS[_midx];if(wAttr[_mn]&&(wAttr[_mn].exits||0)>0){_dynMons.unshift(_mn);if(_dynMons.length>=3)break;}}
-  if(!_dynMons.length){for(var _mi=0;_mi<3;_mi++)_dynMons.unshift(_MONS[(_curMon-1-_mi+12)%12]);}
-  var _attrPeriodLabel=_dynMons[0]+(_dynMons.length>1?'&ndash;'+_dynMons[_dynMons.length-1]:'');
-  var _attrMonCount=_dynMons.length||3;
+  var _ytdMons=[];
+  for(var _mi=0;_mi<12;_mi++){var _midx=(_curMon-1-_mi+12)%12;var _mn=_MONS[_midx];if(wAttr[_mn]&&(wAttr[_mn].exits||0)>0)_ytdMons.unshift(_mn);}
+  if(!_ytdMons.length){for(var _mi=0;_mi<3;_mi++)_ytdMons.unshift(_MONS[(_curMon-1-_mi+12)%12]);}
+  var _attrPeriodLabel=_ytdMons.length>1?_ytdMons[0]+'&ndash;'+_ytdMons[_ytdMons.length-1]+' YTD':(_ytdMons[0]||'YTD');
+  var _attrMonCount=_ytdMons.length||3;
   var _fhc=(W&&(W.active_hc_current||W.active_hc))||2800;
-  var q1exits=_dynMons.reduce(function(s,m){return s+(wAttr[m]&&wAttr[m].exits||0);},0);
-  var q1hc=(function(){var _s=0,_c=0;_dynMons.forEach(function(m){_s+=(wAttr[m]&&wAttr[m].active_hc>0?wAttr[m].active_hc:_fhc);_c++;});return _c>0?(_s/_c)||1:_fhc||1;})();
+  var q1exits=_ytdMons.reduce(function(s,m){return s+(wAttr[m]&&wAttr[m].exits||0);},0);
+  var q1hc=(function(){var _s=0,_c=0;_ytdMons.forEach(function(m){_s+=(wAttr[m]&&wAttr[m].active_hc>0?wAttr[m].active_hc:_fhc);_c++;});return _c>0?(_s/_c)||1:_fhc||1;})();
   var _ytdMonths=_MONS;
   var _ytdExits=0;
   _ytdMonths.slice(0,_curMon+1).forEach(function(m){_ytdExits+=(wAttr[m]&&wAttr[m].exits||0);});
@@ -1057,7 +1057,7 @@ function renderOverview(w, pw) {
     var rd = wReg[reg]||{hc:0,wage_cr:0,ta_sourced:0,ta_joined:0,female_pct:0};
     var regAttr = 0;
     var regExits = 0;
-    _dynMons.forEach(function(m){
+    _ytdMons.forEach(function(m){
       var ra = wAttr[m]&&wAttr[m].region&&wAttr[m].region[reg]||0;
       regExits += ra;
     });
@@ -1272,7 +1272,7 @@ function renderOverview(w, pw) {
   var healthStrip = '<div style="margin-bottom:18px">'
     +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Workforce Health Indicators</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +healthChip('Annualised Attrition (Q1)', q1attr+'%', attrCol)
+    +healthChip('Annualised Attrition YTD', q1attr+'%', attrCol)
     +healthChip('Active HC', (W.active_hc_mar||0).toLocaleString(), 'var(--accent)')
     +healthChip('Female %', (W.female_pct||0)+'%', 'var(--accent)')
     +healthChip('Absent >7d', absCases, absCases>20?'var(--red)':'var(--amber)')
@@ -2258,9 +2258,9 @@ function renderWorkforce() {
   var _wiMONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var _wiCurMon=new Date().getMonth();
   var _wiDynMons=[];
-  for(var _wmi=0;_wmi<12;_wmi++){var _wmidx=(_wiCurMon-1-_wmi+12)%12;var _wmn=_wiMONS[_wmidx];if(W.attrition[_wmn]&&(W.attrition[_wmn].exits||0)>0){_wiDynMons.unshift(_wmn);if(_wiDynMons.length>=3)break;}}
+  for(var _wmi=0;_wmi<12;_wmi++){var _wmidx=(_wiCurMon-1-_wmi+12)%12;var _wmn=_wiMONS[_wmidx];if(W.attrition[_wmn]&&(W.attrition[_wmn].exits||0)>0)_wiDynMons.unshift(_wmn);}
   if(!_wiDynMons.length){for(var _wmi=0;_wmi<3;_wmi++)_wiDynMons.unshift(_wiMONS[(_wiCurMon-1-_wmi+12)%12]);}
-  var _wiPeriodLabel=_wiDynMons[0]+(_wiDynMons.length>1?'&ndash;'+_wiDynMons[_wiDynMons.length-1]:'');
+  var _wiPeriodLabel=_wiDynMons.length>1?_wiDynMons[0]+'&ndash;'+_wiDynMons[_wiDynMons.length-1]+' YTD':(_wiDynMons[0]||'YTD');
   var _wiMonCount=_wiDynMons.length||3;
   var q1x=0,_q1hcSum=0,q1rCount=0;
   var _fhc=(W&&(W.active_hc_current||W.active_hc))||0;
@@ -2302,9 +2302,11 @@ function renderWorkforce() {
   o+='</div>';
 
   var _treg = (typeof window!=='undefined'&&window._wiTrendReg)||'All';
-  var MONTHS = ['Jan','Feb','Mar','Apr'];
-  // Joiners from monthly_hc_snapshot (stored in WI.joiners_by_month if available, else estimate)
+  // Build MONTHS dynamically from actual attrition/joiner data — no hardcoded list
   var _joiners = W.joiners_by_month||{Jan:90,Feb:80,Mar:93,Apr:2};
+  var _allMONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var MONTHS=_allMONS.filter(function(m){return (W.attrition[m]&&((W.attrition[m].exits||0)>0||(W.attrition[m].rate||0)>0))||(_joiners[m]&&_joiners[m]>2);});
+  if(!MONTHS.length)MONTHS=['Jan','Feb','Mar','Apr'];
   var _maxBar = 1;
   MONTHS.forEach(function(m){
     var ex = _treg==='All'
@@ -2323,7 +2325,7 @@ function renderWorkforce() {
     var rate = md.rate||0;
     var exH = Math.max((ex/_maxBar)*100,2);
     var joH = Math.max((jo/_maxBar)*100,2);
-    var isFut = (m==='Apr');
+    var isFut = (ex<=3 && jo<=3); // sparse/incomplete month — render lighter
     var rateCol = rate>25?'var(--red)':rate>15?'var(--amber)':'var(--green)';
     o+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">';
     // Rate label at top
