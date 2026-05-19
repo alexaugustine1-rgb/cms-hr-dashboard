@@ -585,10 +585,10 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <button class="sidebar-item" id="snav-ta" onclick="snavClick('ta',this)">
         <span class="item-icon">📋</span><span class="item-label">TA Commitments</span>
       </button>
-      <button class="sidebar-item" id="snav-joiners" onclick="snavClick('joiners',this)" style="display:none">
+      <button class="sidebar-item" id="snav-prospective-joiners" onclick="snavClick('joiners',this)" style="display:none">
         <span class="item-icon">🧑‍💼</span><span class="item-label">Prospective Joiners</span>
       </button>
-      <button class="sidebar-item" id="snav-joiners" onclick="snavClick('joiners',this)" style="display:none">
+      <button class="sidebar-item" id="snav-expected-joiners" onclick="snavClick('joiners',this)" style="display:none">
         <span class="item-icon">🧑‍💼</span><span class="item-label">Expected Joiners</span>
       </button>
       <button class="sidebar-item" id="snav-resignation" onclick="snavClick('resignation',this)">
@@ -725,7 +725,6 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-users" class="tab-content"></div>
   <div id="tab-accounts" class="tab-content"></div>
   <div id="tab-resignation" class="tab-content"></div>
-  <div id="tab-joiners" class="tab-content"></div>
   <div id="tab-joiners" class="tab-content"></div>
   <div id="tab-absenteeism" class="tab-content"></div>
   <div id="tab-actioncentre" class="tab-content"></div>
@@ -1315,12 +1314,25 @@ function renderOverview(w, pw) {
 
 function renderTA(w,pw){ var el=document.getElementById('tab-ta'); renderTA_Commitments(el); }
 
+// Global helper — checks if a name string belongs to the logged-in user.
+// Used by renderOps and renderTA_Commitments. Defined globally so both can call it.
+function matchesMe(raw) {
+  var displayName = (_sbRole && _sbRole.display_name) || '';
+  if (!raw || !displayName) return false;
+  var nameParts = displayName.replace(/\s+/g,' ').trim().split(' ');
+  var firstName = (nameParts[0]||'').toLowerCase();
+  var lastName  = (nameParts[nameParts.length-1]||'').toLowerCase();
+  var s = raw.toLowerCase();
+  return s.indexOf(firstName) >= 0 && (lastName.length < 3 || s.indexOf(lastName) >= 0);
+}
+
 function renderOps(w, pw, elArg) {
   var el = elArg || document.getElementById('tab-ops');
   if (!el) return;
   if (!_statRisksLoaded && typeof _sb !== 'undefined') {
     loadStatutoryRisks(); // async — tab renders immediately, patches when ready
   }
+  var isAdminView = (_sbRole && (_sbRole.role === 'admin' || _sbRole.role === 'executive'));
   var week = w || (WEEK_ORDER&&WEEK_ORDER.length?WEEKS_DATA[WEEK_ORDER[WEEK_ORDER.length-1]]:{label:'&mdash;',payroll_risks:[],payroll_errors:0,payroll_month:''});
   if(!week||!week.week_key){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading week data…</div>';return;}
   if(!week||!week.week_key){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading week data…</div>';return;}
@@ -2088,12 +2100,12 @@ function renderLD(w, pw) {
       if (name && !name.match(/^name/i)) programs.push({name, date});
       return;
     }
-    // Two-part tab-separated Name\tDate
+    // Newline-separated Name\tDate
     if (parts.length === 2 && parts[1].match(/\d{2}-\d{2}-\d{4}|online|self.paced/i)) {
       programs.push({name: parts[0].trim(), date: parts[1].trim()});
       return;
     }
-    // Plain line with a DD-MM-YYYY date
+    // Plain line with a date pattern
     const dateM = l.match(/(\d{2}-\d{2}-\d{4})/);
     if (dateM) {
       const name = l.replace(dateM[0],'').replace(/^[\d\.\s\t]+/,'').trim();
@@ -2101,11 +2113,6 @@ function renderLD(w, pw) {
     } else if (l.match(/online|self.paced/i)) {
       const name = l.replace(/online.*/i,'').replace(/^[\d\.\s\t]+/,'').trim();
       if (name) programs.push({name, date: 'Online / Self-Paced'});
-    } else {
-      // Plain text fallback — extract trailing date hint (e.g. '— 23 May', '- 30th May')
-      const plainDate = l.match(/[-—]\s*(\d{1,2}(?:st|nd|rd|th)?[-\s&,]+(?:May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|Jan|Feb|Mar|Apr)[^\n]*)$/i);
-      const cleanName = l.replace(/\s*[-—][^a-zA-Z]*$/, '').replace(/^[\d\.\s]+/,'').trim();
-      if (cleanName) programs.push({name: cleanName, date: plainDate ? plainDate[1].trim() : ''});
     }
   });
 
@@ -2219,7 +2226,7 @@ function renderWorkforce() {
   try {
   var W = WI;
   if(!W||!W.attrition){return '<div style="padding:40px;text-align:center;color:var(--muted)">Workforce data not loaded. Please refresh.</div>';}
-  function pb(pct,col){return '<div class="wi-bar-track"><div class="wi-bar-fill" style="width:'+Math.min(pct,100)+'%;background:'+col+'"></div></div>';}
+  var pb=function(pct,col){return '<div class="wi-bar-track"><div class="wi-bar-fill" style="width:'+Math.min(pct,100)+'%;background:'+col+'"></div></div>';};
   var o='';
   o+='<div style="padding:28px 36px">';
 
@@ -3314,7 +3321,7 @@ function init() {
   const wKeys = WEEK_ORDER.filter(k => WEEKS_DATA[k]);
   if(!wKeys.length){ const first=document.getElementById('tab-overview'); if(first){first.classList.add('active');first.innerHTML='<div style="padding:60px 36px;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">📭</div><div style="font-size:15px;font-weight:500;margin-bottom:8px">No data yet</div><div style="font-size:13px">Run the SQL insert script or upload a weekly report</div></div>';} return; }
   const latestKey = wKeys[wKeys.length - 1];
-  currentWeek = latestKey;
+  if(!currentWeek||!WEEKS_DATA[currentWeek]) currentWeek = latestKey;
   const container = document.getElementById('weekBtns');
   if (container) {
     container.innerHTML = '';
@@ -3380,9 +3387,6 @@ function switchTab(id, btn) {
   else if(id==='users') renderUsersTab(el);
   else if(id==='accounts') renderAccountsTab(el);
   else if(id==='gallery') renderGalleryTab();
-  else if(id==='resignation'){const mc=document.getElementById('tab-resignation');if(mc)mc.innerHTML=renderResignation();}
-  else if(id==='od'){const mc=document.getElementById('tab-od');if(mc)mc.innerHTML=renderOD();}
-  else if(id==='tapipeline'){const mc=document.getElementById('tab-tapipeline');if(mc)mc.innerHTML=renderTAPipeline();}
   else if(id==='resignation'){const mc=document.getElementById('tab-resignation');if(mc)mc.innerHTML=renderResignation();}
   else if(id==='od'){const mc=document.getElementById('tab-od');if(mc)mc.innerHTML=renderOD();}
   else if(id==='tapipeline'){const mc=document.getElementById('tab-tapipeline');if(mc)mc.innerHTML=renderTAPipeline();}
@@ -3507,65 +3511,6 @@ function log(msg, type) {
   el.scrollTop=el.scrollHeight;
 }
 
-// ── L&D Upcoming Sessions structured entry ───────────────────────────
-var _ldUpcomingEntries = [];
-
-function addLDUpcoming() {
-  var prog = document.getElementById('ldUpProgram');
-  var date = document.getElementById('ldUpDate');
-  var aud  = document.getElementById('ldUpAudience');
-  var mode = document.getElementById('ldUpMode');
-  if (!prog || !prog.value.trim()) { alert('Please enter a programme name'); return; }
-  _ldUpcomingEntries.push({
-    programme: prog.value.trim(),
-    date:      date ? date.value.trim() : '',
-    audience:  aud  ? aud.value.trim()  : '',
-    mode:      mode ? mode.value        : 'In-person'
-  });
-  renderLDUpcoming();
-  prog.value = ''; if(date) date.value = ''; if(aud) aud.value = '';
-  if(mode) mode.value = 'In-person';
-}
-
-function renderLDUpcoming() {
-  var el = document.getElementById('ldUpcomingList');
-  var hidden = document.getElementById('f_ld_upcoming');
-  if (!el) return;
-  if (!_ldUpcomingEntries.length) {
-    el.innerHTML = '<div style="font-size:11px;color:var(--muted2);padding:4px 0">No upcoming sessions added yet.</div>';
-    if (hidden) hidden.value = '';
-    return;
-  }
-  // Render cards
-  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">'
-    + _ldUpcomingEntries.map(function(e, i) {
-        return '<div style="display:flex;align-items:center;gap:8px;background:var(--surface3);'
-          + 'border:1px solid var(--border);border-radius:7px;padding:7px 10px">'
-          + '<div style="flex:1">'
-          + '<span style="font-size:13px;font-weight:600;color:var(--text)">' + esc(e.programme) + '</span>'
-          + (e.date ? '<span style="font-size:11px;color:var(--accent);margin-left:8px">' + esc(e.date) + '</span>' : '')
-          + (e.audience ? '<span style="font-size:11px;color:var(--muted);margin-left:8px">· ' + esc(e.audience) + '</span>' : '')
-          + (e.mode && e.mode !== 'In-person' ? '<span style="font-size:10px;color:var(--muted2);margin-left:6px;padding:1px 6px;border-radius:6px;background:var(--surface2)">'
-             + esc(e.mode) + '</span>' : '')
-          + '</div>'
-          + '<button type="button" onclick="_ldUpcomingEntries.splice(' + i + ',1);renderLDUpcoming()"'
-          + ' style="background:none;border:none;color:var(--muted2);cursor:pointer;font-size:14px;padding:0 4px">✕</button>'
-          + '</div>';
-      }).join('')
-    + '</div>';
-  // Update hidden field with JSON array stored as newline-separated strings for backward compatibility
-  var lines = _ldUpcomingEntries.map(function(e) {
-    return e.programme + (e.date ? ' -- ' + e.date : '') + (e.audience ? ' -- ' + e.audience : '') + (e.mode && e.mode !== 'In-person' ? ' (' + e.mode + ')' : '');
-  });
-  if (hidden) hidden.value = lines.join('\n');
-}
-
-// Clear LD upcoming entries when submit tab reloads
-function resetLDUpcoming() {
-  _ldUpcomingEntries = [];
-  renderLDUpcoming();
-}
-
 async function handleUploadFile(file) {
   if(!file)return;
   const el=document.getElementById('parseLog'); if(el){el.style.display='block';el.innerHTML='';}
@@ -3584,7 +3529,9 @@ async function handleUploadFile(file) {
   else if(name.includes('with_ctc')||name.includes('ctc_master')||name.includes('ctc')) fileType='ctc';
   else if(name.includes('attendance_consol')||name.includes('attendance')) fileType='attendance';
   else if(name.includes('super')||name.includes('sper')) fileType='super_emp';
+  else if(name.includes('leave')) fileType='leave';
   if(!fileType){log('Filename not recognised — trying as Weekly HR Report','info');fileType='weekly';}
+  if(fileType==='leave'){log('Leave Balance report detected — this file type is not yet supported. No data was changed.','warn');return;}
   log('Detected: '+fileType.toUpperCase(),'ok');
   const reader=new FileReader();
   reader.onload=async(e)=>{
@@ -4122,7 +4069,7 @@ async function loadWeeksIntoDOM(){
   const{data:weeks}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
   if(weeks&&weeks.length){WEEKS_DATA={};weeks.forEach(w=>{WEEKS_DATA[w.week_key]=w;});WEEK_ORDER=weeks.map(w=>w.week_key);weeks.forEach(w=>{WEEK_LABELS[w.week_key]=w.label||'';WEEK_NAMES[w.week_key]='Week '+w.week_num+(w.week_key===WEEK_ORDER[WEEK_ORDER.length-1]?' (Latest)':'');});window.WEEK_ORDER_LIVE=WEEK_ORDER;currentWeek=WEEK_ORDER[WEEK_ORDER.length-1];}
   const container=document.getElementById('weekBtns');
-  if(container){container.innerHTML='';WEEK_ORDER.filter(k=>WEEKS_DATA[k]).forEach(key=>{const w=WEEKS_DATA[key];const btn=document.createElement('button');btn.className='week-btn'+(key===currentWeek?' active latest':'');btn.textContent=(WEEK_NAMES[key]||key)+'  '+w.label;btn.onclick=()=>{currentWeek=key;document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');render();if(currentTab==='hrbp'&&typeof loadHRBPSiteVisitsForTab==='function'){setTimeout(loadHRBPSiteVisitsForTab,150);}if(_sb&&_sbUser){(async function(){try{var _wr=await _sb.from('weekly_reports').select('*').eq('week_key',weekKey).single();if(!_wr.error&&_wr.data){WEEKS_DATA[weekKey]=_wr.data;render();}}catch(e){console.warn('[weekRefresh]',e.message);}})();}};container.appendChild(btn);});}
+  if(container){container.innerHTML='';WEEK_ORDER.filter(k=>WEEKS_DATA[k]).forEach(key=>{const w=WEEKS_DATA[key];const btn=document.createElement('button');btn.className='week-btn'+(key===currentWeek?' active latest':'');btn.textContent=(WEEK_NAMES[key]||key)+'  '+w.label;btn.onclick=()=>{currentWeek=key;document.querySelectorAll('.week-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');render();if(currentTab==='hrbp'&&typeof loadHRBPSiteVisitsForTab==='function'){setTimeout(loadHRBPSiteVisitsForTab,150);}if(_sb&&_sbUser){(async function(){try{var _wr=await _sb.from('weekly_reports').select('*').eq('week_key',key).single();if(!_wr.error&&_wr.data){WEEKS_DATA[key]=_wr.data;render();}}catch(e){console.warn('[weekRefresh]',e.message);}})();}};container.appendChild(btn);});}
   render();
   const wl=document.getElementById('weeksList');if(wl)wl.innerHTML=weeksListHTML();
 }
@@ -4176,13 +4123,13 @@ let _formWeekKey=null,_formPhotos=[],_existingSub=null,_visitYes=false;
 // ── WEEK KEY HELPERS (global) ─────────────────────────────────────────────
 function getCurrentWeekKey() {
   var now = new Date();
-  var mo = now.getMonth();
+  var mo = now.getMonth() + 1; // +1: getMonth() is 0-indexed, map is 1-indexed
   var day = now.getDate();
   // Static map for FY2025-26 (Jan–Dec 2026) — extend as needed
   var map = [
     [1,2,8,'W05'],[1,9,15,'W06'],[1,16,22,'W07'],[1,23,31,'W08'],
     [2,2,8,'W09'],[2,9,15,'W10'],[2,16,22,'W11'],[2,23,29,'W12'],
-    [2,30,31,'W13'],[3,1,5,'W13'],[3,6,12,'W14'],[3,13,19,'W15'],[3,20,26,'W16'],[3,27,30,'W17'],
+    [3,1,5,'W13'],[3,6,12,'W14'],[3,13,19,'W15'],[3,20,26,'W16'],[3,27,30,'W17'],
     [4,1,3,'W17'],[4,4,10,'W18'],[4,11,17,'W19'],[4,18,24,'W20'],[4,25,30,'W21'],
     [5,1,9,'W21'],[5,10,16,'W22'],[5,17,23,'W23'],[5,24,31,'W24'],
     [6,1,8,'W25'],[6,9,15,'W26'],[6,16,22,'W27'],[6,23,30,'W28'],
@@ -4300,7 +4247,7 @@ async function renderSubmitTab(mc){
 }
 
 // ── TEAM MEMBERS ────────────────────────────────────────────────────────────
-const TEAM_MEMBERS = [
+let TEAM_MEMBERS = [
   {id:"33e4101d-df9b-44e3-bcc7-56d16abb0c40",name:"Alex Augustine",fn:"admin",group:"Admin"},
   {id:"c2e8382a-7628-44b6-a9f9-0ad507d944d0",name:"Amit Dasgupta",fn:"executive",group:"CXO"},
   {id:"cc470378-954c-4d21-bdfe-b122b3d5fcab",name:"Neeraj Sharma",fn:"executive",group:"CXO"},
@@ -4687,7 +4634,7 @@ if(t==='hrbp'){
       +'<div class="wform-row"><textarea id="f_anything_else" placeholder="Any other gap, risk or follow-up item…" style="min-height:54px"></textarea></div></div>'
       +buildActionsSection();
   }
-  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Upcoming Trainings (Next 2–4 Weeks)</label><div id="ldUpcomingList" style="margin-bottom:8px"></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input type="text" id="ldUpProgram" placeholder="Programme name" style="flex:2;min-width:180px;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"><input type="text" id="ldUpDate" placeholder="Date (e.g. 23 May)" style="width:120px;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"><input type="text" id="ldUpAudience" placeholder="Target audience" style="flex:1;min-width:120px;padding:8px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"><select id="ldUpMode" style="padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px"><option value="In-person">In-person</option><option value="Online">Online</option><option value="OEM Facilitated">OEM Facilitated</option><option value="Self-paced">Self-paced</option></select><button type="button" onclick="addLDUpcoming()" style="padding:8px 16px;background:var(--accent);color:var(--bg);border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer">+ Add</button></div><input type="hidden" id="f_ld_upcoming"></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>'
+  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Upcoming Trainings (Next 2–4 Weeks)</label><textarea id="f_ld_upcoming" style="min-height:90px" placeholder="Program name, schedule, target audience…"></textarea></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>'
   +buildActionsSection();
   if(t==='admin')return'<div class="wform-section"><div class="wform-section-title">Admin & Facilities</div><div class="wform-row"><label>Facility Issues & Resolution Details</label><textarea id="f_admin_issues" style="min-height:110px" placeholder="AC issues, power supply, internet, office setup…"></textarea></div><div class="wform-row"><label>Cost Optimisation / Savings Initiatives</label><textarea id="f_admin_savings" placeholder="Vendor negotiations, energy savings…"></textarea></div></div>'
   +buildActionsSection();
@@ -4711,7 +4658,7 @@ async function submitWeeklyForm(fnType,region){
     var wkDt=WEEKS_DATA[_formWeekKey];
     var vRecs=_visitEntries.map(function(v){return{week_key:_formWeekKey,week_label:wkDt?wkDt.label:_formWeekKey,submitted_by:_sbUser.id,submitter_name:record.submitter_name,region:region||_sbRole.region||'',account_name:v.account,account_tier:v.tier,visit_date:new Date().toISOString().split('T')[0],visit_notes:v.notes||'',visit_type:v.visit_type||'Connect'};});
     await _sb.from('hrbp_site_visits').insert(vRecs);
-    _visitEntries=[];if(typeof renderVisitEntries==='function')renderVisitEntries();if(typeof renderLDUpcoming==='function'){_ldUpcomingEntries=[];renderLDUpcoming();}
+    _visitEntries=[];if(typeof renderVisitEntries==='function')renderVisitEntries();
   }
   if(_formPhotos.length>0){st.innerHTML='<div style="font-size:12px;color:var(--muted)">Uploading photos…</div>';for(let i=0;i<_formPhotos.length;i++){const{file,caption,event_type}=_formPhotos[i];const ext=file.name.split('.').pop();const path=_formWeekKey+'/'+Date.now()+'_'+i+'.'+ext;const{error:upErr}=await _sb.storage.from('hrbp-photos').upload(path,file,{contentType:file.type});if(!upErr){const{data:urlData}=_sb.storage.from('hrbp-photos').getPublicUrl(path);await _sb.from('hrbp_photos').insert({week_key:_formWeekKey,week_num:wData?.week_num||0,uploaded_by:_sbUser.id,uploader_name:record.submitter_name,uploader_region:region||_sbRole.region||'',photo_url:urlData.publicUrl,caption,event_type:event_type||'site_visit'});}}_formPhotos=[];}
   await rebuildWeekFromSubmissions(_formWeekKey);
@@ -4832,8 +4779,8 @@ async function submitWeeklyForm(fnType,region){
 async function rebuildWeekFromSubmissions(weekKey){
   // Only rebuild if weekly_reports doesn't already have this week
   // (Supabase has the authoritative row — RLS-restricted queries produce partial data)
-  if(WEEKS_DATA[weekKey]&&WEEKS_DATA[weekKey].week_key){
-    console.log('[rebuild] Skipping — week already in WEEKS_DATA:', weekKey);
+  if(WEEKS_DATA[weekKey]&&(WEEKS_DATA[weekKey].total_respondents>0)){
+    console.log('[rebuild] Skipping — week already has submissions:', weekKey);
     return;
   }
   const{data:subs}=await _sb.from('weekly_submissions').select('*').eq('week_key',weekKey);
@@ -4901,7 +4848,7 @@ async function renderSubmissionTracker(mc,displayName,roleLabel){
   // Fetch ALL team members who should submit (not just hrbp)
   const{data:allUsers}=await _sb.from('user_profiles')
     .select('display_name,email,function_type,region,role')
-    .in('role',['hrbp','ta']);
+    .eq('role','hrbp');
   const leads=allUsers||[];
   const submittedEmails=new Set(submitted.map(s=>s.submitter_email));
   const notSubmitted=leads.filter(u=>!submittedEmails.has(u.email));
@@ -4959,7 +4906,16 @@ async function updateUserField(uid,field,val){
 }
 async function updateUserRole(uid,role){return updateUserField(uid,'role',role);}
 
-async function removeUser(uid){if(!confirm('Remove user?'))return;await _sb.auth.admin.deleteUser(uid);await _sb.from('user_profiles').delete().eq('id',uid);await renderUsersTab(document.getElementById('tab-users'));}
+async function removeUser(uid){
+  if(!confirm('Remove user?'))return;
+  // auth.admin.deleteUser requires service_role key and must be called server-side.
+  // Until an Edge Function is set up, remove the profile row only and disable the auth
+  // account via Supabase dashboard. Deleting the profile row is safe — RLS blocks access.
+  const{error}=await _sb.from('user_profiles').delete().eq('id',uid);
+  if(error){alert('Remove failed: '+error.message);return;}
+  alert('Profile removed. To fully delete the auth account, use the Supabase dashboard (Authentication → Users).');
+  await renderUsersTab(document.getElementById('tab-users'));
+}
 
 
 // ── MANAGE ACCOUNTS TAB ───────────────────────────────────────────────────
@@ -7311,13 +7267,13 @@ function showSidebarAfterLogin(role) {
   if(mobSubmit) mobSubmit.style.display = '';
   if(role === 'admin' && adminGroup) adminGroup.style.display = '';
   (function(){
-    var _pjEl=document.getElementById('snav-joiners'); if(!_pjEl) return;
+    var _pjEl=document.getElementById('snav-prospective-joiners'); if(!_pjEl) return;
     var _pjFn=(typeof _sbRole!=='undefined'&&_sbRole)?(_sbRole.function_type||''):'';
     var _showPj=(role==='admin'||role==='executive'||(role==='hrbp'&&(_pjFn==='hrbp'||_pjFn==='ta')));
     _pjEl.style.display=_showPj?'':'none';
   })();
   // Expected Joiners: show for hrbp (all fn types) and admin/executive
-  var _jEl = document.getElementById('snav-joiners');
+  var _jEl = document.getElementById('snav-expected-joiners');
   if(_jEl) {
     var _jFn = (typeof _sbRole!=='undefined'&&_sbRole)?(_sbRole.function_type||''):'';
     var _showJ = role==='admin'||role==='executive'||(role==='hrbp'&&['hrbp','ta'].includes(_jFn));
@@ -7502,7 +7458,6 @@ async function sbBoot(user){
   }
   document.getElementById('authOverlay').style.display='none';
   document.getElementById('dashApp').style.display='block';
-  const st2=document.getElementById('tab-btn-submit');if(st2)st2.style.display='';
   if(_sbRole.role==='admin'){const ag=document.getElementById('snav-admin-group');if(ag)ag.style.display='';}
   showSidebarAfterLogin(_sbRole.role);
   // HR Ops (Sheetal, Kesavan) also get Upload Data access
@@ -7962,7 +7917,7 @@ async function processWISuperEmp(wb) {
   const WEEK_MAP_SUP = [
     [1,2,8,'W05'],[1,9,15,'W06'],[1,16,22,'W07'],[1,23,31,'W08'],
     [2,2,8,'W09'],[2,9,15,'W10'],[2,16,22,'W11'],[2,23,29,'W12'],
-    [2,30,31,'W13'],[3,1,5,'W13'],[3,6,12,'W14'],[3,13,19,'W15'],[3,20,26,'W16'],[3,27,30,'W17'],
+    [3,1,5,'W13'],[3,6,12,'W14'],[3,13,19,'W15'],[3,20,26,'W16'],[3,27,30,'W17'],
     [4,1,3,'W17'],[4,4,10,'W18'],[4,11,17,'W19'],[4,18,24,'W20'],[4,25,30,'W21']
   ];
   function getWeekKey(dt) {
