@@ -2113,6 +2113,10 @@ function renderLD(w, pw) {
     } else if (l.match(/online|self.paced/i)) {
       const name = l.replace(/online.*/i,'').replace(/^[\d\.\s\t]+/,'').trim();
       if (name) programs.push({name, date: 'Online / Self-Paced'});
+    } else if (l.length > 3) {
+      // Fallback: plain text line with no recognisable date — show as-is
+      const name = l.replace(/^[\d\.\s\t\-\.]+/,'').trim();
+      if (name && !name.match(/^name/i)) programs.push({name, date: '—'});
     }
   });
 
