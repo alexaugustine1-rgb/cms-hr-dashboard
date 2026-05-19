@@ -894,6 +894,13 @@ const WEEK_LABELS={};
 const WEEK_NAMES={};
 
 
+var HRBP_ROSTER = [
+  {name:'Surajit Sen',                    region:'East'},
+  {name:'Abhishek Singh',                 region:'North'},
+  {name:'Priya Paul',                     region:'South'},
+  {name:'Shambhavi Prathamesh Joshi',     region:'West'},
+  {name:'Somasri Sukumar Samanta',        region:'West'},
+];
 let currentWeek = 'W09';
 let currentTab = 'overview';
 var _connectStore = {};
@@ -1311,10 +1318,7 @@ function renderOverview(w, pw) {
     +'</div>'
     +cmdStrip
     +regionPanel
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">'
-    +'<div>'+recLeaderboard+'</div>'
-    +'<div>'+hrbpPanel+'</div>'
-    +'</div>'
+    +'<div style="margin-bottom:18px">'+recLeaderboard+'</div>'
     +healthStrip
     +actionsPanel
     +'</div>';
@@ -1703,6 +1707,7 @@ async function loadHRBPSiteVisitsForTab() {
       var wkIdx = wkKeys.indexOf(currentWeek);
       var pw = wkIdx > 0 ? WEEKS_DATA[wkKeys[wkIdx-1]] : null;
       el.innerHTML = renderHRBP(w, pw);
+      setTimeout(renderHRBPScorecardIntoDOM, 100);
     }
   } catch(e) { console.warn('[siteVisitsTab]', e.message); }
 }
@@ -1863,6 +1868,314 @@ function buildJourneyPlanPanel() {
 
   html += '</div>';
   return html;
+}
+
+// ── HRBP IMPACT SCORECARD ────────────────────────────────────────────────────
+function computeHRBPScore(hrbpName, region, data) {
+  var wi          = (data&&data.wi)||{};
+  var absentCases = (data&&data.absentCases)||[];
+  var siteVisits  = (data&&data.siteVisits)||[];
+  var submissions = (data&&data.submissions)||[];
+  var odData      = (data&&data.odData)||[];
+  var last4Weeks  = (data&&data.last4Weeks)||[];
+  var companyAttrRate = (data&&data.companyAttrRate)||0;
+  var dynMons     = (data&&data.dynMons)||[];
+  var today       = new Date();
+
+  // --- 1a: Regional Attrition vs Company Average (15 pts) ---
+  var d1aScore = 0, d1aCtx = '';
+  try {
+    var wAttr = wi.attrition||{};
+    var regionExits = 0;
+    var hcSum = 0, hcCount = 0;
+    dynMons.forEach(function(m){
+      var mo = wAttr[m]||{};
+      var regMap = mo.region||{};
+      regionExits += (regMap[region]||0);
+      var ahc = mo.active_hc||0;
+      if (ahc > 0) { hcSum += ahc; hcCount++; }
+    });
+    // Use region-specific HC from WI.regions; fall back to proportional estimate
+    var regionHC = (wi.regions&&wi.regions[region]&&wi.regions[region].hc) || (hcCount > 0 ? hcSum/hcCount/4 : (wi.active_hc_current||wi.active_hc||2800)/4);
+    if (!regionHC) regionHC = 700;
+    var regionRate = dynMons.length > 0 ? (regionExits / regionHC * (12/dynMons.length) * 100) : 0;
+    var delta = regionRate - companyAttrRate;
+    if (regionExits === 0 && dynMons.length > 0) {
+      d1aScore = 15;
+    } else if (delta <= 0) {
+      d1aScore = 15;
+    } else if (delta <= 3) {
+      d1aScore = 10;
+    } else if (delta <= 6) {
+      d1aScore = 5;
+    } else {
+      d1aScore = 0;
+    }
+    d1aCtx = regionExits+' exits · region '+regionRate.toFixed(1)+'% vs co. avg '+companyAttrRate.toFixed(1)+'%';
+  } catch(e) { d1aScore = 0; d1aCtx = 'Data unavailable'; }
+
+  // --- 1b: Absenteeism Resolution (15 pts) ---
+  var d1bScore = 0, d1bCtx = '';
+  try {
+    var cases = absentCases.filter(function(c){ return c.region===region; });
+    if (cases.length === 0) {
+      d1bScore = 15; d1bCtx = 'No absent cases';
+    } else {
+      var oldCases = cases.filter(function(c){
+        var age = c.days_absent||Math.floor((today - new Date(c.first_absent_date))/86400000)||0;
+        return age > 21;
+      });
+      var resolved = oldCases.filter(function(c){
+        var st = (c.status||'').toLowerCase();
+        return st !== 'uncontacted' && st !== 'under review';
+      });
+      var pct = oldCases.length > 0 ? resolved.length/oldCases.length : 1;
+      if (pct > 0.80)      d1bScore = 15;
+      else if (pct >= 0.60) d1bScore = 10;
+      else if (pct >= 0.40) d1bScore = 6;
+      else                  d1bScore = 0;
+      d1bCtx = resolved.length+'/'+oldCases.length+' old cases resolved ('+Math.round(pct*100)+'%)';
+    }
+  } catch(e) { d1bScore = 0; d1bCtx = 'Data unavailable'; }
+
+  // --- 2a: Plat/Gold Account Visits (15 pts) ---
+  var d2aScore = 0, d2aCtx = '';
+  try {
+    var pgVisits = siteVisits.filter(function(sv){
+      return (sv.account_tier==='Platinum'||sv.account_tier==='Gold') && sv.region===region;
+    }).length;
+    d2aScore = Math.round(Math.min(1, pgVisits/8)*15);
+    d2aCtx = pgVisits+' Plat/Gold visits · target 8';
+  } catch(e) { d2aScore = 0; d2aCtx = 'Data unavailable'; }
+
+  // --- 2b: Town Halls & R&R (10 pts) ---
+  var d2bScore = 0, d2bCtx = '';
+  try {
+    var events = siteVisits.filter(function(sv){
+      return (sv.visit_type==='Town Hall'||sv.visit_type==='R&R') && sv.region===region;
+    }).length;
+    d2bScore = events >= 2 ? 10 : events === 1 ? 5 : 0;
+    d2bCtx = events+' Town Hall/R&R events · target 2';
+  } catch(e) { d2bScore = 0; d2bCtx = 'Data unavailable'; }
+
+  // --- 3a: ER Cases Documented (10 pts) ---
+  var d3aScore = 0, d3aCtx = '';
+  try {
+    var submitted = submissions.filter(function(s){
+      return (s.submitter_name||s.name||'').toLowerCase().trim() === hrbpName.toLowerCase().trim();
+    });
+    var erEntries = submitted.filter(function(s){
+      var d = s.hrbp_discipline;
+      if (Array.isArray(d)) return d.filter(function(x){ return x && String(x).toLowerCase()!=='nil' && String(x).trim()!==''; }).length > 0;
+      return d && String(d).toLowerCase()!=='nil' && String(d).trim()!=='';
+    }).length;
+    d3aScore = erEntries >= 2 ? 10 : erEntries === 1 ? 5 : (submitted.length > 0 ? 2 : 0);
+    d3aCtx = erEntries+' weeks with ER entries logged';
+  } catch(e) { d3aScore = 0; d3aCtx = 'Data unavailable'; }
+
+  // --- 3b: Retention Interventions (10 pts) ---
+  var d3bScore = 0, d3bCtx = '';
+  try {
+    var submitted3b = submissions.filter(function(s){
+      return (s.submitter_name||s.name||'').toLowerCase().trim() === hrbpName.toLowerCase().trim();
+    });
+    var retEntries = submitted3b.filter(function(s){
+      var d = s.hrbp_retention;
+      if (Array.isArray(d)) return d.filter(function(x){ return x && String(x).toLowerCase()!=='nil' && String(x).trim()!==''; }).length > 0;
+      return d && String(d).toLowerCase()!=='nil' && String(d).trim()!=='';
+    }).length;
+    d3bScore = retEntries >= 2 ? 10 : retEntries === 1 ? 5 : (submitted3b.length > 0 ? 2 : 0);
+    d3bCtx = retEntries+' weeks with retention entries logged';
+  } catch(e) { d3bScore = 0; d3bCtx = 'Data unavailable'; }
+
+  // --- 4a & 4b: Geo-punch % and WFH/OD % ---
+  var d4aScore = null, d4aCtx = 'N/A — no OD data';
+  var d4bScore = null, d4bCtx = 'N/A — no OD data';
+  try {
+    var nameParts = hrbpName.toLowerCase().split(' ');
+    var firstName = nameParts[0]||'';
+    var rows = odData.filter(function(r){
+      var rn = (r.name||'').toLowerCase().trim();
+      return rn === hrbpName.toLowerCase().trim() || (firstName && rn.indexOf(firstName) !== -1);
+    });
+    if (rows.length > 0) {
+      var geoPct = rows.reduce(function(s,r){ return s+(r.geo_pct||r.geo_tagged_pct||0); },0)/rows.length;
+      d4aScore = Math.min(10, Math.round(geoPct/95*10));
+      d4aCtx = geoPct.toFixed(0)+'% geo-tagged · target >95%';
+      var wfhPct = rows.reduce(function(s,r){ return s+(r.wfh_pct||r.od_pct||0); },0)/rows.length;
+      d4bScore = wfhPct <= 5 ? 5 : wfhPct <= 10 ? 3 : 0;
+      d4bCtx = wfhPct.toFixed(0)+'% WFH/OD · target <5%';
+    }
+  } catch(e) { /* leave N/A */ }
+
+  // --- 5: Submission Rate (10 pts) ---
+  var d5Score = 0, d5Ctx = '';
+  try {
+    var hrbpSubs = submissions.filter(function(s){
+      return (s.submitter_name||s.name||'').toLowerCase().trim() === hrbpName.toLowerCase().trim();
+    });
+    var submittedWeeks = last4Weeks.filter(function(wk){
+      return hrbpSubs.some(function(s){ return s.week_key===wk; });
+    }).length;
+    d5Score = submittedWeeks===4 ? 10 : submittedWeeks===3 ? 7 : submittedWeeks===2 ? 4 : 0;
+    d5Ctx = submittedWeeks+'/4 weeks submitted';
+  } catch(e) { d5Score = 0; d5Ctx = 'Data unavailable'; }
+
+  // --- Total ---
+  var nonNullScores = [d1aScore, d1bScore, d2aScore, d2bScore, d3aScore, d3bScore, d5Score];
+  var maxBase = 15+15+15+10+10+10+10; // 85 without D4
+  var d4IsNA = (d4aScore === null && d4bScore === null);
+  if (!d4IsNA) {
+    nonNullScores.push(d4aScore||0);
+    nonNullScores.push(d4bScore||0);
+    maxBase = 100;
+  }
+  var rawSum = nonNullScores.reduce(function(a,b){ return a+b; }, 0);
+  var total = d4IsNA ? Math.round(rawSum/85*100) : rawSum;
+
+  return {
+    total: total,
+    d1a: {score:d1aScore, max:15, label:'Regional Attrition',       context:d1aCtx},
+    d1b: {score:d1bScore, max:15, label:'Absenteeism Resolution',    context:d1bCtx},
+    d2a: {score:d2aScore, max:15, label:'Plat/Gold Visits',          context:d2aCtx},
+    d2b: {score:d2bScore, max:10, label:'Town Halls & R&R',          context:d2bCtx},
+    d3a: {score:d3aScore, max:10, label:'ER Cases Documented',       context:d3aCtx},
+    d3b: {score:d3bScore, max:10, label:'Retention Interventions',   context:d3bCtx},
+    d4a: {score:d4aScore, max:10, label:'Geo-punch %',               context:d4aCtx},
+    d4b: {score:d4bScore, max:5,  label:'WFH/OD %',                  context:d4bCtx},
+    d5:  {score:d5Score,  max:10, label:'Submission Rate',            context:d5Ctx},
+  };
+}
+
+function renderScorecardHTML(scores, last4Weeks) {
+  var weekRange = (last4Weeks&&last4Weeks.length)
+    ? last4Weeks[0]+' – '+last4Weeks[last4Weeks.length-1]
+    : '';
+  var regionColors = {East:'#60a5fa',North:'#34d399',South:'#f59e0b',West:'#a78bfa'};
+  var groups = [
+    {label:'Workforce Stability', dims:['d1a','d1b']},
+    {label:'Field Engagement',    dims:['d2a','d2b']},
+    {label:'ER Quality',          dims:['d3a','d3b']},
+    {label:'OD Compliance',       dims:['d4a','d4b']},
+    {label:'Reporting',           dims:['d5']},
+  ];
+
+  var html = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:18px">'
+    +'<div style="padding:10px 14px;border-bottom:1px solid var(--border)">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--green)">HRBP Impact Scorecard — Rolling 4 Weeks</div>'
+    +'<div style="font-size:10px;color:var(--muted2)">'+esc(weekRange)+'</div>'
+    +'</div>';
+
+  scores.forEach(function(item, idx) {
+    var h   = item.hrbp;
+    var sc  = item.score;
+    var tot = sc.total;
+    var badgeColor = tot >= 75 ? '#22c55e' : tot >= 50 ? '#f59e0b' : '#ef4444';
+    var barColor   = tot >= 75 ? '#22c55e' : tot >= 50 ? '#f59e0b' : '#ef4444';
+    var regColor   = regionColors[h.region]||'#94a3b8';
+
+    html += '<div style="border-bottom:1px solid var(--border)">'
+      +'<div onclick="hscToggle('+idx+')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none">'
+      +'<div style="flex:1;font-size:13px;font-weight:600;color:var(--text)">'+esc(h.name)+'</div>'
+      +'<span style="font-size:9px;padding:1px 8px;border-radius:10px;font-weight:700;background:'+regColor+'22;color:'+regColor+'">'+esc(h.region)+'</span>'
+      +'<span style="font-size:13px;font-weight:700;padding:2px 10px;border-radius:8px;background:'+badgeColor+'22;color:'+badgeColor+'">'+tot+'/100</span>'
+      +'<span style="font-size:11px;color:var(--muted)">&#9660;</span>'
+      +'</div>'
+      +'<div style="padding:0 14px 8px;height:4px;background:var(--surface3);margin:0 14px 8px">'
+      +'<div style="height:100%;width:'+Math.min(100,tot)+'%;background:'+barColor+';border-radius:2px;transition:width .4s"></div>'
+      +'</div>'
+      +'<div id="hsc_'+idx+'_det" style="display:none;padding:0 14px 12px">';
+
+    groups.forEach(function(grp) {
+      html += '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);margin:8px 0 4px">'+esc(grp.label)+'</div>';
+      grp.dims.forEach(function(dk) {
+        var dim = sc[dk];
+        if (!dim) return;
+        var isNA  = dim.score === null;
+        var score = isNA ? 0 : dim.score;
+        var pct   = dim.max > 0 ? Math.round(score/dim.max*100) : 0;
+        var dc    = pct >= 75 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+          +'<div style="width:130px;font-size:10px;color:var(--text);flex-shrink:0">'+esc(dim.label)+'</div>'
+          +'<div style="width:42px;font-family:DM_Mono,monospace;font-size:10px;font-weight:600;color:'+(isNA?'var(--muted)':dc)+';text-align:right;flex-shrink:0">'+(isNA?'N/A':score+'/'+dim.max)+'</div>'
+          +'<div style="flex:1;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">'
+          +(isNA?'':'<div style="height:100%;width:'+pct+'%;background:'+dc+';border-radius:3px"></div>')
+          +'</div>'
+          +'<div style="font-size:9px;color:var(--muted2);min-width:150px">'+esc(dim.context||'')+'</div>'
+          +'</div>';
+      });
+    });
+
+    html += '</div></div>';
+  });
+
+  html += '</div>'
+    +'<script>window.hscToggle=function(n){var d=document.getElementById("hsc_"+n+"_det");if(d)d.style.display=d.style.display==="none"?"block":"none";}<\/script>';
+  return html;
+}
+
+async function renderHRBPScorecardIntoDOM() {
+  var el = document.getElementById('hrbp-scorecard-panel');
+  if (!el) return;
+
+  var role = (_sbRole&&_sbRole.role)||'';
+  if (role !== 'admin' && role !== 'executive') { el.style.display='none'; return; }
+
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Computing HRBP scorecards…</div>';
+
+  var wkKeys = Object.keys(WEEKS_DATA||{}).sort();
+  var last4  = wkKeys.slice(-4);
+
+  var submissions = [];
+  try {
+    var res = await _sb.from('weekly_submissions').select('*').in('week_key', last4).eq('function_type','hrbp');
+    if (!res.error) submissions = res.data||[];
+  } catch(e) { console.warn('[scorecard] submissions fetch failed', e); }
+
+  // Pre-compute company attrition
+  var wAttr = (WI&&WI.attrition)||{};
+  var MONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var curMon = new Date().getMonth();
+  var dynMons2 = [];
+  for (var mi=0; mi<12; mi++) {
+    var midx=(curMon-1-mi+12)%12;
+    var mn=MONS[midx];
+    if (wAttr[mn]&&(wAttr[mn].exits||0)>0) dynMons2.unshift(mn);
+    if (dynMons2.length>=3) break;
+  }
+  if (!dynMons2.length) for (var mi2=0; mi2<3; mi2++) dynMons2.unshift(MONS[(curMon-1-mi2+12)%12]);
+  var totalExits2 = dynMons2.reduce(function(s,m){ return s+((wAttr[m]&&wAttr[m].exits)||0); },0);
+  var fhc2 = (WI&&(WI.active_hc_current||WI.active_hc))||2800;
+  var avgHC2 = (function(){
+    var s=0,c=0;
+    dynMons2.forEach(function(m){ s+=((wAttr[m]&&wAttr[m].active_hc>0)?wAttr[m].active_hc:fhc2); c++; });
+    return c>0?(s/c)||1:fhc2||1;
+  })();
+  var companyAttrRate2 = totalExits2>0 ? totalExits2/avgHC2*(12/dynMons2.length)*100 : 0;
+
+  // Fetch site visits for all 4 weeks (not just current week in _hrbpSVCache)
+  var allSiteVisits = [];
+  try {
+    var svRes4 = await _sb.from('hrbp_site_visits').select('*').in('week_key', last4).order('visit_date',{ascending:false});
+    if (!svRes4.error) allSiteVisits = svRes4.data||[];
+  } catch(e) { allSiteVisits = _hrbpSVCache||[]; }
+
+  var sharedData = {
+    wi:             WI||{},
+    absentCases:    _absentCases||[],
+    siteVisits:     allSiteVisits,
+    submissions:    submissions,
+    odData:         (typeof CMS_OD_DATA!=='undefined'?CMS_OD_DATA:null)||[],
+    last4Weeks:     last4,
+    companyAttrRate:companyAttrRate2,
+    dynMons:        dynMons2,
+  };
+
+  var scores = HRBP_ROSTER.map(function(h) {
+    return {hrbp:h, score:computeHRBPScore(h.name, h.region, sharedData)};
+  }).sort(function(a,b){ return b.score.total - a.score.total; });
+
+  el.innerHTML = renderScorecardHTML(scores, last4);
 }
 
 // ── JOURNEY PLAN MODAL FUNCTIONS ────────────────────────────────────────────
@@ -2252,6 +2565,8 @@ const _allConnects=w.hrbp_connects||[];
     </div>
 
     ${buildJourneyPlanPanel()}
+
+    <div id="hrbp-scorecard-panel" style="margin-bottom:18px"></div>
 
     ${(w.hrbp_case_entries&&w.hrbp_case_entries.length)?`<div style="margin-bottom:16px">`+`<div class="section-label">ER Case Entries</div>`+w.hrbp_case_entries.map(function(c){const sev=c.severity||'Medium';const sevCol=sev==='Critical'?'var(--red)':sev==='High'?'var(--amber)':'var(--muted)';return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${sevCol};border-radius:8px;padding:10px 14px;margin-bottom:8px">`+`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">`+`<div style="font-size:12px;font-weight:600;color:var(--text)">${esc(c.employee||'')} &mdash; ${esc(c.account||'')}</div>`+`<div style="display:flex;gap:5px">`+`<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(148,163,184,.1);color:var(--muted);font-weight:600">${esc(c.caseType||'')}</span>`+`<span style="font-size:9px;padding:1px 7px;border-radius:10px;font-weight:600;color:${sevCol};background:${sevCol}18">${esc(sev)}</span>`+`</div></div>`+`<div style="font-size:11px;color:var(--muted);line-height:1.5">${esc(trim(c.description||'',200))}</div>`+`<div style="font-size:10px;color:var(--muted2);margin-top:3px">${esc(c.by||'')} ${c.region?rtag(c.region):''}</div>`+`</div>`;}).join('')+`</div>`:''}
     <div class="section-label">Employee Relations & Retention</div>
