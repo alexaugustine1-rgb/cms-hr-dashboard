@@ -8566,8 +8566,8 @@ async function saveATEUpdate(id, uniqueId) {
 }
 
 // ── ATE Upload Parser (called from processEmployeeMaster) ─────────────────
-async function processEmployeeMaster(file) {
-  var logEl = document.getElementById('uploadLog');
+async function processEmployeeMaster(wb) {
+  var logEl = document.getElementById('parseLog');
   function log(msg, type) {
     if (!logEl) return;
     var c = type==='ok'?'var(--green)':type==='err'?'var(--red)':'var(--muted)';
@@ -8575,8 +8575,6 @@ async function processEmployeeMaster(file) {
   }
   log('Reading Super Employee Master…');
   try {
-    var ab = await file.arrayBuffer();
-    var wb = XLSX.read(ab, {type:'array', cellDates:true});
     var ws = wb.Sheets[wb.SheetNames[0]];
     var rows = XLSX.utils.sheet_to_json(ws, {defval:''});
     log('Rows read: ' + rows.length);
