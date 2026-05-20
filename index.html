@@ -4246,14 +4246,11 @@ async function processEsep(wb) {
   };
   const { error } = await _sb.from('data_uploads').upsert(payload, { onConflict: 'data_type' });
   if (error) {
-    log('Parsed successfully. To apply to dashboard: update WI.attrition with the region data above.', 'ok');
+    log('Could not save snapshot to database: ' + error.message, 'err');
+    log('Attrition summary (not persisted): ' + JSON.stringify(attrition), 'info');
   } else {
-    log('eSep attrition data saved. Run the weekly data refresh to update the dashboard.', 'ok');
+    log('eSep attrition snapshot saved ✓', 'ok');
   }
-
-  // Show the JSON they need to paste
-  log('Copy this into WI.attrition in your Python refresh script:', 'ok');
-  log(JSON.stringify(attrition, null, 2), 'info');
 }
 
 // ── EXPECTED JOINERS TAB ─────────────────────────────────────────────────────
@@ -6225,8 +6222,8 @@ async function processMaster(wb) {
   log('Account-region combinations: '+Object.keys(summary).length,'ok');
   const payload={data_type:'employee_master',uploaded_at:new Date().toISOString(),total_active:activeCount,summary,raw_count:rows.length};
   const{error}=await _sb.from('data_uploads').upsert(payload,{onConflict:'data_type'});
-  if(error){log('Parsed successfully — '+activeCount+' active employees. (Run data_uploads table setup to persist.)','ok');}
-  else{log('Employee master saved to database','ok');}
+  if(error){log('Could not save to database: '+error.message,'err');log('Parsed locally — '+activeCount+' active employees.','ok');}
+  else{log('Employee master saved ✓ — '+activeCount+' active employees','ok');}
 }
 
 // ── CTC MASTER PARSER ─────────────────────────────────────────────────────
@@ -7240,7 +7237,7 @@ async function processReqTAT(wb) {
   const dataRows = rawRows.slice(headerRow+1).filter(r=>r[0]);
   
   function hIdx(name) { return headers.findIndex(h=>h===name); }
-  const REF = new Date(2026,2,25);
+  const REF = new Date();
   
   function reqAge(v) {
     if (!v) return 0;
