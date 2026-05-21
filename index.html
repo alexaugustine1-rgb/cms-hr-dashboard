@@ -5798,7 +5798,8 @@ function renderContractSection() {
   var region = _sbRole ? (_sbRole.region||'All') : 'All';
   var isPan  = role==='admin'||role==='executive'||fnType==='hrops'||fnType==='payroll'||region==='Pan India'||region==='All';
 
-  var data = _cwData;
+  // Exclude ATE type — they are tracked in the dedicated ATE Tracker section above
+  var data = _cwData.filter(function(r){ return r.emp_type !== 'ATE'; });
 
   // Apply filters
   var _cwFilter    = document.getElementById('cw-filter-type')    ? document.getElementById('cw-filter-type').value    : 'All';
@@ -5852,6 +5853,7 @@ function renderContractSection() {
 
     return '<tr style="border-bottom:1px solid var(--border)">'
       +'<td style="padding:7px 10px;font-size:11px;color:var(--text)">'+esc(r.name)+'</td>'
+      +'<td style="padding:7px 8px;font-size:10px;color:var(--muted2);font-family:DM Mono,monospace">'+esc(r.emp_code||'—')+'</td>'
       +'<td style="padding:7px 8px">'+typeTag(r.emp_type)+'</td>'
       +'<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+esc(r.region)+'</td>'
       +'<td style="padding:7px 8px;font-size:10px;color:var(--muted)">'+esc((r.customer||'').substring(0,25))+'</td>'
@@ -5870,7 +5872,10 @@ function renderContractSection() {
 
   el.innerHTML =
     '<div style="padding:24px 28px">'
-    +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:16px">Contract Workforce — ATE, FTC, Consultants &amp; Contract</div>'
+    +'<div style="display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:16px">'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:20px;letter-spacing:1px;color:var(--text)">Contract Workforce</div>'
+      +'<div style="font-size:11px;color:var(--muted)">FTC &nbsp;·&nbsp; Consultants &nbsp;·&nbsp; Contract &nbsp;·&nbsp; <span style="color:var(--muted2);font-style:italic">ATE tracked separately above</span></div>'
+    +'</div>'
 
     // Alert cards
     +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'
@@ -5897,7 +5902,7 @@ function renderContractSection() {
     // Filters
     +'<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
     +'<select id="cw-filter-type" onchange="renderContractSection()" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
-    +'<option>All</option><option>ATE</option><option>FTC</option><option>Consultant</option><option>CONTRACT</option>'
+    +'<option>All</option><option>FTC</option><option>Consultant</option><option>CONTRACT</option>'
     +'</select>'
     +'<select id="cw-filter-alert" onchange="renderContractSection()" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
     +'<option>All</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="ok">OK</option>'
@@ -5913,7 +5918,7 @@ function renderContractSection() {
     +'<div style="overflow-x:auto">'
     +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
     +'<thead><tr style="background:var(--surface3)">'
-    +['Name','Type','Region','Customer','Tenure','Contract End','Superannuation','Alert','Action','Notes'].map(function(h){
+    +['Name','Emp Code','Type','Region','Customer','Tenure','Contract End','Superannuation','Alert','Action','Notes'].map(function(h){
       return '<th style="padding:7px 8px;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);text-align:left">'+h+'</th>';
     }).join('')
     +'</tr></thead>'
@@ -8100,7 +8105,7 @@ function snavClick(id, el) {
   if(id==='ops' && typeof _sbUser !== 'undefined' && _sbUser && !_statRisksLoaded) { setTimeout(loadStatutoryRisks, 100); }
   if(id==='absenteeism' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadAbsentCases, 100); }
   if(id==='joiners' && typeof _sbUser !== 'undefined' && _sbUser && !_pjLoaded) { setTimeout(loadProspectiveJoiners, 100); }
-  if(id==='ate' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadATECases, 100); }
+  if(id==='ate' && typeof _sbUser !== 'undefined' && _sbUser && !_ateLoaded) { setTimeout(loadATECases, 100); }
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(renderActionCentre, 50); }
 }
 
@@ -8621,6 +8626,13 @@ function renderATETab(el) {
     +'</div></div>'
     +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Rows sorted by Training End Date (earliest first). Status updates save directly to database.</div>'
     +'</div>'
+    // Visual divider between ATE and Contract sections
+    +'<div style="margin:32px 0 0 0;border-top:2px solid var(--border);padding-top:24px">'
+      +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">'
+        +'<div style="background:var(--amber);color:#000;font-size:9px;font-weight:700;letter-spacing:1.5px;padding:3px 10px;border-radius:4px;text-transform:uppercase">Contract Workforce</div>'
+        +'<div style="font-size:10px;color:var(--muted2)">FTC · Consultants · Contract employees — separate from ATE above</div>'
+      +'</div>'
+    +'</div>'
     +'<div id="cw-section"><div style="padding:40px;text-align:center;color:var(--muted)">Loading Contract Workforce…</div></div>';
   // Load contract workforce async
   setTimeout(loadContractWorkforce, 200);
@@ -8754,6 +8766,8 @@ async function processEmployeeMaster(wb) {
       if (error) { log('Batch error: ' + error.message, 'err'); errors++; }
     }
     if (!errors) {
+      // Set 'Active' for any newly inserted rows that have no status yet
+      await _sb.from('ate_tracker').update({status:'Active'}).is('status', null);
       log('ATE Tracker updated: ' + upsertRows.length + ' records ✓', 'ok');
       _ateLoaded = false;
       if (typeof renderATETab === 'function') {
