@@ -2476,8 +2476,8 @@ function renderHRBP(w, pw) {
     + '</div>';
 
   // ── HRBP leaderboard ─────────────────────────────────────────────────────
-  // Per-HRBP stats from the filtered pool (region only, not HRBP filter — shows all in selected region)
-  const _leaderPool = _hcR === 'All' ? _svAll : _svAll.filter(function(sv){ return sv.region === _hcR; });
+  // Leaderboard always shows ALL HRBPs pan-India; region filter only scopes the visit log below
+  const _leaderPool = _svAll;
   const _hrbpStats = {};
   _leaderPool.forEach(function(sv){
     const nm = sv.submitter_name || 'Unknown';
@@ -4960,6 +4960,8 @@ async function renderSubmitTab(mc){
   const statusHTML=_existingSub?'<span class="wform-status-badge wsb-submitted">✓ Submitted · '+(_existingSub.updated_at||'').substring(0,10)+'</span>':'<span class="wform-status-badge wsb-none">Not submitted yet</span>';
   mc.innerHTML='<div class="wform-wrap"><div class="wform-header"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report</div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">'+fn.icon+' '+fn.label+'</div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">'+displayName+(region?' · '+region:'')+'</span>'+statusHTML+'</div></div><div style="margin-bottom:20px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div><div class="wform-week-select">'+availWeeks.map(k=>'<button class="wform-week-btn'+(k===_formWeekKey?' active':'')+'" onclick="selectFormWeek(\''+k+'\')">'+(k===liveWkKey?'<b>❖ This Week</b><br><small>'+liveLabel+'</small>':'<b>'+(WEEK_NAMES[k]||k)+'</b><br><small>'+(WEEKS_DATA[k]&&WEEKS_DATA[k].label?WEEKS_DATA[k].label:'')+'</small>')+'</button>').join('')+'</div></div>'+buildFunctionSections(fnType)+'<div class="wform-section"><div class="wform-section-title">📸 Photos</div><div class="wform-row"><label>Upload photos (site visits, R&R, town halls, training)</label><div class="wform-photo-zone" id="formPhotoZone" ondragover="event.preventDefault();this.classList.add(\'drag\')" ondragleave="this.classList.remove(\'drag\')" ondrop="formPhotoDrop(event)"><input type="file" accept="image/*" multiple onchange="formPhotoAdd(this.files)"><div style="font-size:20px;margin-bottom:6px">📷</div><div style="font-size:13px;color:var(--muted)">Drop photos or click to browse</div></div><div class="wform-photo-preview" id="formPhotoPreview"></div></div></div><div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button class="wform-submit-btn" id="formSubmitBtn" onclick="submitWeeklyForm(\''+fnType+'\',\''+region+'\')">'+(_existingSub?'Update Submission':'Submit Report')+'</button>'+(_existingSub?'<span style="font-size:12px;color:var(--muted)">You can update until the week closes</span>':'')+'</div><div id="formSubmitStatus" style="margin-top:12px"></div></div>';
   setVisit(_visitYes);
+  // Default visit region selector to HRBP's profile region
+  (function(){ var ri=document.getElementById('visitRegionInput'); if(ri&&region) ri.value=region; })();
   // Inject week date banner
   (function(){
     var _wkLabel = (WEEKS_DATA[_formWeekKey]&&WEEKS_DATA[_formWeekKey].label)?WEEKS_DATA[_formWeekKey].label:(WEEK_LABELS&&WEEK_LABELS[_formWeekKey]?WEEK_LABELS[_formWeekKey]:getCurrentWeekLabel());
@@ -5310,6 +5312,10 @@ if(t==='hrbp'){
       +'<div style="flex:0 0 auto"><label style="font-size:10px;color:var(--muted2);display:block;margin-bottom:3px">Date</label>'
       +'<input type="date" id="visitDateInput" required style="padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;min-width:140px">'
       +'</div>'
+      +'<div style="flex:0 0 auto"><label style="font-size:10px;color:var(--muted2);display:block;margin-bottom:3px">Visit Region</label>'
+      +'<select id="visitRegionInput" style="padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;min-width:110px">'
+      +'<option value="North">North</option><option value="South">South</option><option value="East">East</option><option value="West">West</option>'
+      +'</select></div>'
       +'<div style="flex:0 0 auto"><label style="font-size:10px;color:var(--muted2);display:block;margin-bottom:3px">Type</label>'
       +'<select id="visitTypeInput" onchange="toggleRRFields(this.value)" style="padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;min-width:130px">'
       +'<option value="Connect">Employee Connect</option><option value="Town Hall">Town Hall</option>'
@@ -5504,7 +5510,7 @@ async function submitWeeklyForm(fnType,region){
         var rrMeta='[[RR]]'+JSON.stringify({venue:v.rr_venue||'',headcount:v.rr_headcount||'',feedback:v.rr_feedback||'',cost:v.rr_cost||''});
         notes=rrMeta+(notes?'\n'+notes:'');
       }
-      return{week_key:_formWeekKey,week_label:wkDt?wkDt.label:_formWeekKey,submitted_by:_sbUser.id,submitter_name:record.submitter_name,region:region||_sbRole.region||'',account_name:v.account,account_tier:v.tier,visit_date:v.date||new Date().toISOString().split('T')[0],visit_notes:notes,visit_type:v.visit_type||'Connect'};
+      return{week_key:_formWeekKey,week_label:wkDt?wkDt.label:_formWeekKey,submitted_by:_sbUser.id,submitter_name:record.submitter_name,region:v.region||region||_sbRole.region||'',account_name:v.account,account_tier:v.tier,visit_date:v.date||new Date().toISOString().split('T')[0],visit_notes:notes,visit_type:v.visit_type||'Connect'};
     });
     await _sb.from('hrbp_site_visits').insert(vRecs);
     _visitEntries=[];if(typeof renderVisitEntries==='function')renderVisitEntries();
@@ -6960,11 +6966,13 @@ function addVisitEntry(){
   var notesInp=document.getElementById('visitNotesInput');
   var typeSel=document.getElementById('visitTypeInput');
   var dateInp=document.getElementById('visitDateInput');
+  var regionInp=document.getElementById('visitRegionInput');
   var account=accSel?accSel.value:(accInp?accInp.value:'');
   if(!account){alert('Please select an account from the dropdown');return;}
   if(!dateInp||!dateInp.value){alert('Visit date is required');return;}
   var entry={account:account,tier:tierSel?tierSel.value:'Regular',
     date:dateInp.value,
+    region:regionInp?regionInp.value:'',
     notes:notesInp?notesInp.value:'',
     visit_type:typeSel?typeSel.value:'Connect'};
   if(entry.visit_type==='R&R'){
@@ -7056,6 +7064,7 @@ function renderVisitEntries(){
       +'<span style="font-size:12px;font-weight:500;color:var(--text)">'+esc(e.account)+'</span>'
       +'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;background:'+col+'20;color:'+col+'">'+esc(e.tier)+'</span>'
       +'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;background:var(--surface);border:1px solid var(--border);color:var(--muted)">'+esc(e.visit_type||'Connect')+'</span>'
+      +(e.region?'<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;background:rgba(96,165,250,.12);color:#60a5fa">'+esc(e.region)+'</span>':'')
       +'<span style="font-size:10px;color:var(--muted2);font-family:DM Mono,monospace">'+dateStr+'</span>'
       +'</div>'
       +(e.notes?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+esc(e.notes)+'</div>':'')
