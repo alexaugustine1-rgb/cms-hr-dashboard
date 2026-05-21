@@ -7101,12 +7101,21 @@ async function processCandidate(wb) {
     WI.ta_monthly = Object.assign({}, WI.ta_monthly||{}, ta_monthly_new);
   }
 
+  const _candAsOf = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
   if (typeof TA_SUMMARY !== 'undefined') {
     TA_SUMMARY.total_pipeline = rows.length;
     TA_SUMMARY.total_joined_ytd = totalJoined;
     TA_SUMMARY.mar_joined = marJoined;
-    TA_SUMMARY.cand_as_of = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    TA_SUMMARY.cand_as_of = _candAsOf;
   }
+  // Persist candidate summary fields so they survive page reload
+  try {
+    await _sb.from('data_cache').upsert({
+      id:'ta_cand_summary',
+      data:{cand_as_of:_candAsOf, mar_joined:marJoined, total_pipeline:rows.length, total_joined_ytd:totalJoined},
+      row_count:1, uploaded_at:new Date().toISOString()
+    },{onConflict:'id'});
+  } catch(e){ console.warn('[processCandidate] summary persist:',e.message); }
 // ADDITION to processCandidate — gender pipeline tracking
 // Insert after the TA_SUMMARY update block
 
@@ -8202,7 +8211,17 @@ async function sbBoot(user){
           }
           console.log('[sbBoot] OD monthly data loaded'); }
         if (row.id==='wfh'         && row.row_count>0) { CMS_WFH_DATA   = row.data; console.log('[sbBoot] CMS_WFH_DATA:',row.row_count,'rows'); }
-        if (row.id==='ta_reqs'     && row.row_count>0) { TA_ACTIVE_REQS = row.data; console.log('[sbBoot] TA_ACTIVE_REQS:',row.row_count,'rows'); }
+        if (row.id==='ta_reqs' && row.row_count>0) {
+          TA_ACTIVE_REQS = row.data;
+          // Reconstruct TA_SUMMARY stats from cached active-req data
+          TA_SUMMARY.total_active = row.data.length;
+          TA_SUMMARY.critical_45 = row.data.filter(function(r){return r.tat>45;}).length;
+          TA_SUMMARY.plat_gold_open = row.data.filter(function(r){return r.tier==='Platinum'||r.tier==='Gold';}).length;
+          TA_SUMMARY.unassigned = row.data.filter(function(r){return !r.ta_recruiter||r.ta_recruiter.trim()==='';}).length;
+          if (row.uploaded_at) { var _tatD=new Date(row.uploaded_at); if(!isNaN(_tatD)) TA_SUMMARY.tat_as_of=_tatD.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }
+          console.log('[sbBoot] TA_ACTIVE_REQS:',row.row_count,'rows');
+        }
+        if (row.id==='ta_cand_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY candidate fields restored'); }
         if (row.id==='summary' && row.data && row.data.total_res) { Object.assign(CMS_SUMMARY, row.data); console.log('[sbBoot] CMS_SUMMARY loaded from cache'); }
       });
     }
