@@ -8746,15 +8746,29 @@ async function processEmployeeMaster(wb) {
 
     // ── Helpers ──────────────────────────────────────────────────────────
     function parseDate(v) {
-      if (!v) return null;
-      if (v instanceof Date) return v.toISOString().substring(0,10);
+      if (v === null || v === undefined || v === '') return null;
+      // JS Date object (e.g. when cellDates:true used)
+      if (v instanceof Date) {
+        if (isNaN(v)) return null;
+        return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
+      }
+      // Excel serial number — ZingHR exports dates as raw serials (e.g. 45831 = Jun 2025)
+      // Range 18000–110000 covers years ~1949 to ~2200 safely
+      var n = Number(v);
+      if (!isNaN(n) && n > 18000 && n < 110000) {
+        // Excel epoch: Dec 30 1899 UTC (handles Excel's 1900 leap-year bug)
+        var ed = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000);
+        return ed.getUTCFullYear()+'-'+String(ed.getUTCMonth()+1).padStart(2,'0')+'-'+String(ed.getUTCDate()).padStart(2,'0');
+      }
       var s = String(v).trim();
+      if (!s) return null;
+      // DD/MM/YYYY or DD-MM-YYYY
       var m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
       if (m) {
         var yr = m[3].length===2 ? '20'+m[3] : m[3];
         return yr+'-'+m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0');
       }
-      try { var d=new Date(s); if(!isNaN(d)) return d.toISOString().substring(0,10); } catch(e){}
+      try { var d=new Date(s); if(!isNaN(d)) return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); } catch(e){}
       return null;
     }
     function addDays(dateStr, days) {
@@ -8794,17 +8808,25 @@ async function processEmployeeMaster(wb) {
       return null; // skip other grades (FTE, etc.)
     }
     function getCust(r) {
-      // Try dedicated customer name columns first
-      var direct = String(r['CustomerName']||r['Customer Name']||'').trim();
-      if (direct) return direct;
-      // CustomerNameRoleandLocation format: "CUSTOMER NAME - Role - Level - Location"
-      var full = String(r['CustomerNameRoleandLocation']||'').trim();
-      if (!full) return '';
-      // Split on ' - ' (space-hyphen-space) to avoid splitting hyphenated customer names
-      var parts = full.split(' - ');
-      if (parts.length > 1) return parts[0].trim();
-      // Fallback: split on plain hyphen
-      return full.split('-')[0].trim();
+      // Try known exact column names first
+      var known = ['CustomerName','Customer Name','CustomerNameRoleandLocation'];
+      for (var _ki=0; _ki<known.length; _ki++) {
+        var _v = String(r[known[_ki]]||'').trim();
+        if (_v) {
+          // Format: "CUSTOMER NAME - Role - Level - Location" — split on ' - '
+          var _p = _v.split(' - ');
+          return (_p.length > 1 ? _p[0] : _v.split('-')[0]).trim();
+        }
+      }
+      // Fallback: scan all keys for any column containing 'customer' (case-insensitive)
+      for (var _k in r) {
+        if (_k.toLowerCase().indexOf('customer') >= 0 && String(r[_k]).trim()) {
+          var _fv = String(r[_k]).trim();
+          var _fp = _fv.split(' - ');
+          return (_fp.length > 1 ? _fp[0] : _fv.split('-')[0]).trim();
+        }
+      }
+      return '';
     }
 
     // ── Classify rows ─────────────────────────────────────────────────────
