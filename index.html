@@ -1030,8 +1030,9 @@ function renderOverview(w, pw) {
   }
   if (!mJoiners && typeof _prospectiveJoiners !== 'undefined' && _prospectiveJoiners.length && w.from_label && w.to_label) {
     try {
-      var _wFrom = new Date(w.from_label + ' 2026');
-      var _wTo   = new Date(w.to_label   + ' 2026');
+      var _wYear = new Date().getFullYear();
+      var _wFrom = new Date(w.from_label + ' ' + _wYear);
+      var _wTo   = new Date(w.to_label   + ' ' + _wYear);
       if (!isNaN(_wFrom) && !isNaN(_wTo)) {
         mJoiners = _prospectiveJoiners.filter(function(j){
           var d = new Date(j.doj);
@@ -3034,7 +3035,7 @@ function renderWorkforce() {
   }
 
   // ── TA SOURCING ──────────────────────────────────────────────────────
-  o+='<div class="wi-section-title">TA Activity &mdash; 2026</div>';
+  o+='<div class="wi-section-title">TA Activity &mdash; '+new Date().getFullYear()+'</div>';
   o+='<div class="wi-grid">';
   var taMons=Object.keys(W.ta_monthly||{}).sort();
   o+='<div class="wi-card" style="grid-column:1/3">';
@@ -3067,7 +3068,7 @@ function renderWorkforce() {
   o+='</div>';
 
   // ── PLATINUM & GOLD ACCOUNT ATTRITION ────────────────────────────────
-  o+='<div class="wi-section-title">Platinum &amp; Gold Account Attrition &mdash; Q1 2026</div>';
+  o+='<div class="wi-section-title">Platinum &amp; Gold Account Attrition &mdash; Q'+(Math.ceil((new Date().getMonth()+1)/3))+' '+new Date().getFullYear()+'</div>';
   var acctAttr = W.account_attrition||{};
   var acctList = Object.entries(acctAttr)
     .map(function(e){return Object.assign({name:e[0]},e[1]);})
@@ -7364,11 +7365,23 @@ async function processReqTAT(wb) {
   });
   log('TA Scorecard built: '+TA_SCORECARD.length+' recruiters','ok');
 
+  // Update CMS_SUMMARY req fields so buildRisks() reflects current data
+  if (typeof CMS_SUMMARY !== 'undefined') {
+    CMS_SUMMARY.total_reqs    = active.length;
+    CMS_SUMMARY.reqs_critical = active.filter(r=>r.tat>45).length;
+    CMS_SUMMARY.req_aging     = {'0-15':TA_AGING['0-15'],'16-30':TA_AGING['16-30'],'31-45':TA_AGING['31-45'],'46-60':TA_AGING['46-60'],'61-90':TA_AGING['61-90'],'90+':TA_AGING['90+']};
+  }
+
   try {
-    await _sb.from('data_cache').upsert({id:'ta_reqs',data:active,row_count:active.length,uploaded_at:new Date().toISOString()},{onConflict:'id'});
+    const _now = new Date().toISOString();
+    await _sb.from('data_cache').upsert([
+      {id:'ta_reqs',         data:active,                row_count:active.length,      uploaded_at:_now},
+      {id:'ta_scorecard',    data:TA_SCORECARD.slice(),  row_count:TA_SCORECARD.length, uploaded_at:_now},
+      {id:'ta_reqs_summary', data:{mar_closed:TA_SUMMARY.mar_closed, mar_fulfilled:TA_SUMMARY.mar_fulfilled, avg_closed_tat:TA_SUMMARY.avg_closed_tat||0}, row_count:1, uploaded_at:_now}
+    ],{onConflict:'id'});
   } catch(e){console.warn('[ReqTAT cache]',e.message);}
 
-  log('✓ Req TAT refreshed — '+active.length+' open reqs, '+closed.length+' March closures','ok');
+  log('✓ Req TAT refreshed — '+active.length+' open reqs, '+closed.length+' MTD closures','ok');
   if (typeof render === 'function') render();
   const el = document.getElementById('tab-tapipeline');
   if (el) el.innerHTML = renderTAPipeline();
@@ -8219,8 +8232,21 @@ async function sbBoot(user){
           TA_SUMMARY.plat_gold_open = row.data.filter(function(r){return r.tier==='Platinum'||r.tier==='Gold';}).length;
           TA_SUMMARY.unassigned = row.data.filter(function(r){return !r.ta_recruiter||r.ta_recruiter.trim()==='';}).length;
           if (row.uploaded_at) { var _tatD=new Date(row.uploaded_at); if(!isNaN(_tatD)) TA_SUMMARY.tat_as_of=_tatD.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}); }
+          // Recompute TA_AGING buckets from cached data
+          TA_AGING['0-15'] =row.data.filter(function(r){return r.tat<=15;}).length;
+          TA_AGING['16-30']=row.data.filter(function(r){return r.tat>15&&r.tat<=30;}).length;
+          TA_AGING['31-45']=row.data.filter(function(r){return r.tat>30&&r.tat<=45;}).length;
+          TA_AGING['46-60']=row.data.filter(function(r){return r.tat>45&&r.tat<=60;}).length;
+          TA_AGING['61-90']=row.data.filter(function(r){return r.tat>60&&r.tat<=90;}).length;
+          TA_AGING['90+']  =row.data.filter(function(r){return r.tat>90;}).length;
+          // Restore CMS_SUMMARY req fields
+          CMS_SUMMARY.total_reqs    = row.data.length;
+          CMS_SUMMARY.reqs_critical = row.data.filter(function(r){return r.tat>45;}).length;
+          CMS_SUMMARY.req_aging     = {'0-15':TA_AGING['0-15'],'16-30':TA_AGING['16-30'],'31-45':TA_AGING['31-45'],'46-60':TA_AGING['46-60'],'61-90':TA_AGING['61-90'],'90+':TA_AGING['90+']};
           console.log('[sbBoot] TA_ACTIVE_REQS:',row.row_count,'rows');
         }
+        if (row.id==='ta_scorecard'    && row.data) { TA_SCORECARD.length=0; row.data.forEach(function(r){TA_SCORECARD.push(r);}); console.log('[sbBoot] TA_SCORECARD:',row.data.length,'recruiters'); }
+        if (row.id==='ta_reqs_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY req summary restored'); }
         if (row.id==='ta_cand_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY candidate fields restored'); }
         if (row.id==='summary' && row.data && row.data.total_res) { Object.assign(CMS_SUMMARY, row.data); console.log('[sbBoot] CMS_SUMMARY loaded from cache'); }
       });
