@@ -8695,8 +8695,21 @@ async function processEmployeeMaster(wb) {
   log('Reading Super Employee Master…');
   try {
     var ws = wb.Sheets[wb.SheetNames[0]];
-    var rows = XLSX.utils.sheet_to_json(ws, {defval:''});
-    log('Rows read: ' + rows.length);
+    // File has a title row at row 1 — scan for the actual header row (contains 'Employee Code')
+    var raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    var hIdx = 0;
+    for (var _hi = 0; _hi < Math.min(10, raw.length); _hi++) {
+      if (raw[_hi].some(function(v){ return String(v).trim()==='Employee Code'||String(v).trim()==='EmployeeCode'; })) {
+        hIdx = _hi; break;
+      }
+    }
+    var _hdrs = raw[hIdx].map(function(h){ return String(h).trim(); });
+    var rows = raw.slice(hIdx+1).map(function(r){
+      var obj = {};
+      _hdrs.forEach(function(h,i){ if(h) obj[h] = (r[i]!==undefined&&r[i]!==null) ? r[i] : ''; });
+      return obj;
+    }).filter(function(r){ return String(r['Employee Code']||r['EmployeeCode']||'').trim(); });
+    log('Rows read: ' + rows.length + ' (header at row ' + (hIdx+1) + ')');
 
     // ── Helpers ──────────────────────────────────────────────────────────
     function parseDate(v) {
