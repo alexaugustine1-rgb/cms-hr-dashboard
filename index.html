@@ -6413,7 +6413,7 @@ function renderFnF() {
 
     <!-- Table -->
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">
-      <div style="display:grid;grid-template-columns:140px 1fr 70px 68px 60px 88px 90px 78px 180px 110px 36px;background:var(--surface3);border-bottom:1px solid var(--border);padding:10px 14px">
+      <div style="display:grid;grid-template-columns:140px 1fr 70px 68px 60px 88px 90px 78px 180px 110px;background:var(--surface3);border-bottom:1px solid var(--border);padding:10px 14px">
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Employee</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Customer</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Region</div>
@@ -6424,7 +6424,6 @@ function renderFnF() {
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Status</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--red)">Escalation Reason</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--red)">Flagged By</div>
-        <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">🚩</div>
       </div>
       ${data.length===0?'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>':
         data.map((r,i)=>{
@@ -6437,7 +6436,9 @@ function renderFnF() {
           const rowAmt     = fnfTotal(r);
           const amtBreakdown = [r.gratuity?'Grat: '+fmtCr(r.gratuity):'', r.leave_enc?'LvE: '+fmtCr(r.leave_enc):'', r.other?'Oth: '+fmtCr(r.other):''].filter(Boolean).join(' · ');
           const borderLeft = isPriority ? 'border-left:3px solid var(--red);' : '';
-          return `<div style="display:grid;grid-template-columns:140px 1fr 70px 68px 60px 88px 90px 78px 180px 110px 36px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:${rowBg};font-size:12px;${borderLeft}align-items:start">
+          const safeCode   = esc(r.emp_code);
+          const safeName   = esc(r.name).replace(/'/g,"\\'");
+          return `<div style="display:grid;grid-template-columns:140px 1fr 70px 68px 60px 88px 90px 78px 180px 110px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:${rowBg};font-size:12px;${borderLeft}align-items:start">
             <div>
               <div style="font-weight:500;color:var(--text)">${esc(r.name)}</div>
               <div style="font-size:10px;color:var(--muted2);margin-top:1px">${r.emp_code}</div>
@@ -6457,14 +6458,14 @@ function renderFnF() {
               <span style="font-size:10px;font-weight:600;color:${statusCol}">${esc(statusLabel)}</span>
               ${isPriority&&!pf?'<div style="font-size:9px;color:var(--red);margin-top:2px">⚑ Excel</div>':''}
             </div>
-            <div style="font-size:11px;color:var(--red);line-height:1.4;padding-right:6px">
-              ${pf ? esc(pf.remark) : '<span style="color:var(--muted2)">—</span>'}
+            <div style="font-size:11px;line-height:1.4;padding-right:6px">
+              ${pf
+                ? `<div style="color:var(--red)">${esc(pf.remark)}</div>
+                   <button onclick="fnfMarkPriority('${safeCode}','${safeName}')" title="Edit or remove flag" style="margin-top:4px;background:none;border:none;padding:0;font-size:10px;color:var(--muted2);cursor:pointer;text-decoration:underline">🚩 Edit flag</button>`
+                : (!r.paid ? `<button onclick="fnfMarkPriority('${safeCode}','${safeName}')" style="background:none;border:none;padding:0;font-size:11px;color:var(--muted2);cursor:pointer;opacity:.5" title="Flag as priority escalation">＋ Flag case</button>` : '')}
             </div>
             <div style="font-size:11px;color:var(--muted)">
-              ${pf ? `<div style="font-weight:500;color:var(--text)">${esc(pf.hrbp_name)}</div><div style="font-size:9px;color:var(--muted2);margin-top:2px">${pf.marked_at?new Date(pf.marked_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div>` : '<span style="color:var(--muted2)">—</span>'}
-            </div>
-            <div>
-              ${!r.paid ? `<button onclick="fnfMarkPriority('${esc(r.emp_code)}','${esc(r.name).replace(/'/g,"\\'")}'); event.stopPropagation()" title="${pf?'Edit/remove priority flag':'Flag as priority escalation'}" style="background:none;border:1px solid ${pf?'var(--red)':'var(--border)'};border-radius:6px;cursor:pointer;padding:4px 6px;font-size:13px;color:${pf?'var(--red)':'var(--muted2)'};line-height:1">🚩</button>` : ''}
+              ${pf ? `<div style="font-weight:500;color:var(--text)">${esc(pf.hrbp_name)}</div><div style="font-size:9px;color:var(--muted2);margin-top:2px">${pf.marked_at?new Date(pf.marked_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div>` : ''}
             </div>
           </div>`;
         }).join('')
