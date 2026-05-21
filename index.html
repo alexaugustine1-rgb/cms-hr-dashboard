@@ -2487,18 +2487,29 @@ function renderHRBP(w, pw) {
     if (!_hrbpStats[nm].last || sv.visit_date > _hrbpStats[nm].last) _hrbpStats[nm].last = sv.visit_date;
   });
   const _regionColors = {North:'#60a5fa',South:'#34d399',East:'#f59e0b',West:'#a78bfa'};
-  const _leaderboard = Object.keys(_hrbpStats).length
+  // Logged-in HRBP's display name for self-highlight
+  const _myName = (typeof _sbRole !== 'undefined' && _sbRole && _sbRole.display_name) ? _sbRole.display_name : '';
+  const _sortedLeader = Object.entries(_hrbpStats).sort(function(a,b){ return b[1].visits - a[1].visits; });
+  const _leaderboard = _sortedLeader.length
     ? '<div style="margin-bottom:16px">'
-      + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;color:var(--muted2);text-transform:uppercase;margin-bottom:8px">HRBP Visit Summary — All Time</div>'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;color:var(--muted2);text-transform:uppercase;margin-bottom:8px">HRBP Visit Leaderboard — All India</div>'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">'
-      + Object.entries(_hrbpStats).sort(function(a,b){ return b[1].visits - a[1].visits; }).map(function(e){
+      + _sortedLeader.map(function(e, idx){
           const nm = e[0], st = e[1];
           const rc = _regionColors[st.region] || '#94a3b8';
           const isActive = _hcH === nm;
+          const isSelf = _isHRBP && _myName && nm.toLowerCase().trim() === _myName.toLowerCase().trim();
+          const rank = idx + 1;
+          const rankEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '#'+rank;
           const lastFmt = st.last ? new Date(st.last+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '—';
-          return '<div onclick="_hrbpSVHRBP=\''+(isActive?'All':nm)+'\';render()" style="cursor:pointer;background:var(--surface2);border:1px solid '+(isActive?'var(--accent)':'var(--border)')+';border-left:3px solid '+rc+';border-radius:8px;padding:10px 12px;'+(isActive?'box-shadow:0 0 0 2px rgba(96,165,250,.25)':'')+'">'
+          const selfBorder = isSelf ? 'border:2px solid #34d399;box-shadow:0 0 0 3px rgba(52,211,153,.15);' : '';
+          return '<div onclick="_hrbpSVHRBP=\''+(isActive?'All':nm)+'\';render()" style="cursor:pointer;background:var(--surface2);'+(isSelf?'background:rgba(52,211,153,.05);':'')+selfBorder+(isSelf?'':'border:1px solid '+(isActive?'var(--accent)':'var(--border)')+';')+'border-left:3px solid '+rc+';border-radius:8px;padding:10px 12px;'+(isActive?'box-shadow:0 0 0 2px rgba(96,165,250,.25)':'')+'">'
             + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+            + '<div style="display:flex;align-items:center;gap:6px">'
+            + '<span style="font-size:13px;line-height:1">'+rankEmoji+'</span>'
             + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+esc(nm)+'</div>'
+            + (isSelf ? '<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:#34d39920;color:#34d399;font-weight:700;border:1px solid #34d39940">YOU</span>' : '')
+            + '</div>'
             + '<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:'+rc+'18;color:'+rc+';font-weight:600">'+esc(st.region)+'</span>'
             + '</div>'
             + '<div style="display:flex;gap:12px">'
