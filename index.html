@@ -2456,16 +2456,23 @@ function renderHRBP(w, pw) {
       }
     });
   const _hrbpDropdown = !_isHRBP && _hrbpNames.length > 1
-    ? '<select onchange="_hrbpSVHRBP=this.value;render()" style="padding:3px 8px;font-size:11px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:20px;color:var(--text);cursor:pointer">'
+    ? '<select onchange="_hrbpSVHRBP=this.value;render()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;min-width:160px">'
       + '<option value="All"' + (_hcH==='All'?' selected':'')+'>All HRBPs</option>'
       + _hrbpNames.map(function(n){ return '<option value="'+esc(n)+'"'+(_hcH===n?' selected':'')+'>'+esc(n)+'</option>'; }).join('')
       + '</select>'
     : '';
 
-  const _filterBar = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:10px">'
-    + '<span style="font-size:10px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap">Region:</span>'
+  const _filterBar = '<div style="margin-bottom:14px;padding:10px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:10px;display:flex;flex-direction:column;gap:8px">'
+    + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+    + '<span style="font-size:10px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;min-width:48px">Region:</span>'
     + '<div style="display:flex;gap:4px;flex-wrap:wrap">'+_regionTabsHtml+'</div>'
-    + (_hrbpDropdown ? '<span style="font-size:10px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;margin-left:8px;white-space:nowrap">HRBP:</span>'+_hrbpDropdown : '')
+    + '</div>'
+    + (_hrbpDropdown
+      ? '<div style="display:flex;align-items:center;gap:8px">'
+        + '<span style="font-size:10px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;min-width:48px">HRBP:</span>'
+        + _hrbpDropdown
+        + '</div>'
+      : '')
     + '</div>';
 
   // ── HRBP leaderboard ─────────────────────────────────────────────────────
