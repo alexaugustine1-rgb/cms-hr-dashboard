@@ -8765,10 +8765,11 @@ async function processEmployeeMaster(wb) {
     }
 
     // ── Classify rows ─────────────────────────────────────────────────────
-    // Valid active statuses in ZingHR Super Employee Master
+    // Filter by 'Employee Status' col (Existing/NewJoinee only — excludes FnF, Resigned, Hold etc.)
+    // Note: 'EmployeeStatus' (no space, col G) = Active/Inactive — different column, not used here
     var activeRows = rows.filter(function(r){
-      var es = String(r['EmployeeStatus']||r['Employee Status']||'').trim();
-      return es==='Existing' || es==='NewJoinee';
+      var es = String(r['Employee Status']||'').trim();
+      return es === 'Existing' || es === 'NewJoinee';
     });
 
     log('Active rows (Existing + NewJoinee): ' + activeRows.length);
