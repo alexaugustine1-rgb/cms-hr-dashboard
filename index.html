@@ -5806,16 +5806,19 @@ function renderContractSection() {
   var _cwAlertF    = document.getElementById('cw-filter-alert')   ? document.getElementById('cw-filter-alert').value   : 'All';
   var _cwRegionF   = document.getElementById('cw-filter-region')  ? document.getElementById('cw-filter-region').value  : 'All';
 
+  // Apply filters — type and alert first, then region (so stat cards reflect region filter too)
+  var _allNonAte = data.slice(); // all non-ATE before region filter, for context count
   if (_cwFilter  !== 'All') data = data.filter(function(r){return r.emp_type === _cwFilter;});
   if (_cwAlertF  !== 'All') data = data.filter(function(r){return r.alert_type === _cwAlertF;});
-  if (_cwRegionF !== 'All') data = data.filter(function(r){return r.region === _cwRegionF;});
+  if (_cwRegionF !== 'All') data = data.filter(function(r){return (r.region||'') === _cwRegionF;});
 
-  var total    = _cwData.length;
-  var critical = _cwData.filter(function(r){return r.alert_type==='critical';}).length;
-  var warning  = _cwData.filter(function(r){return r.alert_type==='warning';}).length;
-  var lwd_c    = _cwData.filter(function(r){return r.lwd_crossed;}).length;
-  var ret_c    = _cwData.filter(function(r){return r.past_superann;}).length;
-  var no_end   = _cwData.filter(function(r){return r.no_end_date;}).length;
+  // Stat cards reflect the currently filtered data (not all data)
+  var total    = data.length;
+  var critical = data.filter(function(r){return r.alert_type==='critical';}).length;
+  var warning  = data.filter(function(r){return r.alert_type==='warning';}).length;
+  var lwd_c    = data.filter(function(r){return r.lwd_crossed;}).length;
+  var ret_c    = data.filter(function(r){return r.past_superann;}).length;
+  var no_end   = data.filter(function(r){return r.no_end_date;}).length;
 
   var ACTIONS = ['Pending','Extend Contract','Convert to FTE','Initiate Retirement',
                  'Initiate Termination','Flag Data Error','Under Review'];
@@ -5846,7 +5849,14 @@ function renderContractSection() {
 
   // Table rows
   var rows = data.map(function(r) {
-    var dolStr = r.dol ? r.dol.substring(0,10)+' <span style="font-size:10px;color:'+(r.lwd_crossed?'var(--red)':'var(--muted)')+'">'+(r.days_to_dol!==null?(r.lwd_crossed?'('+Math.abs(r.days_to_dol)+'d past)':'('+r.days_to_dol+'d)'):'')+'</span>' : '<span style="color:var(--muted2)">Not set</span>';
+    // no_end_date = true means dol is a computed fallback (not from file)
+    var dolStr = r.dol
+      ? r.dol.substring(0,10)
+        + (r.no_end_date ? ' <span style="font-size:9px;color:var(--amber);font-style:italic">est.</span>' : '')
+        + ' <span style="font-size:10px;color:'+(r.lwd_crossed?'var(--red)':'var(--muted)')+'">'
+        + (r.days_to_dol!==null?(r.lwd_crossed?'('+Math.abs(r.days_to_dol)+'d past)':'('+r.days_to_dol+'d)'):'')
+        +'</span>'
+      : '<span style="color:var(--muted2)">Not set</span>';
     var saStr  = r.superann_date ? r.superann_date.substring(0,10)+' <span style="font-size:10px;color:var(--muted)">'+(r.age?'Age '+r.age:'')+'</span>' : '—';
     var acCol  = ACTION_COL[r.action_status] || 'var(--muted)';
     var acOpts = ACTIONS.map(function(a){return '<option value="'+a+'"'+(r.action_status===a?' selected':'')+'>'+a+'</option>';}).join('');
@@ -5911,7 +5921,7 @@ function renderContractSection() {
       '<select id="cw-filter-region" onchange="renderContractSection()" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
       +'<option>All</option><option>North</option><option>South</option><option>East</option><option>West</option>'
       +'</select>' : '')
-    +'<span style="font-size:11px;color:var(--muted);align-self:center">Showing '+data.length+' of '+total+'</span>'
+    +'<span style="font-size:11px;color:var(--muted);align-self:center">Showing '+data.length+' of '+_allNonAte.length+'</span>'
     +'</div>'
 
     // Table
@@ -8812,20 +8822,29 @@ async function processEmployeeMaster(wb) {
       var cwUpsert = cwRows.map(function(r){
         var empType = getEmpType(r);
         var doj     = parseDate(r['DOJ']||r['Date_Of_Joining']||r['Date of Joining']||'');
-        // ContractEndDate is primary; DOL (Date of Last Working) is fallback for contract end
-        var dol     = parseDate(r['ContractEndDate']||r['Contract End Date']||r['Contract_End_Date']||r['DOL']||r['LWD']||r['Last Working Day']||'');
+        // Actual contract end from file — ContractEndDate primary, DOL fallback
+        var actualDol = parseDate(r['ContractEndDate']||r['Contract End Date']||r['Contract_End_Date']||r['DOL']||r['LWD']||r['Last Working Day']||'');
         var dob     = parseDate(r['DateOfBirth']||r['Date of Birth']||r['DOB']||r['Date_of_Birth']||'');
         var cust    = getCust(r);
         var tyr     = tenureYrs(doj);
-        var ddol    = daysDiff(dol);
         // Use pre-computed Superannuation_date from file if available; else derive from DOB+58yrs
         var saDate  = parseDate(r['Superannuation_date']||r['Superannuation Date']||'') || addYears(dob, 58);
-        var dsa     = daysDiff(saDate);
-        var lwd_crossed  = dol ? ddol!==null&&ddol<0 : false;
+        // Fallback DOL: if not in file, use earlier of superannuation date or 31-Mar-2027
+        var _mar2027 = '2027-03-31';
+        var dol = actualDol;
+        if (!dol) {
+          if (saDate) { dol = saDate <= _mar2027 ? saDate : _mar2027; }
+          else        { dol = _mar2027; }
+        }
+        var ddol         = daysDiff(dol);
+        var dsa          = daysDiff(saDate);
+        // lwd_crossed only applies when there's an actual file date (not a computed fallback)
+        var lwd_crossed  = actualDol ? (ddol!==null&&ddol<0) : false;
         var past_sa      = saDate ? dsa!==null&&dsa<0 : false;
         var sa_6m        = saDate ? dsa!==null&&dsa>=0&&dsa<=180 : false;
         var ftc_risk     = empType==='FTC' && tyr!==null && tyr>=1.5;
-        var no_end_date  = !dol;
+        // no_end_date = true means ContractEndDate was genuinely blank in source (needs ZingHR update)
+        var no_end_date  = !actualDol;
         var exp_60d      = dol && ddol!==null && ddol>=0 && ddol<=60;
         var alertType    = (lwd_crossed||past_sa) ? 'critical'
                          : (sa_6m||ftc_risk||exp_60d) ? 'warning' : 'ok';
