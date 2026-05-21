@@ -8808,7 +8808,7 @@ async function processEmployeeMaster(wb) {
       return null; // skip other grades (FTE, etc.)
     }
     function getCust(r) {
-      // Try known exact column names first
+      // 1. Try known customer name columns
       var known = ['CustomerName','Customer Name','CustomerNameRoleandLocation'];
       for (var _ki=0; _ki<known.length; _ki++) {
         var _v = String(r[known[_ki]]||'').trim();
@@ -8818,7 +8818,7 @@ async function processEmployeeMaster(wb) {
           return (_p.length > 1 ? _p[0] : _v.split('-')[0]).trim();
         }
       }
-      // Fallback: scan all keys for any column containing 'customer' (case-insensitive)
+      // 2. Scan all keys for any column containing 'customer' (case-insensitive)
       for (var _k in r) {
         if (_k.toLowerCase().indexOf('customer') >= 0 && String(r[_k]).trim()) {
           var _fv = String(r[_k]).trim();
@@ -8826,6 +8826,11 @@ async function processEmployeeMaster(wb) {
           return (_fp.length > 1 ? _fp[0] : _fv.split('-')[0]).trim();
         }
       }
+      // 3. Fallback for CONTRACT/internal employees with no customer in ZingHR:
+      //    use Designation + SubLocation as a meaningful deployment descriptor
+      var _desig = String(r['Designation']||'').trim();
+      var _loc   = String(r['SubLocation']||r['Location']||r['City']||'').trim();
+      if (_desig || _loc) return [_desig, _loc].filter(Boolean).join(' · ');
       return '';
     }
 
