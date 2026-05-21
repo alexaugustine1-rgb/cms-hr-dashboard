@@ -6447,7 +6447,10 @@ function renderFnF() {
             <div style="color:var(--muted);padding-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.customer)}">${esc(r.customer)}</div>
             <div style="color:var(--muted)">${r.region}</div>
             <div style="color:var(--muted);font-size:11px">${r.dol}</div>
-            <div style="font-weight:600;color:${bandCol}">${r.days}</div>
+            <div>
+              <div style="font-weight:600;color:${bandCol}">${r.days}</div>
+              <div style="font-size:9px;color:var(--muted2);margin-top:1px">${r.paid&&r.pd_iso?'TAT':'waiting'}</div>
+            </div>
             <div>
               <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:${bandCol}20;color:${bandCol}">${BAND_LABEL[r.band]||r.band}</span>
             </div>
@@ -9730,19 +9733,45 @@ async function processFnFData(wb) {
     if (!v || v === 'None') return '';
     try { const d = new Date(String(v).split(' ')[0]); return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); } catch(e) { return ''; }
   };
+  // Returns ISO date string (YYYY-MM-DD) from raw Excel value, or '' if unparseable
+  const toISO = (v) => {
+    if (!v || v === 'None') return '';
+    try {
+      const raw = String(v).split(' ')[0];
+      const d = new Date(raw);
+      return isNaN(d) ? '' : d.toISOString().substring(0, 10);
+    } catch(e) { return ''; }
+  };
 
   log('Processing ' + rows.length + ' FnF records…', 'info');
 
   const newRows = rows.map(r => {
-    const status = g(r, 'Payment Status', 'Status');
-    const net    = parseFloat(String(g(r,'Net FnF Due','Net Salary','NetSalary')).replace(/,/g,'')) || 0;
-    const band   = g(r, 'Band');
+    const status   = g(r, 'Payment Status', 'Status');
+    const net      = parseFloat(String(g(r,'Net FnF Due','Net Salary','NetSalary')).replace(/,/g,'')) || 0;
+    const band     = g(r, 'Band');
+    const dolISO   = toISO(g(r,'DOL','DateOfLeaving','Relieving Date'));
+    const pdRaw    = g(r,'Payment Date','Date of Payment','Paid Date','Payment done case');
+    const pdClean  = (!pdRaw || ['None','Yes','No','Paid','Pending'].includes(pdRaw.trim())) ? '' : pdRaw;
+    const pdISO    = toISO(pdClean);
+    // Compute accurate days:
+    // Paid   → DOL to payment date (settlement TAT); fallback to Excel Days Count
+    // Pending → DOL to today
+    const calcDays = (function() {
+      if (!dolISO) return parseInt(g(r,'Days Count','DaysCount')) || 0;
+      const dolMs = new Date(dolISO).getTime();
+      if (status.trim() === 'Paid' && pdISO) {
+        return Math.max(0, Math.round((new Date(pdISO).getTime() - dolMs) / 86400000));
+      }
+      return Math.max(0, Math.round((Date.now() - dolMs) / 86400000));
+    })();
     return {
       emp_code:     g(r,'Employee code','EmployeeCode'),
       name:         g(r,'Employee Name','EmployeeName'),
       doj:          fmt(g(r,'DOJ','DateOfJoining')),
       dol:          fmt(g(r,'DOL','DateOfLeaving','Relieving Date')),
-      days:         parseInt(g(r,'Days Count','DaysCount')) || 0,
+      dol_iso:      dolISO,
+      days:         calcDays,
+      days_excel:   parseInt(g(r,'Days Count','DaysCount')) || 0,
       band:         band,
       band_order:   BORDER[band] || 0,
       gratuity:     parseFloat(String(g(r,'Gratuity')).replace(/,/g,'')) || 0,
@@ -9751,12 +9780,8 @@ async function processFnFData(wb) {
       net_salary:   net,
       status:       status,
       paid:         status.trim() === 'Paid',
-      payment_date: (function(){
-        var _pd = g(r,'Payment Date','Date of Payment','Paid Date','Payment done case');
-        if (!_pd || _pd === 'None' || _pd === 'Yes' || _pd === 'No' || _pd === 'Paid' || _pd === 'Pending') return '';
-        try { var _d = new Date(String(_pd).split(' ')[0]); return isNaN(_d)?'':_d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
-        catch(e) { return ''; }
-      })(),
+      payment_date: pdISO ? new Date(pdISO).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '',
+      pd_iso:       pdISO,
       region:       g(r,'Region'),
       billable:     g(r,'Billable/Non- Billable','Billable'),
       customer: (function(c){return (!c||c==='0'||c==='None')?'—':c;})(g(r,'Customer')),
