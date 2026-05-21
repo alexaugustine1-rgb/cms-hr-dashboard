@@ -6588,7 +6588,8 @@ function renderTAPipeline(){
   if(_taPosType!=='All') data=data.filter(function(r){return r.pos_type===_taPosType;});
   data.sort(function(a,b){return b.tat-a.tat;});
 
-  var CAND_DATE='26 Mar 2026', TAT_DATE='26 Mar 2026';
+  var TAT_DATE=(TA_SUMMARY&&TA_SUMMARY.tat_as_of)||'—';
+  var CAND_DATE=(TA_SUMMARY&&TA_SUMMARY.cand_as_of)||TAT_DATE||'—';
 
   function fbtn(v,active,fn){
     return '<button onclick="'+fn+'" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(active?700:500)+';border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'var(--accent)':'none')+';color:'+(active?'var(--bg)':'var(--muted)')+';cursor:pointer">'+v+'</button>';
@@ -6733,7 +6734,7 @@ function renderTAPipeline(){
       return'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
     }).join('')+'</div>'
     +(reqRows||'<div style="padding:32px;text-align:center;color:var(--muted)">No reqs match filters</div>')+'</div>'
-    +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:7px">Recruiter Scorecard — Sourced By attribution · as of 26 Mar 2026</div>'
+    +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:7px">Recruiter Scorecard — Sourced By attribution · as of '+TAT_DATE+'</div>'
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'
     +'<div style="display:grid;grid-template-columns:150px 50px 50px 65px 50px 55px 50px 50px 50px 55px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
     +['Recruiter','Active','Crit','BacklogAge','Plat/G','Pipeline','Joined','MTDJoin','FillSpd','Conv%'].map(function(h){
@@ -7043,7 +7044,7 @@ async function processCandidate(wb) {
       if (offerStatus === 'Accepted') stats[rec].offers++;
       if (hasECode) {
         stats[rec].joined++;
-        if (edate && edate.getMonth()===2 && edate.getFullYear()===2026) stats[rec].mar_joined++;
+        if (edate && edate.getMonth()===REF.getMonth() && edate.getFullYear()===REF.getFullYear()) stats[rec].mar_joined++;
       }
       if (['Rejected','Declined'].includes(offerStatus)) stats[rec].dropouts++;
       stats[rec].sources[source] = (stats[rec].sources[source]||0)+1;
@@ -7069,7 +7070,7 @@ async function processCandidate(wb) {
   const curYear = new Date().getFullYear();
   const marJoined = rows.filter(r=>{
     const d=parseEDate(r['ECode Creation Date']);
-    return d && d.getMonth()===2 && d.getFullYear()===curYear && ss(r['Employee Code']||'');
+    return d && d.getMonth()===REF.getMonth() && d.getFullYear()===REF.getFullYear() && ss(r['Employee Code']||'');
   }).length;
 
   // Build ta_monthly — sourced (pipeline), offered (Accepted), joined (ECode) per month
@@ -7104,6 +7105,7 @@ async function processCandidate(wb) {
     TA_SUMMARY.total_pipeline = rows.length;
     TA_SUMMARY.total_joined_ytd = totalJoined;
     TA_SUMMARY.mar_joined = marJoined;
+    TA_SUMMARY.cand_as_of = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
   }
 // ADDITION to processCandidate — gender pipeline tracking
 // Insert after the TA_SUMMARY update block
@@ -7208,7 +7210,7 @@ async function processCandidate(wb) {
   } else {
     log('No prospective joiners found — check Final DOJ column exists in file','info');
   }
-  log('✓ Candidate data refreshed — '+rows.length+' records, '+marJoined+' March joiners','ok');
+  log('✓ Candidate data refreshed — '+rows.length+' records, '+marJoined+' MTD joiners','ok');
   log('Refreshing TA Pipeline…','info');
   
   // Trigger re-render of TA pipeline tab if active
@@ -7258,6 +7260,10 @@ async function processReqTAT(wb) {
   }
   
   const active = [], closed = [];
+  const _nowRef = new Date();
+  const _MNAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const _curMonthStr = _MNAMES[_nowRef.getMonth()];
+  const _curYearStr  = String(_nowRef.getFullYear());
   for (const row of dataRows) {
     const status = String(row[hIdx('Status')]||'').trim();
     const age = reqAge(row[hIdx('Requisition Creation Date')]);
@@ -7284,7 +7290,7 @@ async function processReqTAT(wb) {
     if (status==='Approved') active.push(rec);
     else if (status==='Closed') {
       const cd = String(row[hIdx('Date Of Closing')]||'');
-      if (cd.includes('Mar') && cd.includes('2026')) {
+      if (cd.includes(_curMonthStr) && cd.includes(_curYearStr)) {
         rec.closed_tat = parseInt(row[hIdx('Closing Requisition TAT Day(s)')]||0)||0;
         closed.push(rec);
       }
@@ -7299,7 +7305,9 @@ async function processReqTAT(wb) {
     TA_SUMMARY.critical_45 = active.filter(r=>r.tat>45).length;
     TA_SUMMARY.plat_gold_open = active.filter(r=>r.tier==='Platinum'||r.tier==='Gold').length;
     TA_SUMMARY.replacement_reqs = active.filter(r=>r.pos_type==='Replacement').length;
-    TA_SUMMARY.march_closed = closed.length;
+    TA_SUMMARY.mar_closed = closed.length;
+    TA_SUMMARY.mar_fulfilled = closed.length;
+    TA_SUMMARY.tat_as_of = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
   }
   
   // Update TA_AGING
