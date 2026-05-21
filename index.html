@@ -6331,7 +6331,7 @@ function renderAccountHealth() {
 
     // 5. Attrition (exits with lwd in last 90 days)
     var exits = (CMS_RES_DATA||[]).filter(function(r){ return nameMatch(r.customer,n)&&r.days_to_lwd<0&&r.days_to_lwd>=-90; }).length;
-    var attrRate = contractedHC>0 ? Math.round(exits/contractedHC*1000)/10 : 0;
+    var attrRate = activeHC>0 ? Math.round(exits/activeHC*1000)/10 : 0;
 
     // 6. TA open reqs
     var taReqs = (TA_ACTIVE_REQS||[]).filter(function(r){ return nameMatch(r.account||r.customer||'',n); });
