@@ -1686,14 +1686,14 @@ function isNil(s) {
 }
 
 // ── HRBP SITE VISITS TAB LOADER ─────────────────────────────────────────
-var _hrbpSVCache = []; // site visits for current week from hrbp_site_visits table
+var _hrbpSVCache = []; // ALL site visits from hrbp_site_visits table (not week-restricted)
 async function loadHRBPSiteVisitsForTab() {
   if (!_sbUser || !_sb) return;
   try {
     var wk = currentWeek || '';
-    // Fetch site visits AND fresh weekly_reports row in parallel
+    // Fetch ALL site visits (no week filter) + fresh weekly_reports row in parallel
     var [svRes, wrRes, subRes] = await Promise.all([
-      _sb.from('hrbp_site_visits').select('*').eq('week_key', wk).order('visit_date', {ascending: false}),
+      _sb.from('hrbp_site_visits').select('*').order('visit_date', {ascending: false}),
       _sb.from('weekly_reports').select('*').eq('week_key', wk).single(),
       _sb.from('weekly_submissions').select('submitter_name,region,function_type,hrbp_connect_details,hrbp_activities,hrbp_issues,hrbp_discipline,hrbp_site_visited').eq('week_key', wk).eq('function_type','hrbp')
     ]);
@@ -2414,83 +2414,167 @@ function renderHRBP(w, pw) {
       </div>
     </div>`;
   }
-const _allConnects=w.hrbp_connects||[];
-  const _isHRBP=typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.role==='hrbp';
-  const _hcR=_isHRBP?(_sbRole.region||'All'):((typeof _hrbpConnectRegion!=='undefined'&&_hrbpConnectRegion&&_hrbpConnectRegion!=='All')?_hrbpConnectRegion:(typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India'?_sbRole.region:'All'));
-  const _filteredConnects=_hcR==='All'?_allConnects:_allConnects.filter(function(c){return (c.region||getHRBPRegion(c.name||''))===_hcR;});
-  const _rTabs=_isHRBP?'<span style="font-size:11px;font-weight:700;padding:3px 14px;border-radius:20px;background:rgba(96,165,250,.12);color:var(--accent);border:1px solid rgba(96,165,250,.3)">'+esc(_hcR)+' Region</span>':['All','North','South','East','West'].map(function(r){const active=(r==='All'&&_hcR==='All')||(r===_hcR);const cnt=r==='All'?_allConnects.length:_allConnects.filter(function(c){return (c.region||getHRBPRegion(c.name||''))===r;}).length;if(r!=='All'&&cnt===0)return '';return '<button onclick="_hrbpConnectRegion=\''+r+'\';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#fff':'var(--muted)')+'">'+r+(r!=='All'&&cnt>0?' ('+cnt+')':'')+'</button>';}).join('');
-  // Merge hrbp_site_visits for this week into the connects display
-  // ── Site Visit Cards — redesigned ────────────────────────────────────
-  var _svCards = '';
-  var _vtypeCol = {'Connect':'var(--accent)','Town Hall':'#34d399','R&R':'#f59e0b','Induction':'#a78bfa','Other':'var(--muted2)'};
-  var _vtypeIcon = {'Connect':'🤝','Town Hall':'🏛','R&R':'🏆','Induction':'📋','Other':'📌'};
-  var _tierCol2 = {'Platinum':'#a78bfa','Gold':'#f59e0b','Silver':'#94a3b8','Regular':'var(--muted2)','Internal':'#34d399'};
-  if (typeof _hrbpSVCache !== 'undefined' && _hrbpSVCache.length) {
-    var _svFiltered = (_hcR === 'All') ? _hrbpSVCache
-      : _hrbpSVCache.filter(function(sv){ return sv.region === _hcR; });
-    if (_svFiltered.length) {
-      // Summary counts by visit type
-      var _vtCounts = {};
-      _svFiltered.forEach(function(sv){
-        var vt = sv.visit_type||'Connect';
-        _vtCounts[vt] = (_vtCounts[vt]||0)+1;
-      });
-      var _vtSummary = Object.entries(_vtCounts).map(function(e){
-        var vc=_vtypeCol[e[0]]||'var(--muted2)',vi=_vtypeIcon[e[0]]||'📌';
-        return '<span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:10px;background:'+vc+'18;color:'+vc+';border:1px solid '+vc+'40">'+vi+' '+e[1]+' '+e[0]+'</span>';
+  const _allConnects = w.hrbp_connects || [];
+  const _isHRBP = typeof _sbRole !== 'undefined' && _sbRole && _sbRole.role === 'hrbp';
+  // Region filter: HRBP users locked to their own region; admin/exec use the filter variable
+  const _hcR = _isHRBP
+    ? (_sbRole.region || 'All')
+    : ((typeof _hrbpConnectRegion !== 'undefined' && _hrbpConnectRegion && _hrbpConnectRegion !== 'All')
+        ? _hrbpConnectRegion
+        : (typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India' ? _sbRole.region : 'All'));
+  // HRBP name filter (admin/exec only)
+  const _hcH = (typeof _hrbpSVHRBP !== 'undefined') ? _hrbpSVHRBP : 'All';
+
+  // All site visits — apply region + HRBP filters
+  const _vtypeCol = {'Connect':'var(--accent)','Town Hall':'#34d399','R&R':'#f59e0b','Induction':'#a78bfa','Other':'var(--muted2)'};
+  const _vtypeIcon = {'Connect':'🤝','Town Hall':'🏛','R&R':'🏆','Induction':'📋','Other':'📌'};
+  const _tierCol2  = {'Platinum':'#a78bfa','Gold':'#f59e0b','Silver':'#94a3b8','Regular':'var(--muted2)','Internal':'#34d399'};
+  const _svAll = (typeof _hrbpSVCache !== 'undefined') ? _hrbpSVCache : [];
+  var _svFiltered = _svAll;
+  if (_hcR !== 'All') _svFiltered = _svFiltered.filter(function(sv){ return sv.region === _hcR; });
+  if (_hcH !== 'All') _svFiltered = _svFiltered.filter(function(sv){ return sv.submitter_name === _hcH; });
+
+  // ── Filter bar ──────────────────────────────────────────────────────────
+  // Region tabs
+  const _regionTabsHtml = _isHRBP
+    ? '<span style="font-size:11px;font-weight:700;padding:3px 14px;border-radius:20px;background:rgba(96,165,250,.12);color:var(--accent);border:1px solid rgba(96,165,250,.3)">'+esc(_hcR)+' Region</span>'
+    : ['All','North','South','East','West'].map(function(r){
+        const active = (r === 'All' && _hcR === 'All') || (r === _hcR);
+        const cnt = r === 'All' ? _svAll.length : _svAll.filter(function(sv){ return sv.region === r; }).length;
+        if (r !== 'All' && cnt === 0) return '';
+        return '<button onclick="_hrbpConnectRegion=\''+r+'\';_hrbpSVHRBP=\'All\';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#fff':'var(--muted)')+'">'+esc(r)+(cnt>0&&r!=='All'?' ('+cnt+')':'')+'</button>';
       }).join('');
-      _svCards = '<div style="margin-top:16px">'
-        +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-        +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;color:var(--muted2);text-transform:uppercase">Site Visit Log — '+_svFiltered.length+' visit'+((_svFiltered.length>1)?'s':'')+' this week</div>'
-        +'<div style="display:flex;gap:6px;flex-wrap:wrap">'+_vtSummary+'</div>'
-        +'</div>'
-        +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">'
-        +(function(){
-          // Group visits by account so multiple visits to the same account don't look like duplicates
-          var _grouped = {};
-          _svFiltered.forEach(function(sv){
-            var key = (sv.account_name||'Unknown').toUpperCase().trim();
-            if(!_grouped[key]) _grouped[key] = [];
-            _grouped[key].push(sv);
-          });
-          return Object.values(_grouped).map(function(visits){
-            var sv = visits[0];
-            var tc = _tierCol2[sv.account_tier]||'var(--muted2)';
-            var isMulti = visits.length > 1;
-            var html = '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+tc+';border-radius:8px;padding:12px 14px">';
-            // Account name + multi-visit badge
-            html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
-            html += '<div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3">'+esc(sv.account_name||'')+'</div>';
-            if(isMulti) html += '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(96,165,250,.15);color:#60a5fa;border:1px solid rgba(96,165,250,.3)">'+visits.length+' visits</span>';
-            html += '</div>';
-            // Tier badge + HRBP
-            html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">'
-              +'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:'+tc+'20;color:'+tc+'">'+esc(sv.account_tier||'')+'</span>'
-              +'<span style="font-size:10px;color:var(--muted2)">'+esc(sv.submitter_name||'')+(sv.region?' · '+esc(sv.region):'')+'</span>'
-              +'</div>';
-            // Each visit as a sub-row
-            visits.forEach(function(v, vi_idx){
-              var vt = v.visit_type||'Connect';
-              var vc = _vtypeCol[vt]||'var(--muted2)';
-              var vi2 = _vtypeIcon[vt]||'📌';
-              var dFmt = v.visit_date ? new Date(v.visit_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '';
-              html += '<div style="'+(vi_idx>0?'margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);':'')+'">';
-              html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">'
-                +'<span style="font-size:10px;font-weight:600;padding:1px 7px;border-radius:6px;background:'+vc+'18;color:'+vc+';border:1px solid '+vc+'30">'+vi2+' '+esc(vt)+'</span>'
-                +'<span style="font-size:10px;color:var(--muted);margin-left:auto">'+esc(dFmt)+'</span>'
-                +'</div>';
-              if(v.visit_notes) html += '<div style="font-size:11px;color:var(--muted);line-height:1.5">'+esc(v.visit_notes)+'</div>';
+
+  // HRBP dropdown — built from distinct names in filtered-by-region pool
+  const _hrbpNames = [];
+  const _hrbpSeen = new Set();
+  (_hcR === 'All' ? _svAll : _svAll.filter(function(sv){ return sv.region === _hcR; }))
+    .forEach(function(sv){
+      if (sv.submitter_name && !_hrbpSeen.has(sv.submitter_name)) {
+        _hrbpSeen.add(sv.submitter_name);
+        _hrbpNames.push(sv.submitter_name);
+      }
+    });
+  const _hrbpDropdown = !_isHRBP && _hrbpNames.length > 1
+    ? '<select onchange="_hrbpSVHRBP=this.value;render()" style="padding:3px 8px;font-size:11px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:20px;color:var(--text);cursor:pointer">'
+      + '<option value="All"' + (_hcH==='All'?' selected':'')+'>All HRBPs</option>'
+      + _hrbpNames.map(function(n){ return '<option value="'+esc(n)+'"'+(_hcH===n?' selected':'')+'>'+esc(n)+'</option>'; }).join('')
+      + '</select>'
+    : '';
+
+  const _filterBar = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:10px">'
+    + '<span style="font-size:10px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;white-space:nowrap">Region:</span>'
+    + '<div style="display:flex;gap:4px;flex-wrap:wrap">'+_regionTabsHtml+'</div>'
+    + (_hrbpDropdown ? '<span style="font-size:10px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;margin-left:8px;white-space:nowrap">HRBP:</span>'+_hrbpDropdown : '')
+    + '</div>';
+
+  // ── HRBP leaderboard ─────────────────────────────────────────────────────
+  // Per-HRBP stats from the filtered pool (region only, not HRBP filter — shows all in selected region)
+  const _leaderPool = _hcR === 'All' ? _svAll : _svAll.filter(function(sv){ return sv.region === _hcR; });
+  const _hrbpStats = {};
+  _leaderPool.forEach(function(sv){
+    const nm = sv.submitter_name || 'Unknown';
+    if (!_hrbpStats[nm]) _hrbpStats[nm] = {region: sv.region||'', visits:0, accounts: new Set(), last:''};
+    _hrbpStats[nm].visits++;
+    if (sv.account_name) _hrbpStats[nm].accounts.add(sv.account_name.toUpperCase().trim());
+    if (!_hrbpStats[nm].last || sv.visit_date > _hrbpStats[nm].last) _hrbpStats[nm].last = sv.visit_date;
+  });
+  const _regionColors = {North:'#60a5fa',South:'#34d399',East:'#f59e0b',West:'#a78bfa'};
+  const _leaderboard = Object.keys(_hrbpStats).length
+    ? '<div style="margin-bottom:16px">'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;color:var(--muted2);text-transform:uppercase;margin-bottom:8px">HRBP Visit Summary — All Time</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">'
+      + Object.entries(_hrbpStats).sort(function(a,b){ return b[1].visits - a[1].visits; }).map(function(e){
+          const nm = e[0], st = e[1];
+          const rc = _regionColors[st.region] || '#94a3b8';
+          const isActive = _hcH === nm;
+          const lastFmt = st.last ? new Date(st.last+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '—';
+          return '<div onclick="_hrbpSVHRBP=\''+(isActive?'All':nm)+'\';render()" style="cursor:pointer;background:var(--surface2);border:1px solid '+(isActive?'var(--accent)':'var(--border)')+';border-left:3px solid '+rc+';border-radius:8px;padding:10px 12px;'+(isActive?'box-shadow:0 0 0 2px rgba(96,165,250,.25)':'')+'">'
+            + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+            + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+esc(nm)+'</div>'
+            + '<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:'+rc+'18;color:'+rc+';font-weight:600">'+esc(st.region)+'</span>'
+            + '</div>'
+            + '<div style="display:flex;gap:12px">'
+            + '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:var(--accent)">'+st.visits+'</div><div style="font-size:9px;color:var(--muted)">Visits</div></div>'
+            + '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:var(--green)">'+st.accounts.size+'</div><div style="font-size:9px;color:var(--muted)">Accounts</div></div>'
+            + '<div style="text-align:center;flex:1"><div style="font-size:11px;font-weight:600;color:var(--muted2);margin-top:4px">Last: '+esc(lastFmt)+'</div>'+(isActive?'<div style="font-size:9px;color:var(--accent)">▸ Filtered</div>':'')+'</div>'
+            + '</div>'
+            + '</div>';
+        }).join('')
+      + '</div></div>'
+    : '';
+
+  // ── Site Visit Log (cards) ───────────────────────────────────────────────
+  const _svCards = _svFiltered.length
+    ? (function(){
+        // Group by account
+        var _grouped = {};
+        _svFiltered.forEach(function(sv){
+          var key = (sv.account_name||'Unknown').toUpperCase().trim();
+          if (!_grouped[key]) _grouped[key] = [];
+          _grouped[key].push(sv);
+        });
+        var _vtCounts = {};
+        _svFiltered.forEach(function(sv){ var vt=sv.visit_type||'Connect'; _vtCounts[vt]=(_vtCounts[vt]||0)+1; });
+        var _vtSummary = Object.entries(_vtCounts).map(function(e){
+          var vc=_vtypeCol[e[0]]||'var(--muted2)',vi=_vtypeIcon[e[0]]||'📌';
+          return '<span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:10px;background:'+vc+'18;color:'+vc+';border:1px solid '+vc+'40">'+vi+' '+e[1]+' '+e[0]+'</span>';
+        }).join('');
+        return '<div style="margin-top:4px">'
+          + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+          + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;color:var(--muted2);text-transform:uppercase">Visit Log — '+_svFiltered.length+' visit'+(_svFiltered.length>1?'s':'')+' · '+Object.keys(_grouped).length+' account'+(Object.keys(_grouped).length>1?'s':'')+' (all time)</div>'
+          + '<div style="display:flex;gap:6px;flex-wrap:wrap">'+_vtSummary+'</div>'
+          + '</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">'
+          + Object.values(_grouped).map(function(visits){
+              var sv = visits[0];
+              var tc = _tierCol2[sv.account_tier] || 'var(--muted2)';
+              var isMulti = visits.length > 1;
+              var html = '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+tc+';border-radius:8px;padding:12px 14px">';
+              html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+              html += '<div style="font-size:13px;font-weight:700;color:var(--text);line-height:1.3">'+esc(sv.account_name||'')+'</div>';
+              if (isMulti) html += '<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px;background:rgba(96,165,250,.15);color:#60a5fa;border:1px solid rgba(96,165,250,.3)">'+visits.length+' visits</span>';
               html += '</div>';
-            });
-            html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)"><button data-acct="'+esc(sv.account_name||'')+'" onclick="openGalleryUploadForAccount(this.dataset.acct)" style="font-size:11px;color:var(--accent);background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:600">📷 Add Photos</button></div>';
-            html += '</div>';
-            return html;
-          }).join('');
-        })()
-        +'</div></div>';
-    }
-  }
-  const connectItems=`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">${_rTabs}</div>`+(_filteredConnects.length?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${_filteredConnects.map((c,i)=>buildConnectCard(c,i)).join('')}</div>`:'<div class="empty-state">No connects logged this week.</div>')+_svCards;
+              html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">'
+                + '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:'+tc+'20;color:'+tc+'">'+esc(sv.account_tier||'')+'</span>'
+                + '<span style="font-size:10px;color:var(--muted2)">'+esc(sv.submitter_name||'')+(sv.region?' · '+esc(sv.region):'')+'</span>'
+                + '</div>';
+              visits.forEach(function(v, vi_idx){
+                var vt = v.visit_type||'Connect';
+                var vc = _vtypeCol[vt]||'var(--muted2)';
+                var vi2 = _vtypeIcon[vt]||'📌';
+                var dFmt = v.visit_date ? new Date(v.visit_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '';
+                html += '<div style="'+(vi_idx>0?'margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);':'')+'">';
+                html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">'
+                  + '<span style="font-size:10px;font-weight:600;padding:1px 7px;border-radius:6px;background:'+vc+'18;color:'+vc+';border:1px solid '+vc+'30">'+vi2+' '+esc(vt)+'</span>'
+                  + '<span style="font-size:10px;color:var(--muted);margin-left:auto">'+esc(dFmt)+'</span>'
+                  + '</div>';
+                if (v.visit_notes) html += '<div style="font-size:11px;color:var(--muted);line-height:1.5">'+esc(v.visit_notes)+'</div>';
+                html += '</div>';
+              });
+              html += '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)"><button data-acct="'+esc(sv.account_name||'')+'" onclick="openGalleryUploadForAccount(this.dataset.acct)" style="font-size:11px;color:var(--accent);background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:600">📷 Add Photos</button></div>';
+              html += '</div>';
+              return html;
+            }).join('')
+          + '</div></div>';
+      })()
+    : '<div class="empty-state">No site visits logged yet'+ (_hcR!=='All'?' for '+esc(_hcR):'') + (_hcH!=='All'?' by '+esc(_hcH):'')+'. Use the "Log Visit" button to add one.</div>';
+
+  // ── Weekly connects (from form submissions) ──────────────────────────────
+  const _filteredConnects = _hcR === 'All' ? _allConnects
+    : _allConnects.filter(function(c){ return (c.region || getHRBPRegion(c.name || '')) === _hcR; });
+
+  const connectItems = _filterBar + _leaderboard
+    + (_svAll.length
+        ? _svCards
+        : '<div class="empty-state">No structured site visits logged yet. HRBP users can log visits using the form below.</div>')
+    + (_allConnects.length
+        ? '<div style="margin-top:20px"><div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;color:var(--muted2);text-transform:uppercase;margin-bottom:8px">Weekly Connect Notes — '+esc(w.label)+'</div>'
+          + (_filteredConnects.length
+              ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+_filteredConnects.map(function(c,i){ return buildConnectCard(c,i); }).join('')+'</div>'
+              : '<div class="empty-state">No connects logged for this region this week.</div>')
+          + '</div>'
+        : '');
 
   // Count actual site visits — use hrbp_site_visits table count when available, else fall back to connects
   const _svVisitCount = (typeof _hrbpSVCache !== 'undefined' && _hrbpSVCache.length) ? _hrbpSVCache.length : 0;
@@ -3305,6 +3389,7 @@ var _absentCases = [];
 var _absentLoaded = false;
 var _esepCodeSet = new Set();
 var _hrbpConnectRegion = 'All';
+var _hrbpSVHRBP        = 'All'; // HRBP name filter for site visits tab
 var _absentFilter = { region: 'All', tier: 'All', status: 'All' };
 
 const ABSENT_STATUSES = [
