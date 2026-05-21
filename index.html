@@ -602,6 +602,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <button class="sidebar-item" id="snav-hrbp" onclick="snavClick('hrbp',this)">
         <span class="item-icon">🤝</span><span class="item-label">HRBP Connects</span>
       </button>
+      <button class="sidebar-item" id="snav-acct-health" onclick="snavClick('acct-health',this)">
+        <span class="item-icon">🏢</span><span class="item-label">Account Health</span>
+      </button>
       <button class="sidebar-item" id="snav-absenteeism" onclick="snavClick('absenteeism',this)">
         <span class="item-icon">⚠️</span><span class="item-label">Long Absenteeism</span>
       </button>
@@ -716,6 +719,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-overview" class="tab-content active"></div>
   <div id="tab-ta" class="tab-content"></div>
   <div id="tab-hrbp" class="tab-content"></div>
+  <div id="tab-acct-health" class="tab-content"></div>
   <div id="tab-ops" class="tab-content"></div>
   <div id="tab-ld" class="tab-content"></div>
   <div id="tab-risks" class="tab-content"></div>
@@ -4110,6 +4114,7 @@ function switchTab(id, btn) {
   else if(id==='od'){const mc=document.getElementById('tab-od');if(mc)mc.innerHTML=renderOD();}
   else if(id==='tapipeline'){const mc=document.getElementById('tab-tapipeline');if(mc)mc.innerHTML=renderTAPipeline();}
   else if(id==='fnf'){const mc=document.getElementById('tab-fnf');if(mc)mc.innerHTML=renderFnF();}
+  else if(id==='acct-health'){const mc=document.getElementById('tab-acct-health');if(mc)mc.innerHTML=renderAccountHealth();}
   else if(id==='admin'){const mc=document.getElementById('tab-admin');if(mc)mc.innerHTML=renderAdmin(WEEKS_DATA[currentWeek],currentWeek);}
   else if(id==='submit') renderSubmitTab(el);
   else if(id==='absenteeism') renderAbsenteeism(el);
@@ -6240,6 +6245,221 @@ async function doChangePassword() {
   }
 }
 
+
+// ── ACCOUNT HEALTH CARDS ──────────────────────────────────────────────────
+function renderAccountHealth() {
+  var myRegion = (_sbRole && _sbRole.region && _sbRole.region !== 'Pan India' && _sbRole.region !== 'All') ? _sbRole.region : null;
+  var today = new Date();
+
+  // Filter accounts by HRBP region; sort Platinum > Gold > Silver > Regular, then by HC desc
+  var TIER_ORDER = {Platinum:0,Gold:1,Silver:2,Regular:3};
+  var accounts = (CUSTOMER_LIST||[])
+    .filter(function(c){ return !myRegion || c.r === myRegion; })
+    .slice()
+    .sort(function(a,b){ return (TIER_ORDER[a.t]||3)-(TIER_ORDER[b.t]||3) || b.hc-a.hc; });
+
+  if (!accounts.length) return '<div style="padding:40px;text-align:center;color:var(--muted)">No accounts found. Check your region setting.</div>';
+
+  // ── Helpers ──
+  function acctKey(n){ return String(n||'').toUpperCase().trim(); }
+  function nameMatch(a,b){ a=acctKey(a); b=acctKey(b); return a&&b&&(a===b||a.includes(b)||b.includes(a)); }
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function fmtDate(d){ if(!d)return'—'; var dt=new Date(d); return isNaN(dt)?String(d):dt.getDate()+' '+months[dt.getMonth()]; }
+  function fmtCr(n){ return n>=10000000?'₹'+(n/10000000).toFixed(1)+'Cr':n>=100000?'₹'+(n/100000).toFixed(1)+'L':n>0?'₹'+Math.round(n).toLocaleString('en-IN'):'—'; }
+
+  // ── Build last-visit map ──
+  var lastVisitMap = {}; // UPPER_ACCOUNT_NAME → ISO date string
+  (_hrbpSVCache||[]).forEach(function(sv){
+    var k=acctKey(sv.account_name); if(!k)return;
+    if(!lastVisitMap[k]||sv.visit_date>lastVisitMap[k]) lastVisitMap[k]=sv.visit_date;
+  });
+
+  // ── Build FnF escalation set (emp_codes) ──
+  var fnfEscCodes = new Set(Object.keys(FNF_PRIORITY||{}));
+
+  // ── Compute per-account signals ──
+  var cards = accounts.map(function(acct){
+    var n = acct.n;
+
+    // 1. HC Gap
+    var activeHC = (_cwData||[]).filter(function(r){
+      if(!nameMatch(r.customer, n)) return false;
+      if(!r.dol) return true;
+      return new Date(r.dol) >= today;
+    }).length;
+    var contractedHC = acct.hc || 0;
+    var hcGap = Math.max(0, contractedHC - activeHC);
+    var hcGapPct = contractedHC > 0 ? Math.round(hcGap/contractedHC*100) : 0;
+
+    // 2. Absent
+    var absent = (_absentCases||[]).filter(function(c){ return nameMatch(c.customer,n); });
+    var absentCrit = absent.filter(function(c){ return c.consecutive_absent>=21; });
+    var esepUnverif = absent.filter(function(c){ return c.esep_initiated && c.esep_verified===false; });
+
+    // 3. FnF
+    var fnfPending = (FNF_DATA||[]).filter(function(r){ return nameMatch(r.customer,n)&&!r.paid; });
+    var fnfCrit = fnfPending.filter(function(r){ return r.band==='1year&above'||r.band==='180-365days'; });
+    var fnfAmt = fnfPending.reduce(function(s,r){ return s+(r.net_salary||0); },0);
+    var fnfEsc = fnfPending.filter(function(r){ return fnfEscCodes.has(r.emp_code); });
+
+    // 4. Last visit
+    var lastVisitDate = null;
+    Object.keys(lastVisitMap).forEach(function(k){ if(nameMatch(k,n)&&(!lastVisitDate||lastVisitMap[k]>lastVisitDate)) lastVisitDate=lastVisitMap[k]; });
+    var daysSinceVisit = lastVisitDate ? Math.round((today-new Date(lastVisitDate))/86400000) : null;
+
+    // 5. Attrition (exits with lwd in last 90 days)
+    var exits = (CMS_RES_DATA||[]).filter(function(r){ return nameMatch(r.customer,n)&&r.days_to_lwd<0&&r.days_to_lwd>=-90; }).length;
+    var attrRate = contractedHC>0 ? Math.round(exits/contractedHC*1000)/10 : 0;
+
+    // 6. TA open reqs
+    var taReqs = (TA_ACTIVE_REQS||[]).filter(function(r){ return nameMatch(r.account||r.customer||'',n); });
+    var taCrit = taReqs.filter(function(r){ return (r.tat||0)>45; });
+
+    // ── Health Score ──
+    var sHC     = hcGapPct<=5?20:hcGapPct<=15?12:hcGapPct<=25?6:0;
+    var sAbsent = absent.length===0?20:absentCrit.length===0?12:absentCrit.length<=2?5:0;
+    var sFnf    = fnfPending.length===0?20:fnfCrit.length===0?12:fnfCrit.length===1?5:2;
+    if(fnfEsc.length>0) sFnf=Math.max(0,sFnf-5);
+    var sVisit  = daysSinceVisit===null?0:daysSinceVisit<=14?15:daysSinceVisit<=30?10:daysSinceVisit<=45?5:0;
+    var sAttr   = attrRate<=3?15:attrRate<=8?10:attrRate<=15?5:0;
+    var sTA     = taCrit.length===0?10:taCrit.length===1?6:2;
+    var score   = sHC+sAbsent+sFnf+sVisit+sAttr+sTA;
+    var health  = score>=80?'HEALTHY':score>=55?'AT RISK':'CRITICAL';
+    var hCol    = score>=80?'var(--green)':score>=55?'var(--amber)':'var(--red)';
+    var tCol    = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Regular:'var(--muted2)'}[acct.t]||'var(--muted2)';
+
+    return {acct:acct,score:score,health:health,hCol:hCol,tCol:tCol,
+            activeHC:activeHC,contractedHC:contractedHC,hcGap:hcGap,hcGapPct:hcGapPct,
+            absent:absent,absentCrit:absentCrit,esepUnverif:esepUnverif,
+            fnfPending:fnfPending,fnfCrit:fnfCrit,fnfAmt:fnfAmt,fnfEsc:fnfEsc,
+            daysSinceVisit:daysSinceVisit,lastVisitDate:lastVisitDate,
+            exits:exits,attrRate:attrRate,
+            taReqs:taReqs,taCrit:taCrit};
+  });
+
+  // Sort: Critical first, then AT RISK, then HEALTHY; within tier order preserved from above sort
+  cards.sort(function(a,b){
+    var o={'CRITICAL':0,'AT RISK':1,'HEALTHY':2};
+    return (o[a.health]||0)-(o[b.health]||0)||a.score-b.score;
+  });
+
+  // ── Render ──
+  function sig(label,val,sub,col){
+    return '<div style="background:var(--surface3);border-radius:8px;padding:9px 10px;min-width:0">'
+      +'<div style="font-family:DM_Mono,monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);margin-bottom:4px">'+label+'</div>'
+      +'<div style="font-size:15px;font-weight:700;color:'+(col||'var(--text)')+';line-height:1">'+val+'</div>'
+      +(sub?'<div style="font-size:9px;color:var(--muted2);margin-top:3px;line-height:1.3">'+sub+'</div>':'')
+      +'</div>';
+  }
+
+  var nCrit=cards.filter(function(c){return c.health==='CRITICAL';}).length;
+  var nRisk=cards.filter(function(c){return c.health==='AT RISK';}).length;
+  var nOk  =cards.filter(function(c){return c.health==='HEALTHY';}).length;
+
+  var cardHTML = cards.map(function(c){
+    var a=c.acct;
+
+    // HC Gap signal
+    var hcVal  = c.activeHC+'/'+c.contractedHC;
+    var hcSub  = c.hcGap===0?'✓ fully staffed':c.hcGap+' open ('+c.hcGapPct+'% gap)';
+    var hcCol  = c.hcGapPct<=5?'var(--green)':c.hcGapPct<=15?'var(--amber)':'var(--red)';
+
+    // Absent signal
+    var abVal  = c.absent.length;
+    var abCol  = abVal===0?'var(--green)':c.absentCrit.length>0?'var(--red)':'var(--amber)';
+    var abSub  = abVal===0?'✓ none':c.absentCrit.length+' crit'+(c.esepUnverif.length?' · '+c.esepUnverif.length+' eSep⚠':'');
+
+    // FnF signal
+    var fnfVal = c.fnfPending.length;
+    var fnfCol = fnfVal===0?'var(--green)':c.fnfCrit.length>0?'var(--red)':'var(--amber)';
+    var fnfSub = fnfVal===0?'✓ clear':(c.fnfCrit.length+' crit'+(c.fnfAmt>0?' · '+fmtCr(c.fnfAmt):'')+(c.fnfEsc.length?' 🚩':''));
+
+    // Visit signal
+    var vsVal  = c.daysSinceVisit===null?'—':c.daysSinceVisit+'d';
+    var vsCol  = c.daysSinceVisit===null?'var(--muted2)':c.daysSinceVisit<=14?'var(--green)':c.daysSinceVisit<=30?'var(--amber)':'var(--red)';
+    var vsSub  = c.daysSinceVisit===null?'No visit logged':c.daysSinceVisit<=14?'✓ recent':'Last '+fmtDate(c.lastVisitDate);
+
+    // Attrition signal
+    var atVal  = c.attrRate.toFixed(1)+'%';
+    var atCol  = c.attrRate<=3?'var(--green)':c.attrRate<=8?'var(--amber)':'var(--red)';
+    var atSub  = c.exits===0?'✓ no exits':c.exits+' exit'+(c.exits>1?'s':'')+' (90d)';
+
+    // TA signal
+    var taVal  = c.taReqs.length;
+    var taCol  = taVal===0?'var(--green)':c.taCrit.length>0?'var(--red)':'var(--amber)';
+    var taSub  = taVal===0?'✓ nil':c.taCrit.length+' critical >45d';
+
+    // Flags
+    var flags='';
+    if(c.esepUnverif.length) flags+='<div style="font-size:10px;color:var(--amber);margin-top:4px">⚠ '+c.esepUnverif.length+' eSep raised but not found in ZingHR extract</div>';
+    if(c.fnfEsc.length){
+      var ef=FNF_PRIORITY[c.fnfEsc[0].emp_code];
+      flags+='<div style="font-size:10px;color:var(--red);margin-top:3px">🚩 '+c.fnfEsc.length+' FnF escalation'+(c.fnfEsc.length>1?'s':'')+' flagged'+(ef?' — "'+esc(ef.remark.substring(0,50))+'"':'')+' </div>';
+    }
+
+    // Score bar segments
+    var segs=[
+      {s:c.activeHC&&c.contractedHC?Math.round(c.activeHC/c.contractedHC*100):0,col:hcCol,lbl:'HC'},
+      {s:c.absent.length===0?100:c.absentCrit.length>0?20:60,col:abCol,lbl:'Abs'},
+      {s:c.fnfPending.length===0?100:c.fnfCrit.length>0?20:60,col:fnfCol,lbl:'FnF'},
+      {s:c.daysSinceVisit===null?0:Math.max(0,100-c.daysSinceVisit*2),col:vsCol,lbl:'Visit'},
+      {s:Math.max(0,100-c.attrRate*8),col:atCol,lbl:'Attn'},
+      {s:c.taCrit.length===0?100:Math.max(20,100-c.taCrit.length*30),col:taCol,lbl:'TA'}
+    ];
+
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+c.hCol+';border-radius:12px;padding:16px">'
+      // Header row
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
+        +'<div style="flex:1;min-width:0;padding-right:8px">'
+          +'<div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(a.n)+'">'+esc(a.n)+'</div>'
+          +'<div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">'
+            +'<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:10px;background:'+c.tCol+'20;color:'+c.tCol+'">'+esc(a.t)+'</span>'
+            +'<span style="font-size:10px;color:var(--muted)">'+esc(a.r)+'</span>'
+          +'</div>'
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0">'
+          +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;color:'+c.hCol+';line-height:1">'+c.score+'</div>'
+          +'<div style="font-family:DM_Mono,monospace;font-size:8px;font-weight:700;letter-spacing:1px;color:'+c.hCol+'">'+c.health+'</div>'
+        +'</div>'
+      +'</div>'
+      // Signals grid (2x3)
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px">'
+        +sig('HC Active/Contracted',hcVal,hcSub,hcCol)
+        +sig('Long Absent',abVal,abSub,abCol)
+        +sig('FnF Pending',fnfVal,fnfSub,fnfCol)
+        +sig('Last Site Visit',vsVal,vsSub,vsCol)
+        +sig('Attrition 90d',atVal,atSub,atCol)
+        +sig('Open TA Reqs',taVal,taSub,taCol)
+      +'</div>'
+      +(flags?'<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">'+flags+'</div>':'')
+      +'</div>';
+  }).join('');
+
+  return '<div style="padding:28px 36px;max-width:1400px">'
+    // Page header
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">'
+      +'<div>'
+        +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">HRBP Dashboard</div>'
+        +'<div style="font-family:Bebas_Neue,sans-serif;font-size:28px;letter-spacing:1px;color:var(--text);margin-top:2px">Account Health</div>'
+        +(myRegion?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+myRegion+' Region · '+accounts.length+' accounts</div>':'<div style="font-size:11px;color:var(--muted);margin-top:2px">All Regions · '+accounts.length+' accounts</div>')
+      +'</div>'
+      +'<div style="display:flex;gap:8px">'
+        +'<div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:10px;padding:10px 16px;text-align:center;min-width:60px"><div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--red);line-height:1">'+nCrit+'</div><div style="font-family:DM_Mono,monospace;font-size:8px;letter-spacing:1px;color:var(--muted2);margin-top:2px">CRITICAL</div></div>'
+        +'<div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:10px;padding:10px 16px;text-align:center;min-width:60px"><div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--amber);line-height:1">'+nRisk+'</div><div style="font-family:DM_Mono,monospace;font-size:8px;letter-spacing:1px;color:var(--muted2);margin-top:2px">AT RISK</div></div>'
+        +'<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:10px;padding:10px 16px;text-align:center;min-width:60px"><div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--green);line-height:1">'+nOk+'</div><div style="font-family:DM_Mono,monospace;font-size:8px;letter-spacing:1px;color:var(--muted2);margin-top:2px">HEALTHY</div></div>'
+      +'</div>'
+    +'</div>'
+    // Score key
+    +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:10px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;align-items:center">'
+      +'<span>🟢 <b>Healthy</b> 80–100</span><span>🟡 <b>At Risk</b> 55–79</span><span>🔴 <b>Critical</b> &lt;55</span>'
+      +'<span style="margin-left:auto;font-family:DM_Mono,monospace">HC Gap 20 · Absent 20 · FnF 20 · Visit 15 · Attrition 15 · TA 10</span>'
+    +'</div>'
+    // Cards grid
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px">'
+      +cardHTML
+    +'</div>'
+  +'</div>';
+}
 
 // ── FnF TRACKER ───────────────────────────────────────────────────────────
 let _fnfRegion = 'All';
@@ -8387,7 +8607,7 @@ function snavClick(id, el) {
   // Switch tab content
   switchTab(id);
   // Re-render static tabs so region/filter changes are applied
-  var staticTabs = ['overview','risks','workforce','resignation','od','fnf','ld','hrbp','tapipeline','ta','ops'];
+  var staticTabs = ['overview','risks','workforce','resignation','od','fnf','ld','hrbp','acct-health','tapipeline','ta','ops'];
   if(staticTabs.indexOf(id) >= 0 && typeof render === 'function') render();
   // Async tabs handled separately
   if(id==='ta' && typeof _sbUser !== 'undefined' && _sbUser && !_taEscLoaded) { setTimeout(loadTAEscalations, 100); }
@@ -8398,6 +8618,15 @@ function snavClick(id, el) {
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(renderActionCentre, 50); }
   if(id==='fnf' && typeof _sbUser !== 'undefined' && _sbUser) {
     loadFnFPriority().then(() => { const el=document.getElementById('tab-fnf'); if(el) el.innerHTML=renderFnF(); });
+  }
+  if(id==='acct-health' && typeof _sbUser !== 'undefined' && _sbUser) {
+    var _ahLoaders = [];
+    if (!_cwData) _ahLoaders.push(loadContractWorkforce());
+    if (!_hrbpSVCache || !_hrbpSVCache.length) _ahLoaders.push(loadHRBPSiteVisitsForTab());
+    Promise.all(_ahLoaders).then(function() {
+      var el = document.getElementById('tab-acct-health');
+      if (el) el.innerHTML = renderAccountHealth();
+    });
   }
 }
 
