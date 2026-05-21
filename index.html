@@ -5806,8 +5806,12 @@ function renderContractSection() {
   var _cwAlertF    = document.getElementById('cw-filter-alert')   ? document.getElementById('cw-filter-alert').value   : 'All';
   var _cwRegionF   = document.getElementById('cw-filter-region')  ? document.getElementById('cw-filter-region').value  : 'All';
 
+  // Region is controlled by the top-level region selector on the ATE tab
+  var _ateTabEl = document.getElementById('tab-ate');
+  var _cwRegionF = (_ateTabEl ? _ateTabEl.getAttribute('data-filter-region') : null) || (isPan ? 'All' : region);
+
   // Apply filters — type and alert first, then region (so stat cards reflect region filter too)
-  var _allNonAte = data.slice(); // all non-ATE before region filter, for context count
+  var _allNonAte = data.slice(); // all non-ATE before filters, for context count
   if (_cwFilter  !== 'All') data = data.filter(function(r){return r.emp_type === _cwFilter;});
   if (_cwAlertF  !== 'All') data = data.filter(function(r){return r.alert_type === _cwAlertF;});
   if (_cwRegionF !== 'All') data = data.filter(function(r){return (r.region||'') === _cwRegionF;});
@@ -5851,13 +5855,13 @@ function renderContractSection() {
   var rows = data.map(function(r) {
     // no_end_date = true means dol is a computed fallback (not from file)
     var dolStr = r.dol
-      ? r.dol.substring(0,10)
+      ? fmtD(r.dol)
         + (r.no_end_date ? ' <span style="font-size:9px;color:var(--amber);font-style:italic">est.</span>' : '')
         + ' <span style="font-size:10px;color:'+(r.lwd_crossed?'var(--red)':'var(--muted)')+'">'
         + (r.days_to_dol!==null?(r.lwd_crossed?'('+Math.abs(r.days_to_dol)+'d past)':'('+r.days_to_dol+'d)'):'')
         +'</span>'
       : '<span style="color:var(--muted2)">Not set</span>';
-    var saStr  = r.superann_date ? r.superann_date.substring(0,10)+' <span style="font-size:10px;color:var(--muted)">'+(r.age?'Age '+r.age:'')+'</span>' : '—';
+    var saStr  = r.superann_date ? fmtD(r.superann_date)+' <span style="font-size:10px;color:var(--muted)">'+(r.age?'Age '+r.age:'')+'</span>' : '—';
     var acCol  = ACTION_COL[r.action_status] || 'var(--muted)';
     var acOpts = ACTIONS.map(function(a){return '<option value="'+a+'"'+(r.action_status===a?' selected':'')+'>'+a+'</option>';}).join('');
 
@@ -5917,10 +5921,7 @@ function renderContractSection() {
     +'<select id="cw-filter-alert" onchange="renderContractSection()" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
     +'<option>All</option><option value="critical">Critical</option><option value="warning">Warning</option><option value="ok">OK</option>'
     +'</select>'
-    +(isPan ?
-      '<select id="cw-filter-region" onchange="renderContractSection()" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
-      +'<option>All</option><option>North</option><option>South</option><option>East</option><option>West</option>'
-      +'</select>' : '')
+    +(_cwRegionF !== 'All' ? '<span style="font-size:10px;color:var(--amber);padding:3px 8px;border:1px solid var(--amber);border-radius:4px">Region: '+_cwRegionF+'</span>' : '')
     +'<span style="font-size:11px;color:var(--muted);align-self:center">Showing '+data.length+' of '+_allNonAte.length+'</span>'
     +'</div>'
 
@@ -8422,6 +8423,14 @@ var _ateCases  = [];
 var _ateLoaded = false;
 
 var ATE_STATUS = ['Active','Conversion Initiated','Converted to FTE','Separated'];
+// Date formatter: YYYY-MM-DD → DD/MM/YYYY
+function fmtD(d) {
+  if (!d) return '—';
+  var s = String(d).substring(0,10);
+  var p = s.split('-');
+  if (p.length === 3) return p[2]+'/'+p[1]+'/'+p[0];
+  return s;
+}
 var ATE_STATUS_STYLE = {
   'Active':               {col:'#34d399', bg:'rgba(52,211,153,.12)'},
   'Conversion Initiated': {col:'#f59e0b', bg:'rgba(245,158,11,.12)'},
@@ -8549,8 +8558,8 @@ function renderATETab(el) {
       +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+esc(r.emp_code||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:var(--text);min-width:110px">'+esc(r.account||'—')+tierBadge(r.account_tier)+subsidyBadge(r)+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:var(--muted)">'+esc(r.region||'—')+'</td>'
-      +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+((r.doj||'—').substring(0,10))+'</td>'
-      +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+((r.training_end_date||'—').substring(0,10))+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+fmtD(r.doj)+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+fmtD(r.training_end_date)+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;font-weight:600;color:'+(alert==='overdue'?'var(--red)':alert==='due30'?'var(--amber)':'var(--muted)')+'">'+esc(daysLbl)+'</td>'
       +'<td style="padding:8px 10px">'+alertBadge(alert)+'</td>'
       +'<td style="padding:8px 10px;min-width:160px">'
@@ -8563,7 +8572,7 @@ function renderATETab(el) {
       +'</td>'
       +'<td style="padding:8px 10px;font-size:10px;color:var(--muted2);white-space:nowrap">'
         +(r.updated_by ? esc(r.updated_by.split('.')[0]) + '<br>' : '')
-        +(r.action_date ? esc(r.action_date.substring(0,10)) : '—')
+        +fmtD(r.action_date)
       +'</td>'
       +'<td style="padding:8px 10px">'
         +'<button onclick="saveATEUpdate(\''+r.id+'\',\''+uniqueId+'\')" '
@@ -8586,14 +8595,22 @@ function renderATETab(el) {
     return '<option value="'+a+'"'+(_ateFilterAlert===a?' selected':'')+'>'+a+'</option>';
   }).join('');
 
+  // Region strip at top — shown for pan-india users, controls BOTH ATE and Contract sections
+  var regionStrip = isPanIndia
+    ? '<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;margin-bottom:16px">'
+      +'<span style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">Region</span>'
+      +'<select id="ate-region-top" onchange="ateFilter(this,\'region\')" style="padding:4px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+regionOpts+'</select>'
+      +'<span style="font-size:11px;color:var(--muted2)">— filters both ATE Tracker and Contract Workforce below</span>'
+      +'</div>'
+    : '';
   var filterBar = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px">'
-    +(isPanIndia ? '<select onchange="ateFilter(this,\'region\')" style="padding:5px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+regionOpts+'</select>' : '')
     +'<select onchange="ateFilter(this,\'status\')" style="padding:5px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+statusOpts2+'</select>'
     +'<select onchange="ateFilter(this,\'alert\')" style="padding:5px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+alertOpts+'</select>'
     +'<span style="font-size:11px;color:var(--muted)">'+rows.length+' records shown</span>'
     +'</div>';
 
   el.innerHTML = '<div style="padding:24px 32px;max-width:1280px">'
+    +regionStrip
     // Header
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">'
     +'<div>'
@@ -8651,7 +8668,13 @@ function renderATETab(el) {
 function ateFilter(sel, type) {
   var el = document.getElementById('tab-ate');
   if (!el) return;
-  if (type === 'region') el.setAttribute('data-filter-region', sel.value);
+  if (type === 'region') {
+    el.setAttribute('data-filter-region', sel.value);
+    renderATETab(el);
+    // Region filter applies to both ATE and Contract sections
+    renderContractSection();
+    return;
+  }
   if (type === 'status') el.setAttribute('data-filter-status', sel.value);
   if (type === 'alert')  el.setAttribute('data-filter-alert',  sel.value);
   renderATETab(el);
@@ -8771,7 +8794,17 @@ async function processEmployeeMaster(wb) {
       return null; // skip other grades (FTE, etc.)
     }
     function getCust(r) {
-      return String(r['CustomerName']||r['Customer Name']||r['CustomerNameRoleandLocation']||'').split('-')[0].trim();
+      // Try dedicated customer name columns first
+      var direct = String(r['CustomerName']||r['Customer Name']||'').trim();
+      if (direct) return direct;
+      // CustomerNameRoleandLocation format: "CUSTOMER NAME - Role - Level - Location"
+      var full = String(r['CustomerNameRoleandLocation']||'').trim();
+      if (!full) return '';
+      // Split on ' - ' (space-hyphen-space) to avoid splitting hyphenated customer names
+      var parts = full.split(' - ');
+      if (parts.length > 1) return parts[0].trim();
+      // Fallback: split on plain hyphen
+      return full.split('-')[0].trim();
     }
 
     // ── Classify rows ─────────────────────────────────────────────────────
