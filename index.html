@@ -6246,7 +6246,7 @@ function renderFnF() {
   const critical = pending.filter(r=>['1year&above','180-365days','90-180Days'].includes(r.band));
   const priority = pending.filter(r=>r.status==='Priority');
   const bankIssue = pending.filter(r=>r.status.includes('Bank'));
-  const fnfTotal = r => (r.gratuity||0)+(r.leave_enc||0)+(r.other||0)+(r.net_salary||0);
+  const fnfTotal = r => r.net_salary || 0;
   const totalAmt = pending.reduce((s,r)=>s+fnfTotal(r),0);
   const paidAmt  = paidCases.reduce((s,r)=>s+fnfTotal(r),0);
 
