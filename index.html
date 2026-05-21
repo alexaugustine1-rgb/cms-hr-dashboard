@@ -839,6 +839,8 @@ const _SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJl
 const _sb=supabase.createClient(_SB_URL,_SB_KEY);
 let _sbUser=null,_sbRole=null;
 var _cwData = null;
+var _acctHC = null;   // per-account active HC from super employee master {UPPER_NAME: count}
+var _ahFilters = {region:'All', tier:'All', health:'All'};
 
 const WI = {"active_hc_mar": 2819, "total_wage_bill_cr": 132.25, "female_count": 218, "female_pct": 8.2, "ctc_brackets": {"4-6L": 511, "10-15L": 78, ">15L": 72, "2.5-4L": 1412, "<2.5L": 423, "6-10L": 310}, "tenure_dist": {">10 yrs": 242, "5-10 yrs": 260, "3-5 yrs": 471, "1-3 yrs": 745, "6m-1yr": 419, "<6 months": 669}, "age_dist": {">45": 274, "35-45": 648, "25-30": 865, "30-35": 550, "<25": 469}, "regions": {"North": {"hc": 523, "wage_cr": 27.2, "female_pct": 4.5, "female": 23, "ta_sourced": 36, "ta_joined": 21}, "South": {"hc": 681, "wage_cr": 33.18, "female_pct": 8.5, "female": 57, "ta_sourced": 58, "ta_joined": 40}, "East": {"hc": 509, "wage_cr": 16.4, "female_pct": 3.3, "female": 17, "ta_sourced": 34, "ta_joined": 22}, "West": {"hc": 1095, "wage_cr": 53.81, "female_pct": 10.8, "female": 118, "ta_sourced": 127, "ta_joined": 90}}, "attrition": {"Jan": {"exits": 92, "active_hc": 2810, "rate": 3.3, "ctc_vacated_l": 117.1, "region": {"West": 44, "South": 24, "North": 18, "East": 6}, "acct": {"FIELD SERVICES-SOUTH": 7, "OIL and NATURAL GAS CORPORATION LIMITED": 5, "FIELD SERVICES-NORTH": 5, "HDB FINANCIAL SERVICES LIMITED": 4, "THE INDIAN HOTELS COMPANY LIMITED": 4, "FIELD SERVICES-WEST": 4, "SBI GENERAL INSURANCE COMPANY LIMITED": 3, "ADITYA BIRLA FASHION AND RETAIL LIMITED": 3}}, "Feb": {"exits": 99, "active_hc": 2878, "rate": 3.4, "ctc_vacated_l": 25.9, "region": {"West": 40, "South": 37, "East": 13, "North": 9}, "acct": {"ADITYA BIRLA FASHION AND RETAIL LIMITED": 10, "OIL and NATURAL GAS CORPORATION LIMITED": 6, "SUTHERLAND GLOBAL SERVICES PRIVATE LIMITED": 6, "HDB FINANCIAL SERVICES LIMITED": 5, "INDUS TOWERS LIMITED": 5, "AVENUE SUPERMARTS LIMITED": 4}}, "Mar": {"exits": 85, "active_hc": 2950, "rate": 2.9, "ctc_vacated_l": 246.1, "region": {"West": 39, "South": 33, "North": 7, "East": 6}, "acct": {"SYNGENE INTERNATIONAL LIMITED": 11, "HDB FINANCIAL SERVICES LIMITED": 9, "INDUS TOWERS LIMITED": 7, "AVENUE SUPERMARTS LIMITED": 5, "POONAWALLA FINCORP LIMITED": 4, "SBI GENERAL INSURANCE COMPANY LIMITED": 3}}, "Apr": {"exits": 68, "active_hc": 0, "rate": 0, "ctc_vacated_l": 425.5, "region": {"West": 3, "South": 2}, "acct": {"HDB Financial Services": 2}}, "May": {"exits": 44, "active_hc": 0, "rate": 0, "ctc_vacated_l": 337.9, "region": {"West": 14, "South": 15, "East": 2, "North": 1}, "acct": {"SBI General Insurance": 2, "TCS": 1, "Avenue Supermarts": 3, "HDB Financial Services": 2, "Torrent Power": 1}}}, "ta_monthly": {"Jan": {"sourced": 83, "offered": 75, "joined": 54}, "Feb": {"sourced": 132, "offered": 89, "joined": 68}, "Mar": {"sourced": 40, "offered": 50, "joined": 51}}, "ta_region": {"North": {"sourced": 36, "joined": 21, "accepted": 24}, "South": {"sourced": 58, "joined": 40, "accepted": 46}, "East": {"sourced": 34, "joined": 22, "accepted": 26}, "West": {"sourced": 127, "joined": 90, "accepted": 62}}, "source_stats": {"Internal-Referral": {"total": 88, "offers_made": 67, "accepted": 66, "joined": 65, "acc_rate": 99, "yield_rate": 74}, "Naukri": {"total": 92, "offers_made": 55, "accepted": 55, "joined": 70, "acc_rate": 100, "yield_rate": 76}, "Other Source": {"total": 28, "offers_made": 22, "accepted": 22, "joined": 23, "acc_rate": 100, "yield_rate": 82}, "Job-Portals": {"total": 16, "offers_made": 9, "accepted": 9, "joined": 10, "acc_rate": 100, "yield_rate": 62}, "Consultant": {"total": 3, "offers_made": 3, "accepted": 3, "joined": 3, "acc_rate": 100, "yield_rate": 100}, "Internal-Submission": {"total": 22, "offers_made": 0, "accepted": 0, "joined": 0, "acc_rate": 0, "yield_rate": 0}, "_total": {"total": 256, "offers_made": 159, "accepted": 158, "joined": 173, "acc_rate": 99, "yield_rate": 68}}, "accounts": [{"name": "ADITYA BIRLA FASHION AND RETAIL LIMITED", "tier": "Platinum", "region": "West", "status": "Active", "hc": 155, "female": 8, "female_pct": 5.2, "exits_2026": 14, "attrition_rate_ann": 36.1, "wage_cr": 5.88, "ta_joined": 2}, {"name": "INDIAN HOTELS COMPANY LIMITED", "tier": "Platinum", "region": "West", "status": "Active", "hc": 119, "female": 1, "female_pct": 0.8, "exits_2026": 5, "attrition_rate_ann": 16.8, "wage_cr": 7.67, "ta_joined": 1}, {"name": "HDB FINANCIAL SERVICES LIMITED", "tier": "Platinum", "region": "West", "status": "Active", "hc": 97, "female": 6, "female_pct": 6.2, "exits_2026": 21, "attrition_rate_ann": 86.6, "wage_cr": 3.6, "ta_joined": 3}, {"name": "SBI GIC", "tier": "Platinum", "region": "West", "status": "Active", "hc": 89, "female": 6, "female_pct": 6.7, "exits_2026": 9, "attrition_rate_ann": 40.4, "wage_cr": 4.76, "ta_joined": 2}, {"name": "RELIANCE CORPORATE IT PARK LIMITED", "tier": "Platinum", "region": "West", "status": "Active", "hc": 79, "female": 7, "female_pct": 8.9, "exits_2026": 16, "attrition_rate_ann": 81.0, "wage_cr": 3.33, "ta_joined": 2}, {"name": "Tata AIG General Insurance Company Ltd", "tier": "Platinum", "region": "West", "status": "Active", "hc": 50, "female": 2, "female_pct": 4.0, "exits_2026": 5, "attrition_rate_ann": 40.0, "wage_cr": 2.05, "ta_joined": 1}, {"name": "AVENUE SUPERMARTS LIMITED", "tier": "Platinum", "region": "West", "status": "Active", "hc": 41, "female": 1, "female_pct": 2.4, "exits_2026": 16, "attrition_rate_ann": 156.1, "wage_cr": 1.43, "ta_joined": 6}, {"name": "LIC (WEST)", "tier": "Platinum", "region": "West", "status": "Active", "hc": 25, "female": 1, "female_pct": 4.0, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 1.07, "ta_joined": 0}, {"name": "RELIANCE CAPITAL LTD", "tier": "Gold", "region": "West", "status": "Active", "hc": 39, "female": 3, "female_pct": 7.7, "exits_2026": 5, "attrition_rate_ann": 51.3, "wage_cr": 1.73, "ta_joined": 2}, {"name": "Torrent Power Limited", "tier": "Gold", "region": "West", "status": "Active", "hc": 28, "female": 0, "female_pct": 0.0, "exits_2026": 16, "attrition_rate_ann": 228.6, "wage_cr": 1.02, "ta_joined": 2}, {"name": "Tata Consultancy Services Limited", "tier": "Gold", "region": "West", "status": "Active", "hc": 25, "female": 1, "female_pct": 4.0, "exits_2026": 21, "attrition_rate_ann": 336.0, "wage_cr": 1.25, "ta_joined": 1}, {"name": "Majesco", "tier": "Gold", "region": "West", "status": "Active", "hc": 21, "female": 6, "female_pct": 28.6, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 1.04, "ta_joined": 0}, {"name": "RCOM", "tier": "Gold", "region": "West", "status": "Active", "hc": 19, "female": 3, "female_pct": 15.8, "exits_2026": 1, "attrition_rate_ann": 21.1, "wage_cr": 0.54, "ta_joined": 2}, {"name": "Exide Life Insurance Company Limited", "tier": "Gold", "region": "West", "status": "Active", "hc": 16, "female": 1, "female_pct": 6.2, "exits_2026": 5, "attrition_rate_ann": 125.0, "wage_cr": 0.72, "ta_joined": 2}, {"name": "CEAT LIMITED", "tier": "Gold", "region": "West", "status": "Active", "hc": 15, "female": 0, "female_pct": 0.0, "exits_2026": 16, "attrition_rate_ann": 426.7, "wage_cr": 0.46, "ta_joined": 2}, {"name": "Garfield Health Solutions East Pvt Ltd (Kaiser)", "tier": "Gold", "region": "West", "status": "Active", "hc": 9, "female": 3, "female_pct": 33.3, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 0.54, "ta_joined": 0}, {"name": "AMUL", "tier": "Gold", "region": "West", "status": "Active", "hc": 0, "female": 0, "female_pct": 0, "exits_2026": 0, "attrition_rate_ann": 0, "wage_cr": 0.0, "ta_joined": 0}, {"name": "CLSA INDIA LTD", "tier": "Gold", "region": "West", "status": "Active", "hc": 0, "female": 0, "female_pct": 0, "exits_2026": 0, "attrition_rate_ann": 0, "wage_cr": 0.0, "ta_joined": 0}, {"name": "Synapsewave Innovations Private Limited", "tier": "Gold", "region": "West", "status": "Active", "hc": 0, "female": 0, "female_pct": 0, "exits_2026": 16, "attrition_rate_ann": 0, "wage_cr": 0.0, "ta_joined": 0}, {"name": "STL DIGITAL LIMITED", "tier": "Silver", "region": "West", "status": "Active", "hc": 20, "female": 2, "female_pct": 10.0, "exits_2026": 16, "attrition_rate_ann": 320.0, "wage_cr": 0.71, "ta_joined": 2}, {"name": "LIC (EAST)", "tier": "Regular", "region": "East", "status": "Active", "hc": 81, "female": 0, "female_pct": 0.0, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 1.66, "ta_joined": 1}, {"name": "JINDAL GROUP", "tier": "Regular", "region": "North", "status": "Active", "hc": 55, "female": 4, "female_pct": 7.3, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 2.35, "ta_joined": 3}, {"name": "LARSEN and TOUBRO LIMITED", "tier": "Regular", "region": "North", "status": "Active", "hc": 26, "female": 2, "female_pct": 7.7, "exits_2026": 16, "attrition_rate_ann": 246.2, "wage_cr": 1.62, "ta_joined": 0}, {"name": "UCO BANK", "tier": "Regular", "region": "East", "status": "Active", "hc": 20, "female": 0, "female_pct": 0.0, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 0.76, "ta_joined": 0}, {"name": "Sms India Private Limited", "tier": "Regular", "region": "North", "status": "Active", "hc": 17, "female": 1, "female_pct": 5.9, "exits_2026": 16, "attrition_rate_ann": 376.5, "wage_cr": 0.85, "ta_joined": 1}, {"name": "Tata Medical Centre", "tier": "Regular", "region": "East", "status": "Active", "hc": 16, "female": 1, "female_pct": 6.2, "exits_2026": 0, "attrition_rate_ann": 0.0, "wage_cr": 0.5, "ta_joined": 1}], "fnf": {"total_cases": 154, "total_liability": 3348872, "by_status": {"Payment not cleared -(Bank account Issue)": {"count": 69, "amount": 418085}, "Priority": {"count": 34, "amount": 1659969}, "Pending": {"count": 51, "amount": 1270818}}, "by_aging": {">1 year": {"count": 64, "amount": 386403}, "180-365 days": {"count": 5, "amount": 1160874}, "90-180 days": {"count": 4, "amount": 75340}, "45-90 days": {"count": 50, "amount": 1052088}, "<45 days": {"count": 31, "amount": 674167}}}, "attrition_by_tenure": {"<3 months": {"total_2026": 10, "jan_mar": 7}, "3m-1yr": {"total_2026": 41, "jan_mar": 21}, "1-2 yrs": {"total_2026": 62, "jan_mar": 18}, "2-5 yrs": {"total_2026": 67, "jan_mar": 32}, ">5 yrs": {"total_2026": 17, "jan_mar": 7}}, "exit_reasons": {"q1_2026": [{"reason": "Higher Salary", "count": 83}, {"reason": "Family Issues", "count": 44}, {"reason": "Job Role Change", "count": 41}, {"reason": "Project End", "count": 41}, {"reason": "Absorption (Conversion)", "count": 21}, {"reason": "Unauthorised Absence", "count": 14}, {"reason": "Health Issues", "count": 12}, {"reason": "Location Constraint", "count": 11}, {"reason": "Early Exit", "count": 10}, {"reason": "Industry Change", "count": 10}], "monthly": {"Jan": {"exits": 100, "top_reasons": [["Higher Salary", 30], ["Project End", 22], ["Family Issues", 15]]}, "Feb": {"exits": 116, "top_reasons": [["Higher Salary", 33], ["Job Role Change", 18], ["Family Issues", 16]]}, "Mar": {"exits": 85, "top_reasons": [["Higher Salary", 20], ["Project End", 17], ["Family Issues", 13]]}}}, "absenteeism": {"pending_cases": 59, "all_time_exits": 1397, "m1_exits": 711, "hr_exits": 686, "ytd_2026": 14, "by_region": {"West": 31, "East": 4, "North": 3, "South": 21}}};
 
@@ -4114,7 +4116,7 @@ function switchTab(id, btn) {
   else if(id==='od'){const mc=document.getElementById('tab-od');if(mc)mc.innerHTML=renderOD();}
   else if(id==='tapipeline'){const mc=document.getElementById('tab-tapipeline');if(mc)mc.innerHTML=renderTAPipeline();}
   else if(id==='fnf'){const mc=document.getElementById('tab-fnf');if(mc)mc.innerHTML=renderFnF();}
-  else if(id==='acct-health'){const mc=document.getElementById('tab-acct-health');if(mc)mc.innerHTML=renderAccountHealth();}
+  else if(id==='acct-health'){_ahFilters={region:'All',tier:'All',health:'All'};const mc=document.getElementById('tab-acct-health');if(mc)mc.innerHTML=renderAccountHealth();}
   else if(id==='admin'){const mc=document.getElementById('tab-admin');if(mc)mc.innerHTML=renderAdmin(WEEKS_DATA[currentWeek],currentWeek);}
   else if(id==='submit') renderSubmitTab(el);
   else if(id==='absenteeism') renderAbsenteeism(el);
@@ -5945,10 +5947,34 @@ async function updateAcct(el) {
 }
 
 
+// ── ACCOUNT HC LOADER ─────────────────────────────────────────────────────
+async function loadAcctHC() {
+  try {
+    var {data} = await _sb.from('data_cache').select('data').eq('id','account_hc').maybeSingle();
+    if (data && data.data && typeof data.data === 'object') {
+      _acctHC = data.data; // {UPPER_ACCOUNT_NAME: count}
+    }
+  } catch(e) { console.warn('[loadAcctHC]', e.message); }
+}
+
+function ahSetFilter(key, val, btn) {
+  _ahFilters[key] = val;
+  // Update active button style within the same filter group
+  if (btn) {
+    var grp = btn.parentNode;
+    if (grp) Array.from(grp.children).forEach(function(b){ b.style.background=''; b.style.color=b.getAttribute('data-col')||'var(--muted)'; });
+    btn.style.background = 'var(--accent)';
+    btn.style.color = '#fff';
+  }
+  var el = document.getElementById('tab-acct-health');
+  if (el) el.innerHTML = renderAccountHealth();
+}
+
 // ── CONTRACT WORKFORCE SECTION ─────────────────────────────────────────────
 async function loadContractWorkforce() {
   var el = document.getElementById('tab-ate');
-  if (!el) return;
+  // Load data regardless of whether ATE tab is visible (needed for Account Health)
+  var _ateEl = el;
 
   var role   = _sbRole ? (_sbRole.role||'') : '';
   var fnType = _sbRole ? (_sbRole.function_type||'') : '';
@@ -5961,7 +5987,7 @@ async function loadContractWorkforce() {
   if (error || !data) return;
 
   _cwData = data;
-  renderContractSection();
+  if (_ateEl) renderContractSection(); // only render ATE section if that tab is open
 }
 
 function renderContractSection() {
@@ -6281,15 +6307,11 @@ function renderAccountHealth() {
   var cards = accounts.map(function(acct){
     var n = acct.n;
 
-    // 1. HC Gap
-    var activeHC = (_cwData||[]).filter(function(r){
-      if(!nameMatch(r.customer, n)) return false;
-      if(!r.dol) return true;
-      return new Date(r.dol) >= today;
-    }).length;
-    var contractedHC = acct.hc || 0;
-    var hcGap = Math.max(0, contractedHC - activeHC);
-    var hcGapPct = contractedHC > 0 ? Math.round(hcGap/contractedHC*100) : 0;
+    // 1. Active HC (from super employee master cache — all emp types)
+    var activeHC = 0;
+    if (_acctHC) {
+      Object.keys(_acctHC).forEach(function(k){ if(nameMatch(k,n)) activeHC+=(_acctHC[k]||0); });
+    }
 
     // 2. Absent
     var absent = (_absentCases||[]).filter(function(c){ return nameMatch(c.customer,n); });
@@ -6315,21 +6337,21 @@ function renderAccountHealth() {
     var taReqs = (TA_ACTIVE_REQS||[]).filter(function(r){ return nameMatch(r.account||r.customer||'',n); });
     var taCrit = taReqs.filter(function(r){ return (r.tat||0)>45; });
 
-    // ── Health Score ──
-    var sHC     = hcGapPct<=5?20:hcGapPct<=15?12:hcGapPct<=25?6:0;
-    var sAbsent = absent.length===0?20:absentCrit.length===0?12:absentCrit.length<=2?5:0;
-    var sFnf    = fnfPending.length===0?20:fnfCrit.length===0?12:fnfCrit.length===1?5:2;
+    // ── Health Score (100 pts — HC is informational only, not scored) ──
+    // Absent: 25 | FnF: 25 | Visit: 20 | Attrition: 20 | TA: 10
+    var sAbsent = absent.length===0?25:absentCrit.length===0?15:absentCrit.length<=2?6:0;
+    var sFnf    = fnfPending.length===0?25:fnfCrit.length===0?15:fnfCrit.length===1?6:2;
     if(fnfEsc.length>0) sFnf=Math.max(0,sFnf-5);
-    var sVisit  = daysSinceVisit===null?0:daysSinceVisit<=14?15:daysSinceVisit<=30?10:daysSinceVisit<=45?5:0;
-    var sAttr   = attrRate<=3?15:attrRate<=8?10:attrRate<=15?5:0;
+    var sVisit  = daysSinceVisit===null?0:daysSinceVisit<=14?20:daysSinceVisit<=30?12:daysSinceVisit<=45?5:0;
+    var sAttr   = attrRate<=3?20:attrRate<=8?12:attrRate<=15?5:0;
     var sTA     = taCrit.length===0?10:taCrit.length===1?6:2;
-    var score   = sHC+sAbsent+sFnf+sVisit+sAttr+sTA;
+    var score   = sAbsent+sFnf+sVisit+sAttr+sTA;
     var health  = score>=80?'HEALTHY':score>=55?'AT RISK':'CRITICAL';
     var hCol    = score>=80?'var(--green)':score>=55?'var(--amber)':'var(--red)';
     var tCol    = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Regular:'var(--muted2)'}[acct.t]||'var(--muted2)';
 
     return {acct:acct,score:score,health:health,hCol:hCol,tCol:tCol,
-            activeHC:activeHC,contractedHC:contractedHC,hcGap:hcGap,hcGapPct:hcGapPct,
+            activeHC:activeHC,
             absent:absent,absentCrit:absentCrit,esepUnverif:esepUnverif,
             fnfPending:fnfPending,fnfCrit:fnfCrit,fnfAmt:fnfAmt,fnfEsc:fnfEsc,
             daysSinceVisit:daysSinceVisit,lastVisitDate:lastVisitDate,
@@ -6343,6 +6365,14 @@ function renderAccountHealth() {
     return (o[a.health]||0)-(o[b.health]||0)||a.score-b.score;
   });
 
+  // ── Apply active filters ──
+  var fCards = cards.filter(function(c){
+    if(_ahFilters.health!=='All' && c.health!==_ahFilters.health) return false;
+    if(_ahFilters.tier!=='All' && c.acct.t!==_ahFilters.tier) return false;
+    if(_ahFilters.region!=='All' && c.acct.r!==_ahFilters.region) return false;
+    return true;
+  });
+
   // ── Render ──
   function sig(label,val,sub,col){
     return '<div style="background:var(--surface3);border-radius:8px;padding:9px 10px;min-width:0">'
@@ -6352,17 +6382,62 @@ function renderAccountHealth() {
       +'</div>';
   }
 
+  // Summary counters use ALL cards (pre-filter) to show full picture
   var nCrit=cards.filter(function(c){return c.health==='CRITICAL';}).length;
   var nRisk=cards.filter(function(c){return c.health==='AT RISK';}).length;
   var nOk  =cards.filter(function(c){return c.health==='HEALTHY';}).length;
 
-  var cardHTML = cards.map(function(c){
+  // Filter bar helper — builds a chip button
+  function fBtn(key, val, label, col) {
+    var active = _ahFilters[key]===val;
+    var baseStyle = 'border:none;cursor:pointer;padding:4px 11px;border-radius:6px;font-size:11px;font-weight:600;transition:all .15s;';
+    var colStyle  = col ? 'color:'+col+';' : 'color:var(--muted);';
+    var activeStyle = active ? 'background:var(--accent);color:#fff;' : 'background:transparent;'+colStyle;
+    return '<button onclick="ahSetFilter(\''+key+'\',\''+val+'\',this)" data-col="'+(col||'var(--muted)')+'" style="'+baseStyle+activeStyle+'">'+label+'</button>';
+  }
+
+  // Collect available regions from ALL accounts (not filtered)
+  var availRegions = [];
+  cards.forEach(function(c){ if(availRegions.indexOf(c.acct.r)<0) availRegions.push(c.acct.r); });
+  availRegions.sort();
+
+  var filterBar = '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:20px;padding:12px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">'
+    +'<span style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:1px;color:var(--muted2);text-transform:uppercase;margin-right:4px">Filter</span>'
+    // Health status group
+    +'<div style="display:flex;gap:2px;background:var(--surface3);border-radius:7px;padding:2px">'
+      +fBtn('health','All','All','')
+      +fBtn('health','CRITICAL','Critical','var(--red)')
+      +fBtn('health','AT RISK','At Risk','var(--amber)')
+      +fBtn('health','HEALTHY','Healthy','var(--green)')
+    +'</div>'
+    +'<div style="width:1px;height:22px;background:var(--border)"></div>'
+    // Tier group
+    +'<div style="display:flex;gap:2px;background:var(--surface3);border-radius:7px;padding:2px">'
+      +fBtn('tier','All','All Tiers','')
+      +fBtn('tier','Platinum','Platinum','#a78bfa')
+      +fBtn('tier','Gold','Gold','#f59e0b')
+      +fBtn('tier','Silver','Silver','#94a3b8')
+      +fBtn('tier','Regular','Regular','')
+    +'</div>'
+    // Region group — only show if user has pan-India view
+    +(availRegions.length > 1 && !myRegion
+      ? '<div style="width:1px;height:22px;background:var(--border)"></div>'
+        +'<div style="display:flex;gap:2px;background:var(--surface3);border-radius:7px;padding:2px">'
+          +fBtn('region','All','All Regions','')
+          +availRegions.map(function(r){ return fBtn('region',r,r,''); }).join('')
+        +'</div>'
+      : '')
+    // Active filter label
+    +(fCards.length!==cards.length ? '<span style="font-size:10px;color:var(--accent);margin-left:4px">'+fCards.length+' of '+cards.length+' accounts</span>' : '')
+    +'</div>';
+
+  var cardHTML = fCards.map(function(c){
     var a=c.acct;
 
-    // HC Gap signal
-    var hcVal  = c.activeHC+'/'+c.contractedHC;
-    var hcSub  = c.hcGap===0?'✓ fully staffed':c.hcGap+' open ('+c.hcGapPct+'% gap)';
-    var hcCol  = c.hcGapPct<=5?'var(--green)':c.hcGapPct<=15?'var(--amber)':'var(--red)';
+    // HC signal — active count from super employee master
+    var hcVal  = c.activeHC > 0 ? c.activeHC : '—';
+    var hcSub  = c.activeHC > 0 ? 'active employees' : 'Upload emp master';
+    var hcCol  = c.activeHC > 0 ? 'var(--text)' : 'var(--muted2)';
 
     // Absent signal
     var abVal  = c.absent.length;
@@ -6399,7 +6474,7 @@ function renderAccountHealth() {
 
     // Score bar segments
     var segs=[
-      {s:c.activeHC&&c.contractedHC?Math.round(c.activeHC/c.contractedHC*100):0,col:hcCol,lbl:'HC'},
+      {s:c.activeHC>0?80:10,col:hcCol,lbl:'HC'},
       {s:c.absent.length===0?100:c.absentCrit.length>0?20:60,col:abCol,lbl:'Abs'},
       {s:c.fnfPending.length===0?100:c.fnfCrit.length>0?20:60,col:fnfCol,lbl:'FnF'},
       {s:c.daysSinceVisit===null?0:Math.max(0,100-c.daysSinceVisit*2),col:vsCol,lbl:'Visit'},
@@ -6424,7 +6499,7 @@ function renderAccountHealth() {
       +'</div>'
       // Signals grid (2x3)
       +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px">'
-        +sig('HC Active/Contracted',hcVal,hcSub,hcCol)
+        +sig('Active HC',hcVal,hcSub,hcCol)
         +sig('Long Absent',abVal,abSub,abCol)
         +sig('FnF Pending',fnfVal,fnfSub,fnfCol)
         +sig('Last Site Visit',vsVal,vsSub,vsCol)
@@ -6449,11 +6524,14 @@ function renderAccountHealth() {
         +'<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.25);border-radius:10px;padding:10px 16px;text-align:center;min-width:60px"><div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--green);line-height:1">'+nOk+'</div><div style="font-family:DM_Mono,monospace;font-size:8px;letter-spacing:1px;color:var(--muted2);margin-top:2px">HEALTHY</div></div>'
       +'</div>'
     +'</div>'
+    // Filter bar
+    +filterBar
     // Score key
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:10px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;align-items:center">'
       +'<span>🟢 <b>Healthy</b> 80–100</span><span>🟡 <b>At Risk</b> 55–79</span><span>🔴 <b>Critical</b> &lt;55</span>'
-      +'<span style="margin-left:auto;font-family:DM_Mono,monospace">HC Gap 20 · Absent 20 · FnF 20 · Visit 15 · Attrition 15 · TA 10</span>'
+      +'<span style="margin-left:auto;font-family:DM_Mono,monospace">Absent 25 · FnF 25 · Visit 20 · Attrition 20 · TA 10</span>'
     +'</div>'
+    +(fCards.length===0 ? '<div style="padding:48px;text-align:center;color:var(--muted)">No accounts match the selected filters.</div>' : '')
     // Cards grid
     +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px">'
       +cardHTML
@@ -8621,7 +8699,7 @@ function snavClick(id, el) {
   }
   if(id==='acct-health' && typeof _sbUser !== 'undefined' && _sbUser) {
     var _ahLoaders = [];
-    if (!_cwData) _ahLoaders.push(loadContractWorkforce());
+    if (!_acctHC) _ahLoaders.push(loadAcctHC());
     if (!_hrbpSVCache || !_hrbpSVCache.length) _ahLoaders.push(loadHRBPSiteVisitsForTab());
     Promise.all(_ahLoaders).then(function() {
       var el = document.getElementById('tab-acct-health');
@@ -9354,6 +9432,22 @@ async function processEmployeeMaster(wb) {
     });
 
     log('Active rows (Existing + NewJoinee): ' + activeRows.length);
+
+    // ── Cache per-account HC (ALL active emp types, for Account Health Card) ──
+    var _ahcMap = {};
+    activeRows.forEach(function(r){
+      var cust = getCust(r);
+      if (!cust || cust.length < 3) return;
+      var k = cust.toUpperCase().trim();
+      _ahcMap[k] = (_ahcMap[k]||0) + 1;
+    });
+    try {
+      await _sb.from('data_cache').upsert(
+        {id:'account_hc', data:_ahcMap, row_count:Object.keys(_ahcMap).length, uploaded_at:new Date().toISOString()},
+        {onConflict:'id'}
+      );
+      log('✓ Per-account HC cached: '+Object.keys(_ahcMap).length+' accounts','ok');
+    } catch(e){ log('account_hc cache error: '+e.message,'err'); }
 
     var ateRows   = activeRows.filter(function(r){ return getEmpType(r)==='ATE'; });
     var cwRows    = activeRows.filter(function(r){ var t=getEmpType(r); return t==='FTC'||t==='Consultant'||t==='CONTRACT'; });
