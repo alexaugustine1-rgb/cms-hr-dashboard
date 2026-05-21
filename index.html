@@ -3502,6 +3502,16 @@ async function loadAbsentCases() {
 
 async function updateAbsentStatus(id, newStatus, note) {
   try {
+    const isEsepInitiated = newStatus === 'Absconding — eSep Initiated';
+    const caseRow = _absentCases.find(c => c.id === id);
+
+    // Immediate cross-reference: if HRBP marks eSep initiated and we have a
+    // loaded eSep code set in memory, verify right now — don't wait for next upload
+    let esepVerifiedNow = null; // null = don't touch the column
+    if (isEsepInitiated && _esepCodeSet && _esepCodeSet.size > 0 && caseRow) {
+      esepVerifiedNow = _esepCodeSet.has(String(caseRow.emp_code));
+    }
+
     // Log audit event
     try {
       await _sb.from('audit_log').insert([{
@@ -3512,24 +3522,31 @@ async function updateAbsentStatus(id, newStatus, note) {
         user_region: _sbRole?.region,
         entity_type: 'absent_case',
         entity_id: id,
-        old_value: _absentCases.find(c=>c.id===id)?.status || '',
+        old_value: caseRow?.status || '',
         new_value: newStatus,
         detail: note || ''
       }]);
     } catch(e) { console.warn('[Audit]', e.message); }
-    const { error } = await _sb.from('absent_cases').update({
+
+    const payload = {
       status: newStatus,
       status_note: note || '',
       status_updated_by: _sbUser?.user_metadata?.full_name || _sbUser?.email || 'Unknown',
       status_updated_at: new Date().toISOString(),
-      esep_initiated: newStatus === 'Absconding — eSep Initiated',
-    }).eq('id', id);
+      esep_initiated: isEsepInitiated,
+    };
+    if (esepVerifiedNow !== null) payload.esep_verified = esepVerifiedNow;
+
+    const { error } = await _sb.from('absent_cases').update(payload).eq('id', id);
     if (error) throw error;
-    // Update local cache
+
+    // Update local cache — including esep_initiated and esep_verified so re-render is accurate
     const idx = _absentCases.findIndex(c => c.id === id);
     if (idx >= 0) {
-      _absentCases[idx].status = newStatus;
-      _absentCases[idx].status_note = note || '';
+      _absentCases[idx].status        = newStatus;
+      _absentCases[idx].status_note   = note || '';
+      _absentCases[idx].esep_initiated = isEsepInitiated;
+      if (esepVerifiedNow !== null) _absentCases[idx].esep_verified = esepVerifiedNow;
     }
     renderAbsenteeism(document.getElementById('tab-absenteeism'));
   } catch(e) {
@@ -3663,9 +3680,20 @@ function renderAbsenteeism(el) {
       <div style="font-size:11px;color:var(--muted2)">Source: ZingHR Attendance · Employee Master last updated ${(function(d){if(!d)return'--';var _dt=new Date(d);return _dt.getDate().toString().padStart(2,'0')+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_dt.getMonth()]+' '+_dt.getFullYear();})(window.WI_CACHE_DATE||null)} · Active employees only · ≥7 consecutive working days</div>
     </div>
     ${kpiHTML}
-    <div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:var(--amber)">
-      ⚠ These employees are still <strong>Active</strong> in ZingHR with no eSep initiated. HRBP must investigate and update status. Once "Absconding — eSep Initiated" is selected, the case moves to Resignation &amp; Backfill automatically.
-    </div>
+    ${(function(){
+      const noEsep  = data.filter(c => !c.esep_initiated).length;
+      const esepYes = data.filter(c => c.esep_initiated).length;
+      const unverif = data.filter(c => c.esep_initiated && c.esep_verified === false).length;
+      const lines = [];
+      if (noEsep > 0)
+        lines.push(`⚠ <strong>${noEsep} employee${noEsep>1?'s':''}</strong> still <strong>Active</strong> in ZingHR with no eSep initiated — HRBP must investigate. Selecting "Absconding — eSep Initiated" moves the case to Resignation &amp; Backfill automatically.`);
+      if (unverif > 0)
+        lines.push(`🔴 <strong>${unverif} case${unverif>1?'s':''}</strong> marked eSep Initiated but <strong>not found</strong> in the latest ZingHR eSep extract — please raise eSep in ZingHR and re-upload the eSep report.`);
+      if (esepYes > 0 && unverif === 0)
+        lines.push(`✅ <strong>${esepYes} case${esepYes>1?'s are':' is'}</strong> eSep Initiated and verified against the latest ZingHR extract.`);
+      if (!lines.length) return '';
+      return lines.map(l => `<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:11px;color:var(--amber)">${l}</div>`).join('');
+    })()}
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
       <span style="font-size:11px;color:var(--muted)">Region:</span>${rf}
       <span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>
