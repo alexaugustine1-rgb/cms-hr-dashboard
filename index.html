@@ -8684,7 +8684,7 @@ async function saveATEUpdate(id, uniqueId) {
   setTimeout(function(){ renderATETab(document.getElementById('tab-ate')); }, 800);
 }
 
-// ── ATE Upload Parser (called from processEmployeeMaster) ─────────────────
+// ── ATE + Contract Workforce Upload Parser ────────────────────────────────
 async function processEmployeeMaster(wb) {
   var logEl = document.getElementById('parseLog');
   function log(msg, type) {
@@ -8698,88 +8698,174 @@ async function processEmployeeMaster(wb) {
     var rows = XLSX.utils.sheet_to_json(ws, {defval:''});
     log('Rows read: ' + rows.length);
 
-    var ateRows = rows.filter(function(r){
-      var g  = String(r['Grade']||r['grade']||'').trim().toUpperCase();
-      var es = String(r['EmployeeStatus']||r['Employee Status']||'').trim();
-      return g === 'ATE' && es === 'Active';
-    });
-    log('ATE rows found: ' + ateRows.length);
-    if (!ateRows.length) { log('No ATE rows found — check Grade column', 'err'); return; }
-
+    // ── Helpers ──────────────────────────────────────────────────────────
     function parseDate(v) {
       if (!v) return null;
       if (v instanceof Date) return v.toISOString().substring(0,10);
       var s = String(v).trim();
-      var m = s.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{2,4})$/);
+      var m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
       if (m) {
         var yr = m[3].length===2 ? '20'+m[3] : m[3];
         return yr+'-'+m[1].padStart(2,'0')+'-'+m[2].padStart(2,'0');
       }
-      try { return new Date(s).toISOString().substring(0,10); } catch(e){ return null; }
+      try { var d=new Date(s); if(!isNaN(d)) return d.toISOString().substring(0,10); } catch(e){}
+      return null;
     }
-
     function addDays(dateStr, days) {
       if (!dateStr) return null;
-      var d = new Date(dateStr);
-      d.setDate(d.getDate() + days);
+      var d = new Date(dateStr); d.setDate(d.getDate()+days);
       return d.toISOString().substring(0,10);
     }
-
+    function addYears(dateStr, yrs) {
+      if (!dateStr) return null;
+      var d = new Date(dateStr); d.setFullYear(d.getFullYear()+yrs);
+      return d.toISOString().substring(0,10);
+    }
+    function daysDiff(dateStr) { // positive = future, negative = past
+      if (!dateStr) return null;
+      return Math.round((new Date(dateStr+' 00:00:00').getTime()-Date.now())/86400000);
+    }
+    function tenureYrs(doj) {
+      if (!doj) return null;
+      return Math.round((Date.now()-new Date(doj+' 00:00:00').getTime())/86400000/365*10)/10;
+    }
     function getTier(custName) {
       if (!custName) return 'Regular';
       var cu = custName.toUpperCase().trim();
       if (typeof CUSTOMER_TIER_MAP !== 'undefined') {
         if (CUSTOMER_TIER_MAP[cu]) return CUSTOMER_TIER_MAP[cu];
         var keys = Object.keys(CUSTOMER_TIER_MAP);
-        for (var i=0; i<keys.length; i++) {
-          var k = keys[i];
-          if (k.length > 5 && (cu.indexOf(k) >= 0 || k.indexOf(cu) >= 0)) return CUSTOMER_TIER_MAP[k];
-        }
+        for (var i=0;i<keys.length;i++){var k=keys[i];if(k.length>5&&(cu.indexOf(k)>=0||k.indexOf(cu)>=0))return CUSTOMER_TIER_MAP[k];}
       }
       return 'Regular';
     }
-
-    var upsertRows = ateRows.map(function(r) {
-      var doj  = parseDate(r['DOJ'] || r['Date_Of_Joining'] || r['Date of Joining'] || '');
-      var cust = String(r['CustomerName'] || r['Customer Name'] || r['CustomerNameRoleandLocation'] || '').split('-')[0].trim();
-      var tier = getTier(cust);
-      return {
-        emp_code:          String(r['Employee Code']||r['EmployeeCode']||'').trim(),
-        name:              String(r['Employee Name']||r['EmployeeName']||'').trim(),
-        account:           cust,
-        account_tier:      tier,
-        region:            String(r['Region']||'').trim(),
-        doj:               doj,
-        training_end_date: addDays(doj, 365),
-      };
-    }).filter(function(r){ return r.emp_code && r.name; });
-
-    log('Valid ATE records to upsert: ' + upsertRows.length);
-
-    // Upsert in batches of 50 — preserve status + action_notes
-    var BATCH = 50;
-    var errors = 0;
-    for (var b=0; b<upsertRows.length; b+=BATCH) {
-      var batch = upsertRows.slice(b, b+BATCH);
-      var { error } = await _sb.from('ate_tracker')
-        .upsert(batch, { onConflict: 'emp_code', ignoreDuplicates: false });
-      if (error) { log('Batch error: ' + error.message, 'err'); errors++; }
+    function getEmpType(r) {
+      var t = String(r['EmpType']||r['Emp Type']||r['EmployeeType']||r['Employee Type']||r['Grade']||r['grade']||'').trim().toUpperCase();
+      if (t==='ATE') return 'ATE';
+      if (t==='FTC'||t.includes('FIXED TERM')) return 'FTC';
+      if (t==='CONSULTANT'||t==='CONSULTANCY') return 'Consultant';
+      if (t==='CONTRACT') return 'CONTRACT';
+      return null; // skip other grades (FTE, etc.)
     }
-    if (!errors) {
-      // Set 'Active' for any newly inserted rows that have no status yet
-      await _sb.from('ate_tracker').update({status:'Active'}).is('status', null);
-      log('ATE Tracker updated: ' + upsertRows.length + ' records ✓', 'ok');
-      _ateLoaded = false;
-      if (typeof renderATETab === 'function') {
-        setTimeout(function(){ renderATETab(document.getElementById('tab-ate')); }, 300);
+    function getCust(r) {
+      return String(r['CustomerName']||r['Customer Name']||r['CustomerNameRoleandLocation']||'').split('-')[0].trim();
+    }
+
+    // ── Classify rows ─────────────────────────────────────────────────────
+    // Valid active statuses in ZingHR Super Employee Master
+    var activeRows = rows.filter(function(r){
+      var es = String(r['EmployeeStatus']||r['Employee Status']||'').trim();
+      return es==='Existing' || es==='NewJoinee';
+    });
+
+    log('Active rows (Existing + NewJoinee): ' + activeRows.length);
+
+    var ateRows   = activeRows.filter(function(r){ return getEmpType(r)==='ATE'; });
+    var cwRows    = activeRows.filter(function(r){ var t=getEmpType(r); return t==='FTC'||t==='Consultant'||t==='CONTRACT'; });
+
+    log('ATE: '+ateRows.length+' · FTC: '+cwRows.filter(function(r){return getEmpType(r)==='FTC';}).length+' · Consultant: '+cwRows.filter(function(r){return getEmpType(r)==='Consultant';}).length+' · Contract: '+cwRows.filter(function(r){return getEmpType(r)==='CONTRACT';}).length);
+
+    // ── 1. ATE → ate_tracker ─────────────────────────────────────────────
+    if (ateRows.length) {
+      var ateUpsert = ateRows.map(function(r){
+        var doj = parseDate(r['DOJ']||r['Date_Of_Joining']||r['Date of Joining']||'');
+        var cust = getCust(r);
+        return {
+          emp_code:          String(r['Employee Code']||r['EmployeeCode']||'').trim(),
+          name:              String(r['Employee Name']||r['EmployeeName']||'').trim(),
+          account:           cust,
+          account_tier:      getTier(cust),
+          region:            String(r['Region']||'').trim(),
+          doj:               doj,
+          training_end_date: addDays(doj, 365),
+        };
+      }).filter(function(r){ return r.emp_code && r.name; });
+
+      var BATCH=50, ateErrors=0;
+      for (var b=0;b<ateUpsert.length;b+=BATCH) {
+        var {error} = await _sb.from('ate_tracker').upsert(ateUpsert.slice(b,b+BATCH),{onConflict:'emp_code',ignoreDuplicates:false});
+        if (error){log('ATE batch error: '+error.message,'err');ateErrors++;}
       }
-      log('✓ ATE Tracker tab refreshed','ok');
-    } else {
-      log('Completed with ' + errors + ' batch error(s)', 'err');
+      if (!ateErrors) {
+        await _sb.from('ate_tracker').update({status:'Active'}).is('status',null);
+        log('✓ ATE Tracker: '+ateUpsert.length+' records saved','ok');
+      } else { log('ATE completed with '+ateErrors+' error(s)','err'); }
+    } else { log('No ATE rows found in active employees (check EmpType column)','err'); }
+
+    // ── 2. FTC / Consultant / Contract → contract_workforce ───────────────
+    if (cwRows.length) {
+      var today = new Date();
+      var cwUpsert = cwRows.map(function(r){
+        var empType = getEmpType(r);
+        var doj     = parseDate(r['DOJ']||r['Date_Of_Joining']||r['Date of Joining']||'');
+        // ContractEndDate is primary; DOL (Date of Last Working) is fallback for contract end
+        var dol     = parseDate(r['ContractEndDate']||r['Contract End Date']||r['Contract_End_Date']||r['DOL']||r['LWD']||r['Last Working Day']||'');
+        var dob     = parseDate(r['DateOfBirth']||r['Date of Birth']||r['DOB']||r['Date_of_Birth']||'');
+        var cust    = getCust(r);
+        var tyr     = tenureYrs(doj);
+        var ddol    = daysDiff(dol);
+        // Use pre-computed Superannuation_date from file if available; else derive from DOB+58yrs
+        var saDate  = parseDate(r['Superannuation_date']||r['Superannuation Date']||'') || addYears(dob, 58);
+        var dsa     = daysDiff(saDate);
+        var lwd_crossed  = dol ? ddol!==null&&ddol<0 : false;
+        var past_sa      = saDate ? dsa!==null&&dsa<0 : false;
+        var sa_6m        = saDate ? dsa!==null&&dsa>=0&&dsa<=180 : false;
+        var ftc_risk     = empType==='FTC' && tyr!==null && tyr>=1.5;
+        var no_end_date  = !dol;
+        var exp_60d      = dol && ddol!==null && ddol>=0 && ddol<=60;
+        var alertType    = (lwd_crossed||past_sa) ? 'critical'
+                         : (sa_6m||ftc_risk||exp_60d) ? 'warning' : 'ok';
+        return {
+          emp_code:      String(r['Employee Code']||r['EmployeeCode']||'').trim(),
+          name:          String(r['Employee Name']||r['EmployeeName']||'').trim(),
+          emp_type:      empType,
+          customer:      cust,
+          region:        String(r['Region']||'').trim(),
+          doj:           doj,
+          dol:           dol,
+          tenure_yr:     tyr,
+          days_to_dol:   ddol,
+          lwd_crossed:   lwd_crossed,
+          superann_date: saDate,
+          past_superann: past_sa,
+          superann_6m:   sa_6m,
+          ftc_18m_risk:  ftc_risk,
+          no_end_date:   no_end_date,
+          age:           dob ? Math.floor((today-new Date(dob+' 00:00:00'))/86400000/365) : null,
+          alert_type:    alertType,
+        };
+      }).filter(function(r){ return r.emp_code && r.name; });
+
+      // Preserve action_status + action_notes on re-upload
+      var cwCodes = cwUpsert.map(function(r){return r.emp_code;});
+      var {data:cwExisting} = await _sb.from('contract_workforce')
+        .select('emp_code,action_status,action_notes').in('emp_code',cwCodes);
+      var cwExMap = {};
+      (cwExisting||[]).forEach(function(e){ cwExMap[e.emp_code]=e; });
+      cwUpsert = cwUpsert.map(function(r){
+        var ex = cwExMap[r.emp_code];
+        if (ex) { r.action_status=ex.action_status||'Pending'; r.action_notes=ex.action_notes||''; }
+        else { r.action_status='Pending'; }
+        return r;
+      });
+
+      var cwErrors=0;
+      for (var c=0;c<cwUpsert.length;c+=BATCH) {
+        var {error:cwErr} = await _sb.from('contract_workforce').upsert(cwUpsert.slice(c,c+BATCH),{onConflict:'emp_code',ignoreDuplicates:false});
+        if (cwErr){log('Contract batch error: '+cwErr.message,'err');cwErrors++;}
+      }
+      if (!cwErrors) log('✓ Contract Workforce: '+cwUpsert.length+' records saved (FTC: '+cwUpsert.filter(function(r){return r.emp_type==='FTC';}).length+' · Consultant: '+cwUpsert.filter(function(r){return r.emp_type==='Consultant';}).length+' · Contract: '+cwUpsert.filter(function(r){return r.emp_type==='CONTRACT';}).length+')','ok');
+      else log('Contract completed with '+cwErrors+' error(s)','err');
+    } else { log('No FTC/Consultant/Contract rows found in EmpType column','info'); }
+
+    // Refresh ATE tab if open
+    _ateLoaded = false;
+    if (typeof renderATETab === 'function') {
+      setTimeout(function(){ renderATETab(document.getElementById('tab-ate')); }, 300);
     }
   } catch(e) {
     log('Error processing file: ' + e.message, 'err');
-    console.error('[ATE upload]', e);
+    console.error('[EmpMaster upload]', e);
   }
 }
 // ══════════════════════════════════════════════════════════════════════════
