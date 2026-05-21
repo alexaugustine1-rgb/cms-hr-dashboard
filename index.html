@@ -3465,8 +3465,9 @@ async function loadAbsentCases() {
     const { data, error } = await _sb
       .from('absent_cases')
       .select('*')
-      // Load all cases — Resolved Returned hidden in render, others always shown
-    .not('status', 'eq', 'Resolved — Returned')
+      // Exclude fully resolved cases — both returned and resigned
+      .not('status', 'eq', 'Resolved — Returned')
+      .not('status', 'eq', 'Resolved — Resigned')
       .order('consecutive_absent', { ascending: false });
     if (error) throw error;
     _absentCases = data || [];
