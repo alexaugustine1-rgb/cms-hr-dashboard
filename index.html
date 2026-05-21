@@ -10082,7 +10082,7 @@ async function processAttendanceAbsence(wb) {
     return '';
   };
 
-  const dateColKeys = headers.filter(h => /^\d{2}\s+[A-Za-z]{3}\s+\d{4}$/.test(h.trim()));
+  const dateColKeys = headers.filter(h => /^\d{2}\s+[A-Za-z]{3}\s+(\d{4}|\d{2})$/.test(h.trim()));
   log('Scanning ' + rows.length + ' employees × ' + dateColKeys.length + ' days…', 'info');
 
   const THRESHOLD  = 7;
@@ -10091,7 +10091,10 @@ async function processAttendanceAbsence(wb) {
   const parseDate = (label) => {
     try {
       const p = label.trim().split(' ');
-      if (p.length === 3) return new Date(p[1] + ' ' + p[0] + ' ' + p[2]).toISOString().substring(0, 10);
+      if (p.length === 3) {
+        const yr = p[2].length === 2 ? '20' + p[2] : p[2];
+        return new Date(p[1] + ' ' + p[0] + ' ' + yr).toISOString().substring(0, 10);
+      }
     } catch(e) {}
     return null;
   };
@@ -10103,39 +10106,45 @@ async function processAttendanceAbsence(wb) {
     if (!empCode) return;
 
     // Consecutive absent logic:
-    // A = absent → counts and continues the run
-    // WO / H = week-off / holiday → TRANSPARENT (doesn't break the run, doesn't add to count)
-    // P / PL / CL / SiL etc = present/leave → BREAKS the run
-    // This matches how a real 42-day absence across months is counted
-    let maxConsec = 0, currConsec = 0;
-    let currStart = '', bestStart = '', firstAbsent = '', lastPresent = '';
-    let inRun = false;
+    // A = absent → counts. Also absorbs any buffered WO/H days that preceded it.
+    // WO / H / blank = week-off / holiday → PENDING: if sandwiched between A's they count as absent;
+    //                                        if the run ends on P they are discarded.
+    // P / PL / CL / SiL / P-A etc = present → BREAKS the run and discards any pending WO buffer
+    let maxConsec = 0, currConsec = 0, pendingWO = 0;
+    let currStart = '', bestStart = '', pendingStart = '', lastPresent = '';
 
     dateColKeys.forEach(dk => {
       const val = String(r[dk] || '').trim().toUpperCase();
-      const isAbsent     = val === 'A';
+      const isAbsent      = val === 'A';
       const isTransparent = val === 'WO' || val === 'H' || val === '';
-      const isPresent    = !isAbsent && !isTransparent; // PL, CL, P, SiL, P-A etc
 
       if (isAbsent) {
-        if (!inRun) { inRun = true; currStart = dk; currConsec = 0; }
-        if (!firstAbsent) firstAbsent = dk;
+        if (currConsec === 0) { currStart = dk; }       // start of new run
+        if (pendingWO > 0 && currConsec > 0) {          // absorb buffered WO/H into run
+          currConsec += pendingWO;
+        }
+        pendingWO = 0;
         currConsec++;
         if (currConsec > maxConsec) { maxConsec = currConsec; bestStart = currStart; }
       } else if (isTransparent) {
-        // Keep run going — WO/H between absent days don't reset the streak
-        // but don't increment the counter
+        if (currConsec > 0) {
+          // Inside an ongoing absence run — buffer these; they'll be absorbed if another A follows
+          pendingWO++;
+        }
+        // If no run yet, WO/H at the start are simply ignored
       } else {
-        // P, PL, CL, SiL — breaks the run
-        if (isPresent) lastPresent = dk;
-        inRun = false;
+        // P, PL, CL, SiL, P-A — hard break
+        lastPresent = dk;
         currConsec = 0;
+        pendingWO  = 0;
+        currStart  = '';
       }
     });
 
     if (maxConsec < THRESHOLD) return;
 
-    const cust = g(r, 'Customer Name');
+    const _custRaw = g(r, 'Customer Name Role and Location');
+    const cust = g(r, 'Customer Name') || (_custRaw ? _custRaw.split(' - ')[0].trim() : '');
     let tier = 'Regular';
     if (typeof CMS_PLAT_GOLD !== 'undefined') {
       const m = CMS_PLAT_GOLD.find(a => a.name && a.name.toUpperCase() === cust.toUpperCase());
