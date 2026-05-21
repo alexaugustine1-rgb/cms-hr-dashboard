@@ -6243,10 +6243,13 @@ function renderFnF() {
   let base = FNF_DATA;
   if(_fnfRegion !== 'All') base = base.filter(r => r.region === _fnfRegion);
   const pending = base.filter(r=>!r.paid);
+  const paidCases = base.filter(r=>r.paid);
   const critical = pending.filter(r=>['1year&above','180-365days','90-180Days'].includes(r.band));
   const priority = pending.filter(r=>r.status==='Priority');
   const bankIssue = pending.filter(r=>r.status.includes('Bank'));
-  const totalAmt = pending.reduce((s,r)=>s+r.net_salary,0);
+  const fnfTotal = r => (r.gratuity||0)+(r.leave_enc||0)+(r.other||0)+(r.net_salary||0);
+  const totalAmt = pending.reduce((s,r)=>s+fnfTotal(r),0);
+  const paidAmt  = paidCases.reduce((s,r)=>s+fnfTotal(r),0);
 
   // Band summary
   const bandCounts = {};
@@ -6254,9 +6257,10 @@ function renderFnF() {
 
   // Region summary (always from full data)
   const regionSummary = ['North','South','East','West'].map(reg => {
-    const rp = FNF_DATA.filter(r=>r.region===reg&&!r.paid);
-    const rc = rp.filter(r=>['1year&above','180-365days','90-180Days'].includes(r.band));
-    return {reg, total:rp.length, critical:rc.length, bank:rp.filter(r=>r.status.includes('Bank')).length};
+    const rp  = FNF_DATA.filter(r=>r.region===reg&&!r.paid);
+    const rc  = rp.filter(r=>['1year&above','180-365days','90-180Days'].includes(r.band));
+    const amt = rp.reduce((s,r)=>s+fnfTotal(r),0);
+    return {reg, total:rp.length, critical:rc.length, bank:rp.filter(r=>r.status.includes('Bank')).length, amt};
   });
 
   const fmtCr = n => n >= 10000000 ? '₹'+(n/10000000).toFixed(2)+'Cr' : n >= 100000 ? '₹'+(n/100000).toFixed(1)+'L' : '₹'+n.toLocaleString('en-IN');
@@ -6272,7 +6276,7 @@ function renderFnF() {
     </div>
 
     <!-- KPI Strip -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">
       <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--red);border-radius:10px;padding:14px;text-align:center">
         <div style="font-family:Bebas_Neue,sans-serif;font-size:36px;color:var(--red);line-height:1">${critical.length}</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px">Critical 90+ Days</div>
@@ -6281,14 +6285,18 @@ function renderFnF() {
         <div style="font-family:Bebas_Neue,sans-serif;font-size:36px;color:var(--amber);line-height:1">${priority.length}</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px">Priority Cases</div>
       </div>
-
       <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--accent);border-radius:10px;padding:14px;text-align:center">
         <div style="font-family:Bebas_Neue,sans-serif;font-size:36px;color:var(--accent);line-height:1">${pending.length}</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px">Total Pending</div>
       </div>
       <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--purple);border-radius:10px;padding:14px;text-align:center">
-        <div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--purple);line-height:1;margin-top:6px">${fmtCr(totalAmt)}</div>
-        <div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px">Pending Amount</div>
+        <div style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:var(--purple);line-height:1;margin-top:8px">${fmtCr(totalAmt)}</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px">Pending Liability</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:11px;color:var(--green);font-weight:700;line-height:1;margin-top:4px">${paidCases.length} cases</div>
+        <div style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:var(--green);line-height:1;margin-top:4px">${fmtCr(paidAmt)}</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:4px">Total Paid</div>
       </div>
     </div>
 
@@ -6300,11 +6308,11 @@ function renderFnF() {
             <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:${r.reg==='West'?'var(--red)':r.reg==='South'?'var(--amber)':'var(--accent)'}">${r.reg}</div>
             ${_fnfRegion===r.reg?'<div style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></div>':''}
           </div>
-          <div style="display:flex;gap:12px">
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
             <div style="text-align:center"><div style="font-family:Bebas_Neue,sans-serif;font-size:24px;color:var(--text);line-height:1">${r.total}</div><div style="font-size:9px;color:var(--muted)">Pending</div></div>
             <div style="text-align:center"><div style="font-family:Bebas_Neue,sans-serif;font-size:24px;color:var(--red);line-height:1">${r.critical}</div><div style="font-size:9px;color:var(--muted)">Critical</div></div>
-
           </div>
+          <div style="margin-top:6px;font-size:10px;font-weight:600;color:var(--purple)">${fmtCr(r.amt)}</div>
         </div>`).join('')}
     </div>
 
@@ -6335,13 +6343,14 @@ function renderFnF() {
 
     <!-- Table -->
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">
-      <div style="display:grid;grid-template-columns:160px 1fr 100px 80px 90px 100px 110px 80px;background:var(--surface3);border-bottom:1px solid var(--border);padding:10px 14px">
+      <div style="display:grid;grid-template-columns:150px 1fr 80px 72px 72px 90px 100px 100px 80px;background:var(--surface3);border-bottom:1px solid var(--border);padding:10px 14px">
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Employee</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Customer</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Region</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">DOL</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);cursor:pointer" onclick="_fnfSort='days_desc';document.getElementById('tab-fnf').innerHTML=renderFnF()">Days ↓</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);cursor:pointer" onclick="_fnfSort='band';document.getElementById('tab-fnf').innerHTML=renderFnF()">Aging Band</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">FnF Amount</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Payment Date</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Status</div>
       </div>
@@ -6351,7 +6360,9 @@ function renderFnF() {
           const statusLabel = r.paid ? 'Paid' : r.status.includes('Bank') ? 'Bank Issue' : r.status.trim();
           const statusCol = r.paid?'var(--green)':r.status==='Priority'?'var(--red)':r.status.includes('Bank')?'#f59e0b':'var(--amber)';
           const rowBg = r.band==='1year&above'||r.band==='180-365days'?'rgba(248,113,113,.04)':'';
-          return `<div style="display:grid;grid-template-columns:160px 1fr 100px 80px 90px 100px 110px 80px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:${rowBg};font-size:12px">
+          const rowAmt = fnfTotal(r);
+          const amtBreakdown = [r.gratuity?'Grat: '+fmtCr(r.gratuity):'', r.leave_enc?'LvE: '+fmtCr(r.leave_enc):'', r.other?'Oth: '+fmtCr(r.other):''].filter(Boolean).join(' · ');
+          return `<div style="display:grid;grid-template-columns:150px 1fr 80px 72px 72px 90px 100px 100px 80px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:${rowBg};font-size:12px">
             <div>
               <div style="font-weight:500;color:var(--text)">${esc(r.name)}</div>
               <div style="font-size:10px;color:var(--muted2);margin-top:1px">${r.emp_code}</div>
@@ -6362,6 +6373,10 @@ function renderFnF() {
             <div style="font-weight:600;color:${bandCol}">${r.days}</div>
             <div>
               <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;background:${bandCol}20;color:${bandCol}">${BAND_LABEL[r.band]||r.band}</span>
+            </div>
+            <div>
+              <div style="font-weight:600;color:var(--purple);font-size:12px">${rowAmt>0?fmtCr(rowAmt):'—'}</div>
+              ${amtBreakdown?`<div style="font-size:9px;color:var(--muted2);margin-top:2px;line-height:1.3">${amtBreakdown}</div>`:''}
             </div>
             <div style="font-size:11px;color:${r.payment_date?'var(--green)':'var(--muted2)'}">
               ${r.payment_date
