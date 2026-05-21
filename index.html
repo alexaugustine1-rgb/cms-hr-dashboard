@@ -6413,7 +6413,7 @@ function renderFnF() {
 
     <!-- Table -->
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">
-      <div style="display:grid;grid-template-columns:140px 1fr 70px 68px 60px 88px 90px 78px 180px 110px;background:var(--surface3);border-bottom:1px solid var(--border);padding:10px 14px">
+      <div style="display:grid;grid-template-columns:140px 1fr 70px 68px 60px 88px 90px 78px 86px 180px 110px;background:var(--surface3);border-bottom:1px solid var(--border);padding:10px 14px">
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Employee</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Customer</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Region</div>
@@ -6422,6 +6422,7 @@ function renderFnF() {
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);cursor:pointer" onclick="_fnfSort='band';document.getElementById('tab-fnf').innerHTML=renderFnF()">Aging Band</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">FnF Amt</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Status</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green)">Paid Date</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--red)">Escalation Reason</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--red)">Flagged By</div>
       </div>
@@ -6438,7 +6439,7 @@ function renderFnF() {
           const borderLeft = isPriority ? 'border-left:3px solid var(--red);' : '';
           const safeCode   = esc(r.emp_code);
           const safeName   = esc(r.name).replace(/'/g,"\\'");
-          return `<div style="display:grid;grid-template-columns:140px 1fr 70px 68px 60px 88px 90px 78px 180px 110px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:${rowBg};font-size:12px;${borderLeft}align-items:start">
+          return `<div style="display:grid;grid-template-columns:140px 1fr 70px 68px 60px 88px 90px 78px 86px 180px 110px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:${rowBg};font-size:12px;${borderLeft}align-items:start">
             <div>
               <div style="font-weight:500;color:var(--text)">${esc(r.name)}</div>
               <div style="font-size:10px;color:var(--muted2);margin-top:1px">${r.emp_code}</div>
@@ -6457,6 +6458,11 @@ function renderFnF() {
             <div>
               <span style="font-size:10px;font-weight:600;color:${statusCol}">${esc(statusLabel)}</span>
               ${isPriority&&!pf?'<div style="font-size:9px;color:var(--red);margin-top:2px">⚑ Excel</div>':''}
+            </div>
+            <div style="font-size:11px">
+              ${r.payment_date
+                ? `<span style="font-weight:600;color:var(--green)">✓ ${esc(r.payment_date)}</span>`
+                : '<span style="color:var(--muted2)">—</span>'}
             </div>
             <div style="font-size:11px;line-height:1.4;padding-right:6px">
               ${pf
@@ -9746,8 +9752,8 @@ async function processFnFData(wb) {
       status:       status,
       paid:         status.trim() === 'Paid',
       payment_date: (function(){
-        var _pd = g(r,'Payment done case');
-        if (!_pd || _pd === 'None' || _pd === 'Yes' || _pd === 'No') return '';
+        var _pd = g(r,'Payment Date','Date of Payment','Paid Date','Payment done case');
+        if (!_pd || _pd === 'None' || _pd === 'Yes' || _pd === 'No' || _pd === 'Paid' || _pd === 'Pending') return '';
         try { var _d = new Date(String(_pd).split(' ')[0]); return isNaN(_d)?'':_d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
         catch(e) { return ''; }
       })(),
