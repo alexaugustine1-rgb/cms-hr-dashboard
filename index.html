@@ -8800,12 +8800,13 @@ async function processEmployeeMaster(wb) {
       return 'Regular';
     }
     function getEmpType(r) {
-      var t = String(r['EmpType']||r['Emp Type']||r['EmployeeType']||r['Employee Type']||r['Grade']||r['grade']||'').trim().toUpperCase();
+      // Check EmpType (col CK) first, then Employment Type (col E), then other fallbacks
+      var t = String(r['EmpType']||r['Emp Type']||r['EmployeeType']||r['Employee Type']||r['Employment Type']||r['Grade']||r['grade']||'').trim().toUpperCase();
       if (t==='ATE') return 'ATE';
       if (t==='FTC'||t.includes('FIXED TERM')) return 'FTC';
       if (t==='CONSULTANT'||t==='CONSULTANCY') return 'Consultant';
       if (t==='CONTRACT') return 'CONTRACT';
-      return null; // skip other grades (FTE, etc.)
+      return null; // skip other grades (FTE, General, etc.)
     }
     function getCust(r) {
       // 1. Try known customer name columns
