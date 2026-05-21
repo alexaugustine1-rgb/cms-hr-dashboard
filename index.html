@@ -4319,12 +4319,18 @@ function renderJoinersTab(el) {
   else if(_pjStatusFilter !== 'All')
     data = data.filter(function(r){return r.status===_pjStatusFilter;});
 
-  // TA sees only own candidates
+  // TA sees only own candidates — match on full display_name vs recruiter_name
   if(isTa && !isAdmin && _sbRole.display_name) {
-    var myName = (_sbRole.display_name||'').toLowerCase().split(' ')[0];
-    data = data.filter(function(r){
-      return (r.recruiter_name||'').toLowerCase().includes(myName);
-    });
+    var _myFull = (_sbRole.display_name||'').toLowerCase().trim();
+    var _myFirst = _myFull.split(' ')[0];
+    if(_myFirst) { // guard: blank display_name would match everything
+      data = data.filter(function(r){
+        var rn = (r.recruiter_name||'').toLowerCase().trim();
+        // Match if full display name contains recruiter name or vice-versa (handles
+        // ZingHR abbreviations), or first names match exactly
+        return rn && (_myFull.includes(rn) || rn.includes(_myFull) || rn.split(' ')[0]===_myFirst);
+      });
+    }
   }
 
   // Summary
@@ -4392,12 +4398,14 @@ function renderJoinersTab(el) {
 
     // Status dropdown (TA can update; HRBP limited to Induction Scheduled)
     var canEdit = isAdmin || isTa || (isHrbp && ['Offer Accepted','Induction Scheduled'].includes(r.status));
+    // HRBP can only set Offer Accepted / Induction Scheduled; TA/admin can set all
+    var _allowedOpts = (isHrbp&&!isAdmin&&!isTa)
+      ? STATUS_OPTS.filter(function(s){return ['Offer Accepted','Induction Scheduled'].includes(s)||r.status===s;})
+      : STATUS_OPTS;
     var statusCell = canEdit
       ? '<select onchange="updateJoinerStatus(\''+r.id+'\',this.value)" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer">'
-          +STATUS_OPTS.map(function(s){
-            // HRBP can only set Induction Scheduled; TA/admin can set all
-            var disabled = (isHrbp&&!isAdmin&&!isTa&&!['Offer Accepted','Induction Scheduled'].includes(s)) ? 'disabled' : '';
-            return '<option value="'+s+'" '+(r.status===s?'selected':'')+' '+disabled+'>'+s+'</option>';
+          +_allowedOpts.map(function(s){
+            return '<option value="'+s+'" '+(r.status===s?'selected':'')+'>'+s+'</option>';
           }).join('')
           +'</select>'
       : '<span style="font-size:11px;color:'+sc+'">'+r.status+'</span>';
@@ -7205,7 +7213,7 @@ async function processCandidate(wb) {
     if (_isProspective || _isJoined) {
       var _pCust = ss(_pr['CustomerNameRoleandLocation']||_pr['Customer Name']||_pr['Customer']||'');
       // Extract customer name — before first hyphen
-      var _pCustShort = _pCust.split(' - ')[0].split('-')[0].trim();
+      var _pCustShort = _pCust.split(' - ')[0].split('-')[0].trim() || 'Unassigned';
       var _pRecs = splitRecruiters(ss(_pr['Recruiter Name']||''));
       prospective.push({
         candidate_name: ss(_pr['Candidate Name']||_pr['Name']||''),
@@ -7224,19 +7232,49 @@ async function processCandidate(wb) {
   }
   if(prospective.length > 0) {
     log(prospective.length+' prospective joiners found (Offer Accepted, no ECode)', 'ok');
-    // Upsert to Supabase prospective_joiners table
     var today_str = new Date().toISOString().substring(0,10);
     var batch = 'Candidate_'+today_str;
-    // Mark existing batch as updated
-    var upsertRows = prospective.map(function(p){
-      return Object.assign({}, p, {upload_batch:batch, data_as_of:today_str, updated_at:new Date().toISOString()});
-    });
-    _sb.from('prospective_joiners').upsert(upsertRows, {onConflict:'candidate_name,customer,doj'}).then(function(res){
-      if(res.error) log('Prospective joiners: '+res.error.message+' — check upsert conflict key','warn');
-      else log('Prospective joiners saved to database ('+upsertRows.length+' records)','ok');
-    });
+    try {
+      // Fetch existing records (by candidate name) to preserve manually-set status
+      // and handle DOJ changes without creating duplicate rows
+      var _candNames = prospective.map(function(p){return p.candidate_name;}).filter(Boolean);
+      var _existRes = await _sb.from('prospective_joiners')
+        .select('id,candidate_name,customer,doj,status,status_updated_at')
+        .in('candidate_name', _candNames);
+      // Key: lowercase candidate_name|||customer (DOJ-agnostic so DOJ edits don't dupe)
+      var _existMap = {};
+      (_existRes.data||[]).forEach(function(e){
+        var k=(e.candidate_name||'').toLowerCase()+'|||'+(e.customer||'').toLowerCase();
+        _existMap[k]=e;
+      });
+      var toInsert=[], toUpdate=[];
+      prospective.forEach(function(p){
+        var k=(p.candidate_name||'').toLowerCase()+'|||'+(p.customer||'').toLowerCase();
+        var ex=_existMap[k];
+        var row=Object.assign({},p,{upload_batch:batch,data_as_of:today_str,updated_at:new Date().toISOString()});
+        if(ex){
+          // Preserve status if it was manually set; otherwise allow reset to Offer Accepted
+          if(ex.status_updated_at) row.status=ex.status;
+          toUpdate.push(Object.assign({id:ex.id},row));
+        } else {
+          toInsert.push(row);
+        }
+      });
+      if(toInsert.length){
+        var {error:insErr}=await _sb.from('prospective_joiners').insert(toInsert);
+        if(insErr) log('Insert error: '+insErr.message,'warn');
+        else log(toInsert.length+' new prospective joiners added ✓','ok');
+      }
+      for(var _ui=0;_ui<toUpdate.length;_ui++){
+        var _upRow=toUpdate[_ui];
+        var _upId=_upRow.id; delete _upRow.id;
+        var {error:upErr}=await _sb.from('prospective_joiners').update(_upRow).eq('id',_upId);
+        if(upErr) log('Update error ('+_upRow.candidate_name+'): '+upErr.message,'warn');
+      }
+      if(toUpdate.length) log(toUpdate.length+' existing prospective joiners updated ✓','ok');
+    } catch(e){ log('Prospective joiners save error: '+e.message,'err'); }
   } else {
-    log('No prospective joiners found — check Final DOJ column exists in file','info');
+    log('No prospective joiners found — check Final DOJ / Tentative DOJ column in file','info');
   }
   log('✓ Candidate data refreshed — '+rows.length+' records, '+marJoined+' MTD joiners','ok');
   log('Refreshing TA Pipeline…','info');
@@ -8107,14 +8145,15 @@ function showSidebarAfterLogin(role) {
   (function(){
     var _pjEl=document.getElementById('snav-prospective-joiners'); if(!_pjEl) return;
     var _pjFn=(typeof _sbRole!=='undefined'&&_sbRole)?(_sbRole.function_type||''):'';
-    var _showPj=(role==='admin'||role==='executive'||(role==='hrbp'&&(_pjFn==='hrbp'||_pjFn==='ta')));
+    // "Prospective Joiners" label shown to TA and admin; "Expected Joiners" shown to HRBP
+    var _showPj=(role==='admin'||role==='executive'||_pjFn==='ta');
     _pjEl.style.display=_showPj?'':'none';
   })();
-  // Expected Joiners: show for hrbp (all fn types) and admin/executive
+  // Expected Joiners: shown to HRBP function only (not TA — they see "Prospective Joiners" above)
   var _jEl = document.getElementById('snav-expected-joiners');
   if(_jEl) {
     var _jFn = (typeof _sbRole!=='undefined'&&_sbRole)?(_sbRole.function_type||''):'';
-    var _showJ = role==='admin'||role==='executive'||(role==='hrbp'&&['hrbp','ta'].includes(_jFn));
+    var _showJ = (role==='hrbp'&&_jFn==='hrbp');
     _jEl.style.display = _showJ ? '' : 'none';
   }
   // Auto-scope region filters — only for HRBP function type, not HR Ops or Payroll
