@@ -4266,13 +4266,13 @@ async function loadProspectiveJoiners() {
   try {
     var today  = new Date();
     var fwd30  = new Date(today.getTime() + 120*86400000);
-    var fromDt = new Date(today.getTime() - 45*86400000).toISOString().substring(0,10);
+    var fromDt = new Date(today.getTime() - 90*86400000).toISOString().substring(0,10);
     var toDt   = fwd30.toISOString().substring(0,10);
     var q = _sb.from('prospective_joiners')
       .select('*')
       .gte('doj', fromDt)
       .lte('doj', toDt)
-      .order('doj', {ascending:false});
+      .order('doj', {ascending:true});
     // Region filter: apply only if user has a specific region (not Pan India)
     // Admins, executives, TA leads (Pan India) and hrops/payroll see all regions
     var _pjRole = _sbRole.role||'';
@@ -4365,13 +4365,30 @@ function renderJoinersTab(el) {
     return diff;
   }
 
+  // Overdue action banner — candidates past DOJ still on Offer Accepted
+  var overdueAction = data.filter(function(r){
+    return daysAway(r.doj) !== null && daysAway(r.doj) < 0
+      && ['Offer Accepted','Induction Scheduled'].includes(r.status);
+  });
+  var overdueBanner = overdueAction.length
+    ? '<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px">'
+        +'<div style="font-size:18px;line-height:1">⚠️</div>'
+        +'<div>'
+          +'<div style="font-weight:600;color:var(--red);font-size:13px;margin-bottom:3px">'+overdueAction.length+' candidate'+(overdueAction.length>1?'s':'')+' past DOJ — action needed</div>'
+          +'<div style="font-size:11px;color:var(--muted2)">'+overdueAction.map(function(r){return esc(r.candidate_name);}).join(', ')+' — mark as Joined, No Show, or Deferred</div>'
+        +'</div>'
+      +'</div>'
+    : '';
+
   var rows = data.map(function(r){
     var tc  = tierCol[r.account_tier]  || 'var(--muted2)';
     var sc  = statusCol[r.status]      || 'var(--muted)';
     var days= daysAway(r.doj);
-    var urgency = days===null ? 'var(--muted)' : days<0?'var(--muted2)':days<=3?'var(--red)':days<=7?'var(--amber)':'var(--green)';
+    var isOverdue = days !== null && days < 0;
+    var urgency = days===null ? 'var(--muted)' : isOverdue?'var(--red)':days===0?'var(--red)':days<=3?'var(--red)':days<=7?'var(--amber)':'var(--green)';
     var dojLabel= fmtDoj(r.doj);
-    var dayLabel= days===null?'':(days<0?'Overdue':days===0?'Today':days+'d away');
+    var dayLabel= days===null?'':(days<0?Math.abs(days)+'d overdue':days===0?'Today':days+'d away');
+    var custVal = (r.customer && r.customer!=='None' && r.customer!=='none' && r.customer!=='N/A' && r.customer!=='-') ? r.customer : null;
 
     // Status dropdown (TA can update; HRBP limited to Induction Scheduled)
     var canEdit = isAdmin || isTa || (isHrbp && ['Offer Accepted','Induction Scheduled'].includes(r.status));
@@ -4394,7 +4411,7 @@ function renderJoinersTab(el) {
       : '<div style="font-size:13px;font-weight:700;color:'+urgency+'">'+dojLabel+'</div>'
         +'<div style="font-size:10px;color:'+urgency+'">'+dayLabel+'</div>';
 
-    return '<tr style="border-bottom:1px solid rgba(42,61,82,.25)">'
+    return '<tr style="border-bottom:1px solid rgba(42,61,82,.25)'+(isOverdue?';background:rgba(239,68,68,.04)':'')+'">'
       +'<td style="padding:10px 12px;min-width:130px">'
         +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(r.candidate_name||'—')+'</div>'
       +'</td>'
@@ -4402,7 +4419,7 @@ function renderJoinersTab(el) {
         +'<div style="font-size:11px;color:var(--text)">'+esc(r.designation||'—')+'</div>'
       +'</td>'
       +'<td style="padding:10px 12px;min-width:160px">'
-        +'<div style="font-size:11px;color:var(--text)">'+esc(r.customer||'—')+'</div>'
+        +'<div style="font-size:11px;color:'+(custVal?'var(--text)':'var(--muted2)')+'">'+esc(custVal||'Unassigned')+'</div>'
         +'<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.25);color:'+tc+'">'+esc(r.account_tier||'Regular')+'</span>'
       +'</td>'
       +'<td style="padding:10px 12px">'
@@ -4447,6 +4464,7 @@ function renderJoinersTab(el) {
     +'<div style="margin-bottom:8px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Region</span>'+regBtns+'</div>'
     +'<div style="margin-bottom:8px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Tier</span>'+tierBtns+'</div>'
     +'<div style="margin-bottom:18px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Status</span>'+sfBtns+'</div>'
+    +overdueBanner
 
     // Table
     +'<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">'
