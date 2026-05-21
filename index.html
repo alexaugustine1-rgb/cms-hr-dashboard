@@ -2487,35 +2487,45 @@ function renderHRBP(w, pw) {
     if (!_hrbpStats[nm].last || sv.visit_date > _hrbpStats[nm].last) _hrbpStats[nm].last = sv.visit_date;
   });
   const _regionColors = {North:'#60a5fa',South:'#34d399',East:'#f59e0b',West:'#a78bfa'};
-  // Logged-in HRBP's display name for self-highlight
+  // Logged-in user's display name for self-highlight
   const _myName = (typeof _sbRole !== 'undefined' && _sbRole && _sbRole.display_name) ? _sbRole.display_name : '';
   const _sortedLeader = Object.entries(_hrbpStats).sort(function(a,b){ return b[1].visits - a[1].visits; });
+  const _maxVisits = _sortedLeader.length ? _sortedLeader[0][1].visits : 1;
   const _leaderboard = _sortedLeader.length
     ? '<div style="margin-bottom:16px">'
       + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;color:var(--muted2);text-transform:uppercase;margin-bottom:8px">HRBP Visit Leaderboard — All India</div>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">'
+      + '<div style="display:flex;flex-direction:column;gap:6px">'
       + _sortedLeader.map(function(e, idx){
           const nm = e[0], st = e[1];
           const rc = _regionColors[st.region] || '#94a3b8';
           const isActive = _hcH === nm;
           const isSelf = _myName && nm.toLowerCase().trim() === _myName.toLowerCase().trim();
           const rank = idx + 1;
-          const rankEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '#'+rank;
+          const rankLabel = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '<span style="font-size:10px;font-weight:700;color:var(--muted2);font-family:DM Mono,monospace">#'+rank+'</span>';
+          const pct = Math.max(6, Math.round((st.visits / _maxVisits) * 100));
           const lastFmt = st.last ? new Date(st.last+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '—';
-          const selfBorder = isSelf ? 'border:2px solid #34d399;box-shadow:0 0 0 3px rgba(52,211,153,.15);' : '';
-          return '<div onclick="_hrbpSVHRBP=\''+(isActive?'All':nm)+'\';render()" style="cursor:pointer;background:var(--surface2);'+(isSelf?'background:rgba(52,211,153,.05);':'')+selfBorder+(isSelf?'':'border:1px solid '+(isActive?'var(--accent)':'var(--border)')+';')+'border-left:3px solid '+rc+';border-radius:8px;padding:10px 12px;'+(isActive?'box-shadow:0 0 0 2px rgba(96,165,250,.25)':'')+'">'
-            + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
-            + '<div style="display:flex;align-items:center;gap:6px">'
-            + '<span style="font-size:13px;line-height:1">'+rankEmoji+'</span>'
-            + '<div style="font-size:12px;font-weight:700;color:var(--text)">'+esc(nm)+'</div>'
-            + (isSelf ? '<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:#34d39920;color:#34d399;font-weight:700;border:1px solid #34d39940">YOU</span>' : '')
+          const gapAbove = idx > 0 ? _sortedLeader[idx-1][1].visits - st.visits : 0;
+          const gapText = gapAbove > 0
+            ? '<span style="font-size:9px;color:var(--muted2);white-space:nowrap">'+gapAbove+' behind</span>'
+            : (rank === 1 ? '<span style="font-size:9px;color:#f59e0b;white-space:nowrap">👑 Leader</span>' : '');
+          const selfStyle = isSelf
+            ? 'background:rgba(52,211,153,.06);border:1px solid #34d39950;box-shadow:0 0 0 2px rgba(52,211,153,.1);'
+            : 'background:var(--surface2);border:1px solid '+(isActive?'var(--accent)':'var(--border)')+';';
+          return '<div onclick="_hrbpSVHRBP=\''+(isActive?'All':nm)+'\';render()" style="cursor:pointer;'+selfStyle+'border-left:3px solid '+rc+';border-radius:8px;padding:9px 12px">'
+            + '<div style="display:flex;align-items:center;gap:8px">'
+            + '<div style="min-width:24px;text-align:center;font-size:14px;line-height:1">'+rankLabel+'</div>'
+            + '<div style="flex:1;font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(nm)+'</div>'
+            + (isSelf ? '<span style="font-size:9px;padding:1px 6px;border-radius:6px;background:#34d39920;color:#34d399;font-weight:700;border:1px solid #34d39940;white-space:nowrap">YOU</span>' : '')
+            + '<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:'+rc+'18;color:'+rc+';font-weight:600;white-space:nowrap">'+esc(st.region)+'</span>'
+            + '<div style="font-size:13px;font-weight:700;color:var(--accent);min-width:28px;text-align:right">'+st.visits+'</div>'
+            + '<div style="font-size:10px;color:var(--muted2);min-width:52px;text-align:right;white-space:nowrap">'+st.accounts.size+' accts</div>'
+            + '<div style="font-size:10px;color:var(--muted2);min-width:58px;text-align:right;white-space:nowrap">'+esc(lastFmt)+'</div>'
             + '</div>'
-            + '<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:'+rc+'18;color:'+rc+';font-weight:600">'+esc(st.region)+'</span>'
+            + '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;padding-left:32px">'
+            + '<div style="flex:1;background:var(--surface);border-radius:3px;height:4px;overflow:hidden">'
+            + '<div style="height:100%;width:'+pct+'%;background:'+(isSelf?'#34d399':rc)+';border-radius:3px;transition:width .5s ease"></div>'
             + '</div>'
-            + '<div style="display:flex;gap:12px">'
-            + '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:var(--accent)">'+st.visits+'</div><div style="font-size:9px;color:var(--muted)">Visits</div></div>'
-            + '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:var(--green)">'+st.accounts.size+'</div><div style="font-size:9px;color:var(--muted)">Accounts</div></div>'
-            + '<div style="text-align:center;flex:1"><div style="font-size:11px;font-weight:600;color:var(--muted2);margin-top:4px">Last: '+esc(lastFmt)+'</div>'+(isActive?'<div style="font-size:9px;color:var(--accent)">▸ Filtered</div>':'')+'</div>'
+            + gapText
             + '</div>'
             + '</div>';
         }).join('')
@@ -2594,8 +2604,11 @@ function renderHRBP(w, pw) {
           + '</div>'
         : '');
 
-  // Count actual site visits — use hrbp_site_visits table count when available, else fall back to connects
-  const _svVisitCount = (typeof _hrbpSVCache !== 'undefined' && _hrbpSVCache.length) ? _hrbpSVCache.length : 0;
+  // Count actual site visits — for HRBP users scope to their own visits only, admin/exec see all
+  const _mySVs = (typeof _hrbpSVCache !== 'undefined' && _isHRBP && _myName)
+    ? _hrbpSVCache.filter(function(sv){ return sv.submitter_name && sv.submitter_name.toLowerCase().trim() === _myName.toLowerCase().trim(); })
+    : (typeof _hrbpSVCache !== 'undefined' ? _hrbpSVCache : []);
+  const _svVisitCount = _mySVs.length;
   const _connectVisitCount = w.hrbp_connects.reduce((total, c) => {
     const detail = c.detail || c.activities || '';
     if (/site name\s*[-–:]/i.test(detail)) {
@@ -2656,8 +2669,12 @@ function renderHRBP(w, pw) {
           var totalAccounts = (CUSTOMER_LIST||[]).filter(function(c){
             return (c.t==='Platinum'||c.t==='Gold') && (isPanIndia2 || c.r===_hcR);
           }).length;
+          // Scope visited accounts to this HRBP's own visits; admin/exec see all-India
+          var _scorecardSVs = (isPanIndia2 && !(role2==='hrbp'))
+            ? (_hrbpSVCache||[])
+            : (_mySVs||[]);
           var visitedSet = {};
-          (_hrbpSVCache||[]).forEach(function(sv){ if(sv.account_name) visitedSet[sv.account_name.toUpperCase().trim()]=1; });
+          _scorecardSVs.forEach(function(sv){ if(sv.account_name) visitedSet[sv.account_name.toUpperCase().trim()]=1; });
           var visitedCount = Object.keys(visitedSet).length;
           var overdueCount = Math.max(0, totalAccounts - visitedCount);
           var visitPlans2 = {};
