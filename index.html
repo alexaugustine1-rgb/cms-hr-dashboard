@@ -2492,44 +2492,50 @@ function renderHRBP(w, pw) {
   const _sortedLeader = Object.entries(_hrbpStats).sort(function(a,b){ return b[1].visits - a[1].visits; });
   const _maxVisits = _sortedLeader.length ? _sortedLeader[0][1].visits : 1;
   const _leaderboard = _sortedLeader.length
-    ? '<div style="margin-bottom:16px">'
-      + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;color:var(--muted2);text-transform:uppercase;margin-bottom:8px">HRBP Visit Leaderboard — All India</div>'
-      + '<div style="display:flex;flex-direction:column;gap:6px">'
+    ? '<div style="margin-bottom:20px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden">'
+      + '<div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
+      + '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;color:var(--muted2);text-transform:uppercase">🏆 HRBP Visit Leaderboard — All India</div>'
+      + '<div style="font-size:10px;color:var(--muted2)">'+_svAll.length+' total visits · click to filter log</div>'
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:36px 1fr 80px 1fr 52px 72px 72px;align-items:center;padding:6px 18px;border-bottom:1px solid var(--border)">'
+      + '<div></div>'
+      + '<div style="font-size:9px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px">Name</div>'
+      + '<div style="font-size:9px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;text-align:center">Region</div>'
+      + '<div style="font-size:9px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;padding:0 8px">Progress</div>'
+      + '<div style="font-size:9px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;text-align:center">Visits</div>'
+      + '<div style="font-size:9px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;text-align:center">Accounts</div>'
+      + '<div style="font-size:9px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;text-align:center">Last Visit</div>'
+      + '</div>'
       + _sortedLeader.map(function(e, idx){
           const nm = e[0], st = e[1];
           const rc = _regionColors[st.region] || '#94a3b8';
           const isActive = _hcH === nm;
           const isSelf = _myName && nm.toLowerCase().trim() === _myName.toLowerCase().trim();
           const rank = idx + 1;
-          const rankLabel = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '<span style="font-size:10px;font-weight:700;color:var(--muted2);font-family:DM Mono,monospace">#'+rank+'</span>';
-          const pct = Math.max(6, Math.round((st.visits / _maxVisits) * 100));
+          const rankLabel = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '<span style="font-size:11px;font-weight:700;color:var(--muted2);font-family:DM Mono,monospace">#'+rank+'</span>';
+          const pct = Math.max(4, Math.round((st.visits / _maxVisits) * 100));
           const lastFmt = st.last ? new Date(st.last+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '—';
-          const gapAbove = idx > 0 ? _sortedLeader[idx-1][1].visits - st.visits : 0;
-          const gapText = gapAbove > 0
-            ? '<span style="font-size:9px;color:var(--muted2);white-space:nowrap">'+gapAbove+' behind</span>'
-            : (rank === 1 ? '<span style="font-size:9px;color:#f59e0b;white-space:nowrap">👑 Leader</span>' : '');
-          const selfStyle = isSelf
-            ? 'background:rgba(52,211,153,.06);border:1px solid #34d39950;box-shadow:0 0 0 2px rgba(52,211,153,.1);'
-            : 'background:var(--surface2);border:1px solid '+(isActive?'var(--accent)':'var(--border)')+';';
-          return '<div onclick="_hrbpSVHRBP=\''+(isActive?'All':nm)+'\';render()" style="cursor:pointer;'+selfStyle+'border-left:3px solid '+rc+';border-radius:8px;padding:9px 12px">'
-            + '<div style="display:flex;align-items:center;gap:8px">'
-            + '<div style="min-width:24px;text-align:center;font-size:14px;line-height:1">'+rankLabel+'</div>'
-            + '<div style="flex:1;font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(nm)+'</div>'
-            + (isSelf ? '<span style="font-size:9px;padding:1px 6px;border-radius:6px;background:#34d39920;color:#34d399;font-weight:700;border:1px solid #34d39940;white-space:nowrap">YOU</span>' : '')
-            + '<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:'+rc+'18;color:'+rc+';font-weight:600;white-space:nowrap">'+esc(st.region)+'</span>'
-            + '<div style="font-size:13px;font-weight:700;color:var(--accent);min-width:28px;text-align:right">'+st.visits+'</div>'
-            + '<div style="font-size:10px;color:var(--muted2);min-width:52px;text-align:right;white-space:nowrap">'+st.accounts.size+' accts</div>'
-            + '<div style="font-size:10px;color:var(--muted2);min-width:58px;text-align:right;white-space:nowrap">'+esc(lastFmt)+'</div>'
+          const rowBg = isSelf ? 'background:rgba(52,211,153,.05);' : isActive ? 'background:rgba(96,165,250,.05);' : '';
+          const rowBorder = isSelf ? 'border-left:3px solid #34d399;' : 'border-left:3px solid '+rc+';';
+          return '<div onclick="_hrbpSVHRBP=\''+(isActive?'All':nm)+'\';render()" '
+            + 'style="cursor:pointer;display:grid;grid-template-columns:36px 1fr 80px 1fr 52px 72px 72px;align-items:center;padding:10px 18px;'+rowBg+rowBorder+(idx<_sortedLeader.length-1?'border-bottom:1px solid var(--border);':'')+(isActive?'box-shadow:inset 0 0 0 1px rgba(96,165,250,.3)':'')+'">'
+            + '<div style="text-align:center;font-size:16px;line-height:1">'+rankLabel+'</div>'
+            + '<div style="display:flex;align-items:center;gap:6px">'
+            +   '<span style="font-size:13px;font-weight:700;color:var(--text)">'+esc(nm)+'</span>'
+            +   (isSelf ? '<span style="font-size:9px;padding:1px 6px;border-radius:6px;background:#34d39920;color:#34d399;font-weight:700;border:1px solid #34d39940">YOU</span>' : '')
             + '</div>'
-            + '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;padding-left:32px">'
-            + '<div style="flex:1;background:var(--surface);border-radius:3px;height:4px;overflow:hidden">'
-            + '<div style="height:100%;width:'+pct+'%;background:'+(isSelf?'#34d399':rc)+';border-radius:3px;transition:width .5s ease"></div>'
+            + '<div style="text-align:center"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:'+rc+'18;color:'+rc+';font-weight:600">'+esc(st.region)+'</span></div>'
+            + '<div style="padding:0 8px">'
+            +   '<div style="background:var(--surface);border-radius:3px;height:6px;overflow:hidden">'
+            +   '<div style="height:100%;width:'+pct+'%;background:'+(isSelf?'#34d399':rc)+';border-radius:3px;transition:width .5s ease"></div>'
+            +   '</div>'
             + '</div>'
-            + gapText
-            + '</div>'
+            + '<div style="text-align:center;font-size:16px;font-weight:700;color:var(--accent)">'+st.visits+'</div>'
+            + '<div style="text-align:center;font-size:13px;font-weight:600;color:var(--green)">'+st.accounts.size+'</div>'
+            + '<div style="text-align:center;font-size:11px;color:var(--muted2)">'+esc(lastFmt)+'</div>'
             + '</div>';
         }).join('')
-      + '</div></div>'
+      + '</div>'
     : '';
 
   // ── Site Visit Log (cards) ───────────────────────────────────────────────
@@ -2592,7 +2598,7 @@ function renderHRBP(w, pw) {
   const _filteredConnects = _hcR === 'All' ? _allConnects
     : _allConnects.filter(function(c){ return (c.region || getHRBPRegion(c.name || '')) === _hcR; });
 
-  const connectItems = _filterBar + _leaderboard
+  const connectItems = _filterBar
     + (_svAll.length
         ? _svCards
         : '<div class="empty-state">No structured site visits logged yet. HRBP users can log visits using the form below.</div>')
@@ -2648,6 +2654,8 @@ function renderHRBP(w, pw) {
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--green)">${w.hrbp_connects.length}</div><div class="mini-stat-label">Detailed Connects Logged</div></div>
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--amber)">${w.hrbp_discipline.filter(d=>!isNil(d)&&d.length>10).length}</div><div class="mini-stat-label">ER / Discipline Cases</div></div>
     </div>
+
+    ${_leaderboard}
 
     <div class="two-col">
       <div class="card">
