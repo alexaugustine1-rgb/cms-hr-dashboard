@@ -2498,7 +2498,7 @@ function renderHRBP(w, pw) {
           const nm = e[0], st = e[1];
           const rc = _regionColors[st.region] || '#94a3b8';
           const isActive = _hcH === nm;
-          const isSelf = _isHRBP && _myName && nm.toLowerCase().trim() === _myName.toLowerCase().trim();
+          const isSelf = _myName && nm.toLowerCase().trim() === _myName.toLowerCase().trim();
           const rank = idx + 1;
           const rankEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '#'+rank;
           const lastFmt = st.last ? new Date(st.last+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}) : '—';
