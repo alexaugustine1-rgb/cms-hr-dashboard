@@ -3473,10 +3473,17 @@ async function loadAbsentCases() {
     _absentCases = data || [];
     _absentLoaded = true;
     // Build eSep emp code set for cross-reference flag
+    // Prefer esep_codes cache (full unfiltered list from ZingHR extract);
+    // fall back to resignation cache if esep_codes not yet generated
     try {
-      const { data: dc } = await _sb.from('data_cache').select('data').eq('id','resignation').maybeSingle();
-      const esepRows = (dc && Array.isArray(dc.data)) ? dc.data : [];
-      _esepCodeSet = new Set(esepRows.map(function(r){ return String(r.EmployeeCode||r.emp_code||''); }));
+      const { data: dcCodes } = await _sb.from('data_cache').select('data').eq('id','esep_codes').maybeSingle();
+      if (dcCodes && Array.isArray(dcCodes.data) && dcCodes.data.length) {
+        _esepCodeSet = new Set(dcCodes.data.map(function(c){ return String(c); }));
+      } else {
+        const { data: dc } = await _sb.from('data_cache').select('data').eq('id','resignation').maybeSingle();
+        const esepRows = (dc && Array.isArray(dc.data)) ? dc.data : [];
+        _esepCodeSet = new Set(esepRows.map(function(r){ return String(r.EmployeeCode||r.emp_code||''); }));
+      }
     } catch(e) { _esepCodeSet = new Set(); }
     renderAbsenteeism(el);
     // Refresh Overview KPI so absent count stays in sync
@@ -9946,8 +9953,19 @@ async function processResignationData(wb) {
   // Auto-update esep_verified on absent_cases based on current eSep file
   // esep_verified = true  → employee code found in this eSep upload (active eSep exists)
   // esep_verified = false → esep_initiated=true but code not in this file
+  // IMPORTANT: use raw unfiltered `rows` — not `newRows` — so FnF Locked / LWD>90d
+  // employees still count as verified (their eSep did exist in ZingHR)
   try {
-    const esepCodes = new Set(newRows.map(r => String(r.emp_code)));
+    const esepCodes = new Set(
+      rows.map(r => String(r['EmployeeCode'] || r['Employee Code'] || '').trim()).filter(Boolean)
+    );
+    // Cache the full code list so loadAbsentCases can cross-reference without filtering
+    try {
+      await _sb.from('data_cache').upsert(
+        { id: 'esep_codes', data: [...esepCodes], row_count: esepCodes.size, uploaded_at: new Date().toISOString() },
+        { onConflict: 'id' }
+      );
+    } catch(e) { console.warn('[esep_codes cache]', e.message); }
     const { data: absCases } = await _sb.from('absent_cases')
       .select('id,emp_code,esep_initiated,esep_verified')
       .eq('esep_initiated', true);
