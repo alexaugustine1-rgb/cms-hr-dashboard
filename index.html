@@ -10092,8 +10092,13 @@ async function processAttendanceAbsence(wb) {
     try {
       const p = label.trim().split(' ');
       if (p.length === 3) {
-        const yr = p[2].length === 2 ? '20' + p[2] : p[2];
-        return new Date(p[1] + ' ' + p[0] + ' ' + yr).toISOString().substring(0, 10);
+        const yr  = p[2].length === 2 ? '20' + p[2] : p[2];
+        const mon = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+        const m   = mon[p[1]];
+        if (m === undefined) return null;
+        // Use Date.UTC to avoid local-timezone rollback (IST midnight → prev-day UTC)
+        const d = new Date(Date.UTC(parseInt(yr), m, parseInt(p[0])));
+        return d.toISOString().substring(0, 10);
       }
     } catch(e) {}
     return null;
