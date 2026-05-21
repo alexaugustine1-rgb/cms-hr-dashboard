@@ -6210,6 +6210,77 @@ async function doChangePassword() {
 let _fnfRegion = 'All';
 let _fnfStatus = 'Pending';
 let _fnfSort   = 'days_desc';
+let FNF_PRIORITY = {}; // keyed by emp_code — loaded from fnf_priority table
+
+async function loadFnFPriority() {
+  try {
+    const { data, error } = await _sb.from('fnf_priority').select('*');
+    if (error) throw error;
+    FNF_PRIORITY = {};
+    (data || []).forEach(r => { FNF_PRIORITY[r.emp_code] = r; });
+  } catch(e) { console.warn('[FnF Priority]', e.message); }
+}
+
+function fnfMarkPriority(empCode, empName) {
+  const existing  = FNF_PRIORITY[empCode];
+  const hrbpName  = (_sbRole && _sbRole.display_name) || '';
+  const overlay   = document.createElement('div');
+  overlay.id      = '_fnfPriorityModal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.65);z-index:9999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;width:440px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+      <div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--red);margin-bottom:4px">🚩 FnF Priority Flag</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:18px">${esc(empName)} <span style="font-size:11px;color:var(--muted);font-weight:400">(${esc(empCode)})</span></div>
+      ${existing ? `<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px">
+        <span style="color:var(--muted2);font-size:10px;text-transform:uppercase;letter-spacing:.5px">Currently flagged by</span><br>
+        <b style="color:var(--text)">${esc(existing.hrbp_name)}</b> — ${esc(existing.remark)}
+      </div>` : ''}
+      <div style="margin-bottom:14px">
+        <div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Escalation Reason / Remark *</div>
+        <textarea id="_fnfRemark" rows="3" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:12px;font-family:inherit;resize:vertical;box-sizing:border-box;line-height:1.5" placeholder="e.g. Client escalation — MD level involvement, employee threatening legal action…">${existing ? esc(existing.remark) : ''}</textarea>
+      </div>
+      <div style="margin-bottom:22px">
+        <div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Your Name (HRBP) *</div>
+        <input id="_fnfHrbpName" type="text" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:12px;font-family:inherit;box-sizing:border-box" value="${esc(hrbpName)}" placeholder="Your full name">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        ${existing ? `<button onclick="fnfUnmarkPriority('${esc(empCode)}',document.getElementById('_fnfPriorityModal'))" style="padding:8px 16px;border-radius:8px;border:1px solid var(--red);background:none;color:var(--red);font-size:12px;cursor:pointer;font-weight:500">Remove Flag</button>` : ''}
+        <button onclick="document.getElementById('_fnfPriorityModal').remove()" style="padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);font-size:12px;cursor:pointer">Cancel</button>
+        <button onclick="fnfSavePriority('${esc(empCode)}',document.getElementById('_fnfPriorityModal'))" style="padding:8px 22px;border-radius:8px;border:none;background:var(--red);color:#fff;font-size:12px;cursor:pointer;font-weight:600">🚩 Flag Priority</button>
+      </div>
+    </div>`;
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  setTimeout(() => { const ta = document.getElementById('_fnfRemark'); if(ta) ta.focus(); }, 50);
+}
+
+async function fnfSavePriority(empCode, modal) {
+  const remark   = (document.getElementById('_fnfRemark') || {}).value || '';
+  const hrbpName = (document.getElementById('_fnfHrbpName') || {}).value || '';
+  if (!remark.trim())   { alert('Please enter an escalation reason / remark.'); return; }
+  if (!hrbpName.trim()) { alert('Please enter your name.'); return; }
+  const row = { emp_code: empCode, remark: remark.trim(), hrbp_name: hrbpName.trim(), region: (_sbRole && _sbRole.region) || null, marked_at: new Date().toISOString() };
+  try {
+    const { error } = await _sb.from('fnf_priority').upsert(row, { onConflict: 'emp_code' });
+    if (error) throw error;
+    FNF_PRIORITY[empCode] = row;
+    if (modal) modal.remove();
+    const el = document.getElementById('tab-fnf');
+    if (el) el.innerHTML = renderFnF();
+  } catch(e) { alert('Error saving priority flag: ' + e.message); }
+}
+
+async function fnfUnmarkPriority(empCode, modal) {
+  if (!confirm('Remove priority flag for this case?')) return;
+  try {
+    const { error } = await _sb.from('fnf_priority').delete().eq('emp_code', empCode);
+    if (error) throw error;
+    delete FNF_PRIORITY[empCode];
+    if (modal) modal.remove();
+    const el = document.getElementById('tab-fnf');
+    if (el) el.innerHTML = renderFnF();
+  } catch(e) { alert('Error removing flag: ' + e.message); }
+}
 
 function renderFnF() {
   if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _fnfRegion = _sbRole.region; }
@@ -6230,7 +6301,7 @@ function renderFnF() {
   let data = [...FNF_DATA];
   if(_fnfRegion !== 'All') data = data.filter(r => r.region === _fnfRegion);
   if(_fnfStatus === 'Pending') data = data.filter(r => !r.paid && !r.status.includes('Bank'));
-  else if(_fnfStatus === 'Priority') data = data.filter(r => r.status.trim() === 'Priority' && !r.paid);
+  else if(_fnfStatus === 'Priority') data = data.filter(r => !r.paid && (r.status.trim() === 'Priority' || !!FNF_PRIORITY[r.emp_code]));
   else if(_fnfStatus === 'Bank Issue') data = data.filter(r => r.status.includes('Bank') && !r.paid);
   else if(_fnfStatus === 'Paid') data = data.filter(r => r.paid);
   // Sort
@@ -6244,7 +6315,7 @@ function renderFnF() {
   const pending = base.filter(r=>!r.paid);
   const paidCases = base.filter(r=>r.paid);
   const critical = pending.filter(r=>['1year&above','180-365days','90-180Days'].includes(r.band));
-  const priority = pending.filter(r=>r.status==='Priority');
+  const priority = pending.filter(r=>r.status.trim()==='Priority'||!!FNF_PRIORITY[r.emp_code]);
   const bankIssue = pending.filter(r=>r.status.includes('Bank'));
   const fnfTotal = r => r.net_salary || 0;
   const totalAmt = pending.reduce((s,r)=>s+fnfTotal(r),0);
@@ -6342,31 +6413,36 @@ function renderFnF() {
 
     <!-- Table -->
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">
-      <div style="display:grid;grid-template-columns:150px 1fr 80px 72px 72px 90px 100px 100px 80px;background:var(--surface3);border-bottom:1px solid var(--border);padding:10px 14px">
+      <div style="display:grid;grid-template-columns:140px 1fr 70px 68px 60px 88px 90px 78px 180px 110px 36px;background:var(--surface3);border-bottom:1px solid var(--border);padding:10px 14px">
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Employee</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Customer</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Region</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">DOL</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);cursor:pointer" onclick="_fnfSort='days_desc';document.getElementById('tab-fnf').innerHTML=renderFnF()">Days ↓</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);cursor:pointer" onclick="_fnfSort='band';document.getElementById('tab-fnf').innerHTML=renderFnF()">Aging Band</div>
-        <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">FnF Amount</div>
-        <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Payment Date</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">FnF Amt</div>
         <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">Status</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--red)">Escalation Reason</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--red)">Flagged By</div>
+        <div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2)">🚩</div>
       </div>
       ${data.length===0?'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>':
         data.map((r,i)=>{
-          const bandCol = BAND_COLOR[r.band]||'var(--muted)';
-          const statusLabel = r.paid ? 'Paid' : r.status.includes('Bank') ? 'Bank Issue' : r.status.trim();
-          const statusCol = r.paid?'var(--green)':r.status==='Priority'?'var(--red)':r.status.includes('Bank')?'#f59e0b':'var(--amber)';
-          const rowBg = r.band==='1year&above'||r.band==='180-365days'?'rgba(248,113,113,.04)':'';
-          const rowAmt = fnfTotal(r);
+          const pf         = FNF_PRIORITY[r.emp_code];
+          const isPriority = !!pf || r.status.trim() === 'Priority';
+          const bandCol    = BAND_COLOR[r.band]||'var(--muted)';
+          const statusLabel= r.paid ? 'Paid' : r.status.includes('Bank') ? 'Bank Issue' : r.status.trim();
+          const statusCol  = r.paid?'var(--green)':isPriority?'var(--red)':r.status.includes('Bank')?'#f59e0b':'var(--amber)';
+          const rowBg      = isPriority ? 'rgba(248,113,113,.06)' : r.band==='1year&above'||r.band==='180-365days'?'rgba(248,113,113,.03)':'';
+          const rowAmt     = fnfTotal(r);
           const amtBreakdown = [r.gratuity?'Grat: '+fmtCr(r.gratuity):'', r.leave_enc?'LvE: '+fmtCr(r.leave_enc):'', r.other?'Oth: '+fmtCr(r.other):''].filter(Boolean).join(' · ');
-          return `<div style="display:grid;grid-template-columns:150px 1fr 80px 72px 72px 90px 100px 100px 80px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:${rowBg};font-size:12px">
+          const borderLeft = isPriority ? 'border-left:3px solid var(--red);' : '';
+          return `<div style="display:grid;grid-template-columns:140px 1fr 70px 68px 60px 88px 90px 78px 180px 110px 36px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:${rowBg};font-size:12px;${borderLeft}align-items:start">
             <div>
               <div style="font-weight:500;color:var(--text)">${esc(r.name)}</div>
               <div style="font-size:10px;color:var(--muted2);margin-top:1px">${r.emp_code}</div>
             </div>
-            <div style="color:var(--muted);padding-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.customer)}</div>
+            <div style="color:var(--muted);padding-right:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.customer)}">${esc(r.customer)}</div>
             <div style="color:var(--muted)">${r.region}</div>
             <div style="color:var(--muted);font-size:11px">${r.dol}</div>
             <div style="font-weight:600;color:${bandCol}">${r.days}</div>
@@ -6377,13 +6453,18 @@ function renderFnF() {
               <div style="font-weight:600;color:var(--purple);font-size:12px">${rowAmt>0?fmtCr(rowAmt):'—'}</div>
               ${amtBreakdown?`<div style="font-size:9px;color:var(--muted2);margin-top:2px;line-height:1.3">${amtBreakdown}</div>`:''}
             </div>
-            <div style="font-size:11px;color:${r.payment_date?'var(--green)':'var(--muted2)'}">
-              ${r.payment_date
-                ? '<span style="font-weight:600">✓ '+esc(r.payment_date)+'</span>'
-                : '<span style="color:var(--muted2)">—</span>'}
-            </div>
             <div>
               <span style="font-size:10px;font-weight:600;color:${statusCol}">${esc(statusLabel)}</span>
+              ${isPriority&&!pf?'<div style="font-size:9px;color:var(--red);margin-top:2px">⚑ Excel</div>':''}
+            </div>
+            <div style="font-size:11px;color:var(--red);line-height:1.4;padding-right:6px">
+              ${pf ? esc(pf.remark) : '<span style="color:var(--muted2)">—</span>'}
+            </div>
+            <div style="font-size:11px;color:var(--muted)">
+              ${pf ? `<div style="font-weight:500;color:var(--text)">${esc(pf.hrbp_name)}</div><div style="font-size:9px;color:var(--muted2);margin-top:2px">${pf.marked_at?new Date(pf.marked_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div>` : '<span style="color:var(--muted2)">—</span>'}
+            </div>
+            <div>
+              ${!r.paid ? `<button onclick="fnfMarkPriority('${esc(r.emp_code)}','${esc(r.name).replace(/'/g,"\\'")}'); event.stopPropagation()" title="${pf?'Edit/remove priority flag':'Flag as priority escalation'}" style="background:none;border:1px solid ${pf?'var(--red)':'var(--border)'};border-radius:6px;cursor:pointer;padding:4px 6px;font-size:13px;color:${pf?'var(--red)':'var(--muted2)'};line-height:1">🚩</button>` : ''}
             </div>
           </div>`;
         }).join('')
@@ -8270,6 +8351,9 @@ function snavClick(id, el) {
   if(id==='joiners' && typeof _sbUser !== 'undefined' && _sbUser && !_pjLoaded) { setTimeout(loadProspectiveJoiners, 100); }
   if(id==='ate' && typeof _sbUser !== 'undefined' && _sbUser && !_ateLoaded) { setTimeout(loadATECases, 100); }
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(renderActionCentre, 50); }
+  if(id==='fnf' && typeof _sbUser !== 'undefined' && _sbUser) {
+    loadFnFPriority().then(() => { const el=document.getElementById('tab-fnf'); if(el) el.innerHTML=renderFnF(); });
+  }
 }
 
 function toggleSidebar() {
@@ -9704,10 +9788,12 @@ async function processFnFData(wb) {
   log('✓ FnF: '+FNF_DATA.length+' records loaded','ok');
   log('Pending: '+FNF_DATA.filter(r=>!r.paid).length+' | Paid: '+FNF_DATA.filter(r=>r.paid).length,'ok');
 
-  // Force re-render
+  // Force re-render (load priority flags first so they show immediately after upload)
   if (typeof render === 'function') render();
-  const el = document.getElementById('tab-fnf');
-  if (el) el.innerHTML = renderFnF();
+  loadFnFPriority().then(() => {
+    const el = document.getElementById('tab-fnf');
+    if (el) el.innerHTML = renderFnF();
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
