@@ -8948,9 +8948,21 @@ async function processEmployeeMaster(wb) {
         var {error:cwErr} = await _sb.from('contract_workforce').upsert(cwUpsert.slice(c,c+BATCH),{onConflict:'emp_code',ignoreDuplicates:false});
         if (cwErr){log('Contract batch error: '+cwErr.message,'err');cwErrors++;}
       }
-      if (!cwErrors) log('✓ Contract Workforce: '+cwUpsert.length+' records saved (FTC: '+cwUpsert.filter(function(r){return r.emp_type==='FTC';}).length+' · Consultant: '+cwUpsert.filter(function(r){return r.emp_type==='Consultant';}).length+' · Contract: '+cwUpsert.filter(function(r){return r.emp_type==='CONTRACT';}).length+')','ok');
-      else log('Contract completed with '+cwErrors+' error(s)','err');
-    } else { log('No FTC/Consultant/Contract rows found in EmpType column','info'); }
+      if (!cwErrors) {
+        log('✓ Contract Workforce: '+cwUpsert.length+' records saved (FTC: '+cwUpsert.filter(function(r){return r.emp_type==='FTC';}).length+' · Consultant: '+cwUpsert.filter(function(r){return r.emp_type==='Consultant';}).length+' · Contract: '+cwUpsert.filter(function(r){return r.emp_type==='CONTRACT';}).length+')','ok');
+        // Clean up stale records — employees no longer active (FnF Locked/Resigned etc.) from old uploads
+        // Only delete non-ATE records (ATE are managed separately in ate_tracker)
+        var {data:allCw} = await _sb.from('contract_workforce').select('emp_code').neq('emp_type','ATE');
+        if (allCw && allCw.length) {
+          var freshCodes = new Set(cwUpsert.map(function(r){return r.emp_code;}));
+          var stale = allCw.filter(function(r){return !freshCodes.has(r.emp_code);}).map(function(r){return r.emp_code;});
+          if (stale.length) {
+            var {error:delErr} = await _sb.from('contract_workforce').delete().in('emp_code', stale);
+            if (!delErr) log('Cleaned up '+stale.length+' stale records (ex-employees)','info');
+          }
+        }
+      } else { log('Contract completed with '+cwErrors+' error(s)','err'); }
+    } else { log('No FTC/Consultant/Contract rows found in EmpType or Employment Type column','info'); }
 
     // Refresh ATE tab if open
     _ateLoaded = false;
