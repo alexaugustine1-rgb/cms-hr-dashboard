@@ -6288,7 +6288,16 @@ function renderAccountHealth() {
 
   // ── Helpers ──
   function acctKey(n){ return String(n||'').toUpperCase().trim(); }
-  function nameMatch(a,b){ a=acctKey(a); b=acctKey(b); return a&&b&&(a===b||a.includes(b)||b.includes(a)); }
+  function nameMatch(a, b) {
+    a = String(a || '').toUpperCase().trim();
+    b = String(b || '').toUpperCase().trim();
+    if (!a || !b) return false;
+    if (a === b) return true;
+    if (a.length > 8 && b.length > 8) {
+      return a.includes(b) || b.includes(a);
+    }
+    return false;
+  }
   var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function fmtDate(d){ if(!d)return'—'; var dt=new Date(d); return isNaN(dt)?String(d):dt.getDate()+' '+months[dt.getMonth()]; }
   function fmtCr(n){ return n>=10000000?'₹'+(n/10000000).toFixed(1)+'Cr':n>=100000?'₹'+(n/100000).toFixed(1)+'L':n>0?'₹'+Math.round(n).toLocaleString('en-IN'):'—'; }
@@ -6331,7 +6340,7 @@ function renderAccountHealth() {
 
     // 5. Attrition (exits with lwd in last 90 days)
     var exits = (CMS_RES_DATA||[]).filter(function(r){ return nameMatch(r.customer,n)&&r.days_to_lwd<0&&r.days_to_lwd>=-90; }).length;
-    var attrRate = activeHC>0 ? Math.round(exits/activeHC*1000)/10 : 0;
+    var attrRate = activeHC > 0 ? Math.round(exits / activeHC * (12/3) * 100 * 10) / 10 : 0;
 
     // 6. TA open reqs
     var taReqs = (TA_ACTIVE_REQS||[]).filter(function(r){ return nameMatch(r.account||r.customer||'',n); });
@@ -6503,7 +6512,7 @@ function renderAccountHealth() {
         +sig('Long Absent',abVal,abSub,abCol)
         +sig('FnF Pending',fnfVal,fnfSub,fnfCol)
         +sig('Last Site Visit',vsVal,vsSub,vsCol)
-        +sig('Attrition 90d',atVal,atSub,atCol)
+        +sig('Annualised (90-day)',atVal,atSub,atCol)
         +sig('Open TA Reqs',taVal,taSub,taCol)
       +'</div>'
       +(flags?'<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">'+flags+'</div>':'')
@@ -7775,6 +7784,10 @@ async function processCandidate(wb) {
 
   
   // ── Extract prospective joiners (Offer Accepted + no ECode yet) ──────
+  var _reqMap = {};
+  (TA_ACTIVE_REQS || []).forEach(function(r) {
+    if (r.req_id) _reqMap[String(r.req_id).trim()] = r;
+  });
   var prospective = [];
   for(var _pi=0;_pi<rows.length;_pi++){
     var _pr = rows[_pi];
@@ -7803,15 +7816,23 @@ async function processCandidate(wb) {
     var _isProspective = (_pStatus==='Accepted' && !_pHasCode && _pDoj);
     var _isJoined      = (_pStatus==='Accepted' && _pHasCode);
     if (_isProspective || _isJoined) {
-      var _pCust = ss(_pr['CustomerNameRoleandLocation']||_pr['Customer Name']||_pr['Customer']||'');
-      // Extract customer name — before first hyphen
-      var _pCustShort = _pCust.split(' - ')[0].split('-')[0].trim() || 'Unassigned';
+      var _rawReqId = String(_pr['Req ID'] || _pr['Requisition ID'] || _pr['RequisitionId'] || '').trim();
+      var _linkedReq = _reqMap[_rawReqId];
+      var _pCust = _linkedReq
+        ? _linkedReq.customer
+        : normaliseCustomer(
+            String(_pr['CustomerNameRoleandLocation'] || _pr['Customer Name'] || _pr['Customer'] || '').split(' - ')[0].trim()
+          );
+      var _pCustShort = _pCust || 'Unassigned';
+      var tier = _linkedReq ? (_linkedReq.tier || 'Regular') : 'Regular';
+      var _unlinked = !_linkedReq;
       var _pRecs = splitRecruiters(ss(_pr['Recruiter Name']||''));
       prospective.push({
         candidate_name: ss(_pr['Candidate Name']||_pr['Name']||''),
         designation:    ss(_pr['Designation']||_pr['Job Role']||''),
         customer:       _pCustShort,
-        account_tier:   (function(c){var cu=(c||'').toUpperCase().trim();if(CUSTOMER_TIER_MAP[cu])return CUSTOMER_TIER_MAP[cu];var ks=Object.keys(CUSTOMER_TIER_MAP);for(var _ti=0;_ti<ks.length;_ti++){var k=ks[_ti];if(k.length>5&&(cu.indexOf(k)>=0||k.indexOf(cu)>=0))return CUSTOMER_TIER_MAP[k];}return ss(_pr['Account Tier']||'Regular');})(_pCustShort),
+        account_tier:   tier,
+        _unlinked:      _unlinked,
         region:         ss(_pr['Region']||''),
         doj:            _pDoj,
         recruiter_name: _pRecs[0]||'',
@@ -7821,6 +7842,10 @@ async function processCandidate(wb) {
         status:         'Offer Accepted'
       });
     }
+  }
+  var _unlinkedCount = prospective.filter(function(r){ return r._unlinked; }).length;
+  if (_unlinkedCount > 0) {
+    console.warn('[Candidate] ' + _unlinkedCount + ' candidates without req linkage — verify req IDs in ZingHR');
   }
   if(prospective.length > 0) {
     log(prospective.length+' prospective joiners found (Offer Accepted, no ECode)', 'ok');
@@ -7883,6 +7908,45 @@ async function processCandidate(wb) {
 }
 
 // ── REQ TAT PARSER ───────────────────────────────────────────────────────
+function normaliseCustomer(raw) {
+  if (!raw) return '';
+  var s = raw.trim();
+  // Strip role/designation appended after hyphen
+  var roleKeywords = ['Desktop','Service Desk','EUS','Std','L1','L2','L3',
+                      'P0','P1','P2','Manage','Support','Engineer','Executive',
+                      'Officer','Technician','Analyst'];
+  var parts = s.split(/\s*-\s*/);
+  if (parts.length > 1) {
+    var second = parts[1].trim();
+    if (roleKeywords.some(function(k){
+      return second.toLowerCase().indexOf(k.toLowerCase()) >= 0;
+    })) {
+      s = parts[0].trim();
+    }
+  }
+  // Fuzzy match against CUSTOMER_LIST to fix typos
+  var sUp = s.toUpperCase();
+  var best = null, bestScore = 0;
+  (CUSTOMER_LIST || []).forEach(function(c) {
+    var cn = (c.n || '').toUpperCase();
+    if (cn === sUp) { best = c.n; bestScore = 1; return; }
+    if (!cn || !sUp) return;
+    // Character overlap score
+    var minLen = Math.min(sUp.length, cn.length);
+    var maxLen = Math.max(sUp.length, cn.length);
+    if (maxLen === 0) return;
+    var overlap = 0;
+    for (var i = 0; i < minLen; i++) {
+      if (sUp[i] === cn[i]) overlap++;
+    }
+    var score = overlap / maxLen;
+    if (score > 0.82 && score > bestScore) {
+      bestScore = score; best = c.n;
+    }
+  });
+  return best || s;
+}
+
 async function processReqTAT(wb) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   // Find header row (row 4 in ZingHR export)
@@ -7925,7 +7989,7 @@ async function processReqTAT(wb) {
   for (const row of dataRows) {
     const status = String(row[hIdx('Status')]||'').trim();
     const age = reqAge(row[hIdx('Requisition Creation Date')]);
-    const cust = getCustomer(row);
+    const cust = normaliseCustomer(getCustomer(row));
     const rec = {
       req_id: String(row[hIdx('Requisition ID')]||''),
       designation: (function(){
@@ -9912,7 +9976,7 @@ async function processWIEsep(wb) {
     });
   } catch(e) { console.warn('[eSep] HC snap load failed:', e.message); }
 
-  const fallbackHC = (typeof WI !== 'undefined' && WI.active_hc) || 2830;
+  const fallbackHC = (typeof WI !== 'undefined' && (WI.active_hc_current || WI.active_hc)) || 2830;
 
   // ── Build attrition object with correct per-month denominator ──────────
   const attrition = {};
