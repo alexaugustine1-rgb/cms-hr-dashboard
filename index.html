@@ -1118,21 +1118,17 @@ function renderOverview(w, pw) {
   });
   var _atRiskCol = _atRisk>5?'var(--red)':_atRisk>2?'var(--amber)':'var(--green)';
 
-  // CHIP 4 — Absent Resolution Rate
-  var _totalAbs   = (_absentCases||[]).length;
-  var _resolvedAbs= (_absentCases||[]).filter(function(c){
-    if (!c.status) return false;
-    var s = c.status.toLowerCase();
-    return s.indexOf('resolved') >= 0
-      || s.indexOf('returned') >= 0
-      || s.indexOf('resigned') >= 0;
-  }).length;
-  var _resRate  = _totalAbs > 0 ? Math.round(_resolvedAbs / _totalAbs * 100) : null;
-  var _resStr   = _resRate === null ? '…' : _resRate + '%';
-  var _resCol   = _resRate === null ? 'var(--muted)'
+  // CHIP 4 — Absent Resolution Rate (reads from window counts set in sbBoot)
+  var _resolvedAbs = window._absResolvedCount || 0;
+  var _totalAbs    = window._absTotalCount
+    || (_absentCases||[]).length + _resolvedAbs;
+  var _resRate = _totalAbs > 0
+    ? Math.round(_resolvedAbs / _totalAbs * 100) : null;
+  var _resStr  = _resRate === null ? '…' : _resRate + '%';
+  var _resCol  = _resRate === null ? 'var(--muted)'
     : _resRate >= 60 ? 'var(--green)'
     : _resRate >= 40 ? 'var(--amber)' : 'var(--red)';
-  var _resSub   = _resRate === null ? 'loading cases…'
+  var _resSub  = _resRate === null ? 'loading…'
     : _resolvedAbs + ' of ' + _totalAbs + ' cases resolved';
 
   var cmdStrip2 = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'
@@ -9184,6 +9180,23 @@ async function sbBoot(user){
   init();
   // Background-load absent cases on login so Overview chip shows data without visiting Absenteeism tab
   if (!_absentLoaded) loadAbsentCases();
+  // Absent resolution stats for Overview chip
+  // Separate from _absentCases (which excludes resolved cases)
+  try {
+    var { data: _absStats } = await _sb
+      .from('absent_cases')
+      .select('status')
+      .ilike('status', 'resolved%');
+    window._absResolvedCount = (_absStats || []).length;
+    var { count: _absTotalCount } = await _sb
+      .from('absent_cases')
+      .select('*', { count: 'exact', head: true });
+    window._absTotalCount = _absTotalCount || 0;
+  } catch(e) {
+    console.warn('[boot abs stats]', e.message);
+    window._absResolvedCount = 0;
+    window._absTotalCount = 0;
+  }
   // Re-apply region filters AFTER weeks data loaded and init() ran
   // Skip for HR Ops / Payroll — they have Pan India access
   var _fnTypeSb = _sbRole ? (_sbRole.function_type||'') : '';
