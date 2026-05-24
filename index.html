@@ -1058,7 +1058,7 @@ function renderOverview(w, pw) {
   }
 
   var cmdStrip = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'
-    +cmdKpi('👥', ((W.active_hc_current||W.active_hc_mar||W.active_hc||0)).toLocaleString(), 'Total Headcount', 'var(--accent)', 'Active as on '+(W._super_emp_updated?new Date(W._super_emp_updated).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'latest upload'))
+    +cmdKpi('👥', ((W.active_hc_current||W.active_hc||0)).toLocaleString(), 'Total Headcount', 'var(--accent)', 'Active as on '+(W._super_emp_updated?new Date(W._super_emp_updated).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'latest upload'))
     +cmdKpi('📋', openReqs, 'Open Positions', openReqs>200?'var(--red)':'var(--amber)', critReqs+' critical (>45d)')
     +cmdKpi('✅', mJoiners, 'W'+w.week_num+' Joiners', mJoiners>5?'var(--green)':'var(--muted)', w.ta_offers+' offers released')
     +cmdKpi('📈', q1attr+'%', 'Annualised Attrition', q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)', q1exits+' exits '+_attrPeriodLabel)
@@ -1080,14 +1080,17 @@ function renderOverview(w, pw) {
     var fillRate = rd.ta_sourced>0?Math.round(rd.ta_joined/rd.ta_sourced*100):0;
     var attrCol = regAttr>0?(regAttr>25?'var(--red)':regAttr>15?'var(--amber)':'var(--green)'):'var(--muted)';
     var regCritical = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.region===reg&&r.tat>45;}).length : 0;
+    var regAbsent = (_absentCases||[]).filter(function(c){ return c.region===reg; }).length;
     var regColor = {'North':'#60a5fa','South':'#34d399','East':'#f59e0b','West':'#a78bfa'}[reg]||'var(--accent)';
     return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+regColor+';border-radius:10px;padding:14px 16px">'
       +'<div style="font-family:Bebas_Neue,sans-serif;font-size:18px;color:'+regColor+';letter-spacing:1px;margin-bottom:8px">'+reg+'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
       +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">'+rd.hc.toLocaleString()+'</div><div style="font-size:10px;color:var(--muted)">Headcount</div></div>'
       +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+attrCol+'">'+(regAttr>0?regAttr+'%':'—')+'</div><div style="font-size:10px;color:var(--muted)">Attrition ('+_attrPeriodLabel+')</div></div>'
       +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:var(--text)">'+(rd.ta_joined||'—')+'</div><div style="font-size:10px;color:var(--muted)">Joined FY26</div></div>'
       +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+(regCritical>5?'var(--red)':'var(--amber)')+'">'+regCritical+'</div><div style="font-size:10px;color:var(--muted)">Critical Reqs</div></div>'
+      +'<div><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+(regAbsent>20?'var(--red)':regAbsent>10?'var(--amber)':'var(--muted)')+'">'+regAbsent+'</div>'
+      +'<div style="font-size:10px;color:var(--muted)">Absent Cases</div></div>'
       +'</div>'
       +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Fill rate: '+fillRate+'% &nbsp;|&nbsp; Wage: &#8377;'+(rd.wage_cr||'—')+'Cr</div>'
       +'</div>';
@@ -1267,36 +1270,63 @@ function renderOverview(w, pw) {
     +'</div>'
     +hrbpColHdr+hrbpRows+'</div>';
 
-  // ── 5. WORKFORCE HEALTH STRIP ─────────────────────────────────────────
-  var srcStats = W.source_stats||{};
-  var topSrc = Object.entries(srcStats).sort(function(a,b){return b[1]-a[1];}).slice(0,3);
-  var topSrcText = topSrc.map(function(s){var v=s[1];var n=typeof v==='object'?v.pipeline||v.joined||0:v;return esc(s[0])+': '+n;}).join(' &nbsp;|&nbsp; ');
-
-  var plat_open = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.tier==='Platinum'&&r.tat>45;}).length : 0;
-  var gold_open = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.tier==='Gold'&&r.tat>45;}).length : 0;
-  var attrCol = q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)';
-
-  function healthChip(label, val, color) {
-    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:3px">'
-      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:20px;color:'+color+';line-height:1">'+val+'</div>'
-      +'<div style="font-size:10px;color:var(--muted);letter-spacing:.5px">'+label+'</div>'
-      +'</div>';
+  // ── MONTHLY TREND TABLE ─────────────────────────────────────────────
+  var _trendMons = [];
+  var _allM = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var _curMIdx = new Date().getMonth();
+  for (var _mi = 5; _mi >= 0; _mi--) {
+    var _mIdx = (_curMIdx - _mi + 12) % 12;
+    var _mn = _allM[_mIdx];
+    if (wAttr[_mn] || (W.joiners_by_month && W.joiners_by_month[_mn])) {
+      _trendMons.push(_mn);
+    }
   }
 
-  var healthStrip = '<div style="margin-bottom:18px">'
-    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Workforce Health Indicators</div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +healthChip('Annualised Attrition YTD', q1attr+'%', attrCol)
-    +healthChip('Active HC', (W.active_hc_mar||0).toLocaleString(), 'var(--accent)')
-    +healthChip('Female %', (W.female_pct||0)+'%', 'var(--accent)')
-    +healthChip('Absent >7d', absCases, absCases>20?'var(--red)':'var(--amber)')
-    +healthChip('Plat Critical', plat_open, plat_open>3?'var(--red)':'var(--amber)')
-    +healthChip('Gold Critical', gold_open, gold_open>3?'var(--amber)':'var(--muted)')
-    +healthChip('W'+w.week_num+' Offers', w.ta_offers||0, 'var(--green)')
-    +healthChip('Offer Dropouts', w.ta_dropouts||0, (w.ta_dropouts||0)>3?'var(--red)':'var(--muted)')
-    +'</div>'
-    +'<div style="margin-top:6px;font-size:10px;color:var(--muted2)">Top sources: '+topSrcText+'</div>'
-    +'</div>';
+  var _trendRows = _trendMons.map(function(mon) {
+    var md   = wAttr[mon] || {};
+    var exits = md.exits || 0;
+    var hc    = md.active_hc || (W.active_hc_current || W.active_hc || 0);
+    var joiners = (W.joiners_by_month && W.joiners_by_month[mon]) || 0;
+    var net   = joiners - exits;
+    var rate  = md.rate || 0;
+    var absent = (_absentCases || []).filter(function(c) {
+      if (!c.absent_since) return false;
+      var m = new Date(c.absent_since);
+      return !isNaN(m) && _allM[m.getMonth()] === mon;
+    }).length;
+    var rateCol = rate > 20 ? 'var(--red)' : rate > 10 ? 'var(--amber)' : rate > 0 ? 'var(--green)' : 'var(--muted)';
+    var netCol  = net > 0 ? 'var(--green)' : net < 0 ? 'var(--red)' : 'var(--muted)';
+    var abCol   = absent > 25 ? 'var(--red)' : absent > 15 ? 'var(--amber)' : 'var(--muted)';
+    return '<tr>'
+      + '<td style="padding:7px 12px;font-weight:600;color:var(--text);font-size:12px">' + mon + '</td>'
+      + '<td style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:12px;color:var(--text)">' + (hc > 0 ? hc.toLocaleString() : '—') + '</td>'
+      + '<td style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:12px;color:var(--green)">' + (joiners > 0 ? '+' + joiners : '—') + '</td>'
+      + '<td style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:12px;color:exits>0?\'var(--red)\':\\\'var(--muted)\\\'">' + (exits > 0 ? exits : '—') + '</td>'
+      + '<td style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:12px;color:' + netCol + '">' + (net !== 0 ? (net > 0 ? '+' : '') + net : '—') + '</td>'
+      + '<td style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:12px;color:' + abCol + '">' + (absent > 0 ? absent : '—') + '</td>'
+      + '<td style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:12px;color:' + rateCol + ';font-weight:600">' + (rate > 0 ? rate + '%' : '—') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  var trendTable = _trendRows.length > 0
+    ? '<div style="margin-bottom:20px">'
+      + '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted2);margin-bottom:10px">📊 Monthly Workforce Trend</div>'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+      + '<table style="width:100%;border-collapse:collapse">'
+      + '<thead><tr style="background:var(--surface3);border-bottom:1px solid var(--border)">'
+      + '<th style="padding:7px 12px;text-align:left;font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);font-weight:600">Month</th>'
+      + '<th style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);font-weight:600">Active HC</th>'
+      + '<th style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);font-weight:600">Joiners</th>'
+      + '<th style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);font-weight:600">Exits</th>'
+      + '<th style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);font-weight:600">Net</th>'
+      + '<th style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);font-weight:600">Absent</th>'
+      + '<th style="padding:7px 12px;text-align:right;font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);font-weight:600">Attrition%</th>'
+      + '</tr></thead>'
+      + '<tbody>' + _trendRows + '</tbody>'
+      + '</table></div>'
+      + '<div style="font-size:9px;color:var(--muted2);margin-top:4px;padding-left:2px">Attrition = annualised. Absent = new cases opened that month.</div>'
+      + '</div>'
+    : '';
 
   // ── 6. OPEN ACTIONS ───────────────────────────────────────────────────
   var risksHTML = '';
@@ -1325,8 +1355,7 @@ function renderOverview(w, pw) {
     +'</div>'
     +cmdStrip
     +regionPanel
-    +'<div style="margin-bottom:18px">'+recLeaderboard+'</div>'
-    +healthStrip
+    +trendTable
     +actionsPanel
     +'</div>';
 }
@@ -6288,16 +6317,7 @@ function renderAccountHealth() {
 
   // ── Helpers ──
   function acctKey(n){ return String(n||'').toUpperCase().trim(); }
-  function nameMatch(a, b) {
-    a = String(a || '').toUpperCase().trim();
-    b = String(b || '').toUpperCase().trim();
-    if (!a || !b) return false;
-    if (a === b) return true;
-    if (a.length > 8 && b.length > 8) {
-      return a.includes(b) || b.includes(a);
-    }
-    return false;
-  }
+  function nameMatch(a,b){ a=acctKey(a); b=acctKey(b); if(!a||!b) return false; if(a===b) return true; if(a.length>8&&b.length>8){ return a.includes(b)||b.includes(a); } return false; }
   var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function fmtDate(d){ if(!d)return'—'; var dt=new Date(d); return isNaN(dt)?String(d):dt.getDate()+' '+months[dt.getMonth()]; }
   function fmtCr(n){ return n>=10000000?'₹'+(n/10000000).toFixed(1)+'Cr':n>=100000?'₹'+(n/100000).toFixed(1)+'L':n>0?'₹'+Math.round(n).toLocaleString('en-IN'):'—'; }
