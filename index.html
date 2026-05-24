@@ -1065,6 +1065,71 @@ function renderOverview(w, pw) {
     +cmdKpi('🚨', absCases, 'Long Absent Cases', absCases>20?'var(--red)':absCases>10?'var(--amber)':'var(--muted)', 'Pending action / no eSep')
     +'</div>';
 
+  function cmdChip(icon, val, label, color, sub) {
+    return '<div style="flex:1;min-width:120px;background:var(--surface2);'
+      +'border:1px solid var(--border);border-top:2px solid '+color+';'
+      +'border-radius:8px;padding:10px 14px">'
+      +'<div style="font-size:14px;margin-bottom:2px">'+icon+'</div>'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'
+      +color+';line-height:1;letter-spacing:1px">'+val+'</div>'
+      +'<div style="font-family:DM_Mono,monospace;font-size:8px;letter-spacing:'
+      +'.8px;text-transform:uppercase;color:var(--muted);margin-top:2px">'+label+'</div>'
+      +(sub?'<div style="font-size:9px;color:var(--muted2);margin-top:1px">'+sub+'</div>':'')
+      +'</div>';
+  }
+
+  // CHIP 1 — Attrition Δ MoM
+  var _monKeys = Object.keys(wAttr).filter(function(m){ return wAttr[m] && wAttr[m].rate>0; });
+  var _curMon  = _monKeys[_monKeys.length-1] || '';
+  var _priorMon= _monKeys[_monKeys.length-2] || '';
+  var _curRate  = wAttr[_curMon] ? (wAttr[_curMon].rate||0) : 0;
+  var _priorRate= wAttr[_priorMon] ? (wAttr[_priorMon].rate||0) : 0;
+  var _attrDelta= Math.round((_curRate - _priorRate)*10)/10;
+  var _attrDeltaStr = _attrDelta===0 ? '—'
+    : (_attrDelta>0 ? '▲ '+_attrDelta+'pp' : '▼ '+Math.abs(_attrDelta)+'pp');
+  var _attrDeltaCol = _attrDelta>0 ? 'var(--red)'
+    : _attrDelta<0 ? 'var(--green)' : 'var(--muted)';
+
+  // CHIP 2 — Offer→Join conversion %
+  var _taSum = (typeof TA_SUMMARY!=='undefined' && TA_SUMMARY) || {};
+  var _offers  = _taSum.total_offers || (S.total_offers||0);
+  var _joined  = _taSum.total_joined || (S.march_closed||0);
+  var _convPct = _offers>0 ? Math.round(_joined/_offers*100) : 0;
+  var _convCol = _convPct>=75?'var(--green)':_convPct>=50?'var(--amber)':'var(--red)';
+
+  // CHIP 3 — Accounts at Risk (Plat/Gold with absent burden >5%)
+  var _atRisk = 0;
+  (CUSTOMER_LIST||[]).forEach(function(c){
+    if (c.t==='Platinum'||c.t==='Gold') {
+      var _acctAbs = (_absentCases||[]).filter(function(a){
+        return a.customer && a.customer.toUpperCase().includes((c.n||'').toUpperCase().substring(0,8));
+      }).length;
+      var _acctHCVal = _acctHC && _acctHC[c.n] ? _acctHC[c.n] : (c.hc||1);
+      var _absBurden = _acctHCVal>0 ? (_acctAbs/_acctHCVal*100) : 0;
+      if (_absBurden > 5) _atRisk++;
+    }
+  });
+  var _atRiskCol = _atRisk>5?'var(--red)':_atRisk>2?'var(--amber)':'var(--green)';
+
+  // CHIP 4 — Absent Resolution Rate
+  var _totalAbs   = (_absentCases||[]).length;
+  var _resolvedAbs= (_absentCases||[]).filter(function(c){
+    return c.status && (c.status.includes('Resolved')||c.status.includes('Returned'));
+  }).length;
+  var _resRate = _totalAbs>0 ? Math.round(_resolvedAbs/_totalAbs*100) : 0;
+  var _resCol  = _resRate>=60?'var(--green)':_resRate>=40?'var(--amber)':'var(--red)';
+
+  var cmdStrip2 = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'
+    +cmdChip('📉', _attrDeltaStr, 'Attrition MoM', _attrDeltaCol,
+             (_curMon&&_priorMon?_priorMon+'→'+_curMon:'vs prior month'))
+    +cmdChip('🎯', _convPct+'%', 'Offer→Join Rate', _convCol,
+             _joined+' joined of '+_offers+' offers')
+    +cmdChip('⚠️', _atRisk, 'Plat/Gold At Risk', _atRiskCol,
+             'accounts with absent burden >5%')
+    +cmdChip('✔️', _resRate+'%', 'Absent Resolution', _resCol,
+             _resolvedAbs+' of '+_totalAbs+' cases resolved')
+    +'</div>';
+
   // ── 2. REGION PANEL ───────────────────────────────────────────────────
   var regionOrder = ['North','South','East','West'];
   var regCards = regionOrder.map(function(reg) {
@@ -1354,6 +1419,7 @@ function renderOverview(w, pw) {
     +'<div style="font-size:11px;color:var(--muted)">W'+esc(String(w.week_num||''))+' &nbsp;·&nbsp; '+esc(w.from_label||'')+'&ndash;'+esc(w.to_label||'')+'</div>'
     +'</div>'
     +cmdStrip
+    +cmdStrip2
     +regionPanel
     +trendTable
     +actionsPanel
