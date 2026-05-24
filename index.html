@@ -1033,26 +1033,10 @@ function renderOverview(w, pw) {
   // pending_cases = active long-absent cases with no eSep raised
   var openReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.length : (S.total_reqs||0);
   var critReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.tat>45;}).length : (S.reqs_critical||0);
-  // Joiners this week — priority: ta_closed (from NewJoinee in Super Emp) → WI.joiners_by_week → prospective_joiners
-  var _curWkKey = typeof getCurrentWeekKey==='function' ? getCurrentWeekKey() : '';
-  var _selWkKey = (w && w.week_key) || _curWkKey;
-  var mJoiners = w.ta_closed || 0;
-  if (!mJoiners && W && W.joiners_by_week && W.joiners_by_week[_selWkKey]) {
-    mJoiners = W.joiners_by_week[_selWkKey];
-  }
-  if (!mJoiners && typeof _prospectiveJoiners !== 'undefined' && _prospectiveJoiners.length && w.from_label && w.to_label) {
-    try {
-      var _wYear = new Date().getFullYear();
-      var _wFrom = new Date(w.from_label + ' ' + _wYear);
-      var _wTo   = new Date(w.to_label   + ' ' + _wYear);
-      if (!isNaN(_wFrom) && !isNaN(_wTo)) {
-        mJoiners = _prospectiveJoiners.filter(function(j){
-          var d = new Date(j.doj);
-          return !isNaN(d) && d >= _wFrom && d <= _wTo;
-        }).length;
-      }
-    } catch(e) {}
-  }
+  // MTD Joiners — from ZingHR joiners_by_month (TA weekly forms stopped at W13)
+  var _MON_LBL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var _thisMon = _MON_LBL[new Date().getMonth()];
+  var _mtdJoiners = (W && W.joiners_by_month && W.joiners_by_month[_thisMon]) || 0;
 
   function cmdKpi(icon, val, label, color, sub) {
     return '<div style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+color+';border-radius:10px;padding:14px 16px">'
@@ -1066,7 +1050,7 @@ function renderOverview(w, pw) {
   var cmdStrip = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'
     +cmdKpi('👥', ((W.active_hc_current||W.active_hc||0)).toLocaleString(), 'Total Headcount', 'var(--accent)', 'Active as on '+(W._super_emp_updated?new Date(W._super_emp_updated).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'latest upload'))
     +cmdKpi('📋', openReqs, 'Open Positions', openReqs>200?'var(--red)':'var(--amber)', critReqs+' critical (>45d)')
-    +cmdKpi('✅', mJoiners, 'W'+w.week_num+' Joiners', mJoiners>5?'var(--green)':'var(--muted)', w.ta_offers+' offers released')
+    +cmdKpi('✅', _mtdJoiners, 'MTD JOINERS', _mtdJoiners>0?'var(--green)':'var(--muted)', _thisMon+' 2026 \xb7 from ZingHR')
     +cmdKpi('📈', q1attr+'%', 'Annualised Attrition', q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)', q1exits+' exits '+_attrPeriodLabel)
     +cmdKpi('🚨', absCases, 'Long Absent Cases', absCases>20?'var(--red)':absCases>10?'var(--amber)':'var(--muted)', 'Pending action / no eSep')
     +'</div>';
@@ -1085,9 +1069,19 @@ function renderOverview(w, pw) {
   }
 
   // CHIP 1 — Attrition Δ MoM
-  var _monKeys = Object.keys(wAttr).filter(function(m){ return wAttr[m] && wAttr[m].rate>0; });
   var _MON_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  _monKeys.sort(function(a,b){ return _MON_ORDER.indexOf(a) - _MON_ORDER.indexOf(b); });
+  var _nowMonIdx = new Date().getMonth(); // 0=Jan … 11=Dec; guard against future months
+  var _monKeys = Object.keys(wAttr || {})
+    .filter(function(m){
+      var idx = _MON_ORDER.indexOf(m);
+      return idx >= 0
+        && idx <= _nowMonIdx        // not a future month
+        && wAttr[m]
+        && wAttr[m].rate > 0;
+    })
+    .sort(function(a,b){
+      return _MON_ORDER.indexOf(a) - _MON_ORDER.indexOf(b);
+    });
   var _curMon  = _monKeys[_monKeys.length-1] || '';
   var _priorMon= _monKeys[_monKeys.length-2] || '';
   var _curRate  = wAttr[_curMon] ? (wAttr[_curMon].rate||0) : 0;
@@ -3633,12 +3627,14 @@ async function loadAbsentCases() {
       }
     } catch(e) { _esepCodeSet = new Set(); }
     renderAbsenteeism(el);
-    // Refresh Overview KPI so absent count stays in sync
-    var _ovEl = document.getElementById('tab-overview');
-    if(_ovEl && _ovEl.classList.contains('active') && typeof renderOverview==='function'){
-      var _w=WEEKS_DATA[currentWeek], _wk=(window.WEEK_ORDER_LIVE||WEEK_ORDER);
-      var _pw=WEEKS_DATA[_wk[_wk.indexOf(currentWeek)-1]]||_w;
-      _ovEl.innerHTML=renderOverview(_w,_pw);
+    // Re-render Overview chips once absent data loads (fires whether or not Overview is active)
+    if (typeof renderOverview === 'function' && document.getElementById('tab-overview')) {
+      var _ovEl = document.getElementById('tab-overview');
+      if (_ovEl && _ovEl.innerHTML.indexOf('…') >= 0) {
+        var _w=WEEKS_DATA[currentWeek], _wk=(window.WEEK_ORDER_LIVE||WEEK_ORDER);
+        var _pw=WEEKS_DATA[_wk[_wk.indexOf(currentWeek)-1]]||_w;
+        if (_w) _ovEl.innerHTML=renderOverview(_w,_pw);
+      }
     }
   } catch(e) {
     console.error('[loadAbsentCases]', e);
@@ -9186,6 +9182,8 @@ async function sbBoot(user){
     hr.appendChild(rb);
   }
   init();
+  // Background-load absent cases on login so Overview chip shows data without visiting Absenteeism tab
+  if (!_absentLoaded) loadAbsentCases();
   // Re-apply region filters AFTER weeks data loaded and init() ran
   // Skip for HR Ops / Payroll — they have Pan India access
   var _fnTypeSb = _sbRole ? (_sbRole.function_type||'') : '';
