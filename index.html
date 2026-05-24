@@ -908,6 +908,12 @@ var HRBP_ROSTER = [
   {name:'Somasri Sukumar Samanta',        region:'West'},
 ];
 let currentWeek = 'W09';
+// Resolve currentWeek to latest available week with data
+var _availKeys = (window.WEEK_ORDER_LIVE || WEEK_ORDER || [])
+  .filter(function(k){ return WEEKS_DATA && WEEKS_DATA[k]; });
+if (_availKeys.length > 0) {
+  currentWeek = _availKeys[_availKeys.length - 1];
+}
 let currentTab = 'overview';
 var _connectStore = {};
 
@@ -1080,6 +1086,8 @@ function renderOverview(w, pw) {
 
   // CHIP 1 — Attrition Δ MoM
   var _monKeys = Object.keys(wAttr).filter(function(m){ return wAttr[m] && wAttr[m].rate>0; });
+  var _MON_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  _monKeys.sort(function(a,b){ return _MON_ORDER.indexOf(a) - _MON_ORDER.indexOf(b); });
   var _curMon  = _monKeys[_monKeys.length-1] || '';
   var _priorMon= _monKeys[_monKeys.length-2] || '';
   var _curRate  = wAttr[_curMon] ? (wAttr[_curMon].rate||0) : 0;
@@ -1350,8 +1358,16 @@ function renderOverview(w, pw) {
   var _trendRows = _trendMons.map(function(mon) {
     var md   = wAttr[mon] || {};
     var exits = md.exits || 0;
-    var hc    = md.active_hc || (W.active_hc_current || W.active_hc || 0);
-    var joiners = (W.joiners_by_month && W.joiners_by_month[mon]) || 0;
+    var _snapHC = (WI._hc_snap && WI._hc_snap[mon])
+      || (WI.monthly_hc && WI.monthly_hc[mon])
+      || md.opening_hc
+      || md.active_hc
+      || (W.active_hc_current || W.active_hc || 0);
+    var hc = _snapHC;
+    var joiners = (W.joiners_by_month && W.joiners_by_month[mon])
+      || (WI._hc_snap && WI._hc_snap[mon+'_joiners'])
+      || (WI.monthly_joiners && WI.monthly_joiners[mon])
+      || 0;
     var net   = joiners - exits;
     var rate  = md.rate || 0;
     var absent = (_absentCases || []).filter(function(c) {
@@ -9096,8 +9112,9 @@ async function sbBoot(user){
     var _c=(WEEKS_DATA[k]&&WEEKS_DATA[k].total_respondents)||0;
     if(_c>_bestCount){_bestCount=_c;_bestWk=k;}
   });
-  // Prefer current live week if it exists in DB, else fall to most-submissions week
-  currentWeek=(_liveWk&&WEEK_ORDER.includes(_liveWk))?_liveWk:_bestWk;
+  // Prefer latest week with data; live week key is only a fallback
+  var _latestKeys = WEEK_ORDER.filter(function(k){ return WEEKS_DATA && WEEKS_DATA[k]; });
+  currentWeek = _latestKeys.length > 0 ? _latestKeys[_latestKeys.length - 1] : _bestWk;
   console.log('[HR] weeks loaded:',WEEK_ORDER.length,'defaulting to',currentWeek);}
   else{console.warn('[HR] No weekly data yet');}
   // Check if current week has submissions but no weekly_reports row
