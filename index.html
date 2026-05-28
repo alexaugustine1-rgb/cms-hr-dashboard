@@ -1820,6 +1820,7 @@ function isNil(s) {
 }
 
 // ── HRBP SITE VISITS TAB LOADER ─────────────────────────────────────────
+function hscToggle(n){var d=document.getElementById('hsc_'+n+'_det');if(d)d.style.display=d.style.display==='none'?'block':'none';}
 var _hrbpSVCache = []; // ALL site visits from hrbp_site_visits table (not week-restricted)
 async function loadHRBPSiteVisitsForTab() {
   if (!_sbUser || !_sb) return;
@@ -1857,6 +1858,7 @@ async function loadHRBPSiteVisitsForTab() {
       var pw = wkIdx > 0 ? WEEKS_DATA[wkKeys[wkIdx-1]] : null;
       el.innerHTML = renderHRBP(w, pw);
       setTimeout(renderHRBPScorecardIntoDOM, 100);
+      setTimeout(function(){ var jpe=document.getElementById('journey-plan-panel'); if(jpe && typeof buildJourneyPlanPanel==='function'){ jpe.outerHTML=buildJourneyPlanPanel()||''; } }, 50);
     }
   } catch(e) { console.warn('[siteVisitsTab]', e.message); }
 }
@@ -1993,7 +1995,7 @@ function buildJourneyPlanPanel() {
   // Sort planned by date ascending
   plannedCards.sort(function(a,b){ return (a.planDate||'') < (b.planDate||'') ? -1 : 1; });
 
-  var html = '<div style="margin-bottom:16px">'
+  var html = '<div id="journey-plan-panel" style="margin-bottom:16px">'
     +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">🗺️ Journey Plan — Platinum &amp; Gold Accounts</div>';
 
   if (plannedCards.length) {
@@ -2260,8 +2262,7 @@ function renderScorecardHTML(scores, last4Weeks) {
     html += '</div></div>';
   });
 
-  html += '</div>'
-    +'<script>window.hscToggle=function(n){var d=document.getElementById("hsc_"+n+"_det");if(d)d.style.display=d.style.display==="none"?"block":"none";}<\/script>';
+  html += '</div>';
   return html;
 }
 
@@ -2789,6 +2790,8 @@ function renderHRBP(w, pw) {
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--amber)">${w.hrbp_discipline.filter(d=>!isNil(d)&&d.length>10).length}</div><div class="mini-stat-label">ER / Discipline Cases</div></div>
     </div>
 
+    ${buildJourneyPlanPanel()}
+
     ${_leaderboard}
 
     <div class="two-col">
@@ -2843,8 +2846,6 @@ function renderHRBP(w, pw) {
         })()}</div>
       </div>
     </div>
-
-    ${buildJourneyPlanPanel()}
 
     <div id="hrbp-scorecard-panel" style="margin-bottom:18px"></div>
 
