@@ -9388,10 +9388,19 @@ function renderDBTSection() {
   if (fnType !== 'hrops' && fnType !== 'payroll' && role !== 'admin' && role !== 'executive') return '';
   var data = window._dbtData || [];
   var selRegion = window._dbtRegionFilter || 'All';
-  var filteredData = selRegion === 'All' ? data : data.filter(function(d){ return (d.region||'') === selRegion; });
+  var selEmp    = window._dbtEmpFilter    || 'All';
+  var ateStatusMap = {};
+  (_ateCases||[]).forEach(function(a){ if(a.emp_code) ateStatusMap[a.emp_code] = a.status||''; });
+  function fmtDMY(s){ if(!s) return '—'; var p=(s+'').split('-'); return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s; }
+  var filteredData = data.filter(function(d){
+    if (selRegion !== 'All' && (d.region||'') !== selRegion) return false;
+    var st = ateStatusMap[d.emp_code] || '';
+    var isClosed = st === 'Converted to FTE' || st === 'Separated';
+    if (selEmp === 'Active' && isClosed) return false;
+    if (selEmp === 'Exited' && !isClosed) return false;
+    return true;
+  });
   var el = document.getElementById('dbt-recovery-section');
-  var threeMonthsAgo = new Date();
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
   var totalAdv = 0, totalRec = 0, totalOut = 0;
   filteredData.forEach(function(d) { totalAdv += d.total_advance; totalRec += d.total_recovery; totalOut += d.net_outstanding; });
   var summaryHTML = '<div style="display:flex;gap:28px;margin-bottom:16px;padding:14px 18px;background:var(--bg);border-radius:10px;flex-wrap:wrap;">'
@@ -9402,19 +9411,18 @@ function renderDBTSection() {
     + '</div>';
   var rowsHTML = '';
   filteredData.forEach(function(d, idx) {
-    var lastDate = d.last_advance_date ? new Date(d.last_advance_date) : null;
-    var isRecent = lastDate && lastDate >= threeMonthsAgo;
     var out = d.net_outstanding;
+    var ateStatus = ateStatusMap[d.emp_code] || '';
+    var isExited = ateStatus === 'Converted to FTE' || ateStatus === 'Separated';
     var light, lightColor;
-    if (out <= 0) { light = 'Green'; lightColor = '#22c55e'; }
-    else if (!isRecent && out > 0) { light = '&#9888; Stale'; lightColor = '#6b7280'; }
-    else if (out > 0 && d.total_recovery === 0) { light = 'Red'; lightColor = '#ef4444'; }
-    else if (out > 0 && d.total_recovery < d.total_advance * 0.5) { light = 'Amber'; lightColor = '#f59e0b'; }
-    else { light = 'Active'; lightColor = '#3b82f6'; }
+    if (out <= 0) { light = 'Cleared'; lightColor = '#22c55e'; }
+    else if (d.total_recovery === 0) { light = 'No Recovery'; lightColor = '#ef4444'; }
+    else if (d.total_recovery < d.total_advance * 0.5) { light = 'Amber'; lightColor = '#f59e0b'; }
+    else { light = 'Recovering'; lightColor = '#3b82f6'; }
     var detailId = 'dbt-detail-' + idx;
     var txRows = (d.transactions||[]).map(function(t) {
       return '<tr style="border-top:1px solid var(--border);">'
-        + '<td style="padding:4px 8px;">' + (t.transaction_date||'') + '</td>'
+        + '<td style="padding:4px 8px;">' + fmtDMY(t.transaction_date) + '</td>'
         + '<td style="padding:4px 8px;"><span style="color:' + (t.transaction_type==='advance'?'#3b82f6':'#22c55e') + ';font-weight:600;">' + t.transaction_type + '</span></td>'
         + '<td style="padding:4px 8px;">' + (t.month_reference||'') + '</td>'
         + '<td style="padding:4px 8px;text-align:right;">&#8377;' + parseFloat(t.amount||0).toLocaleString('en-IN') + '</td>'
@@ -9424,12 +9432,12 @@ function renderDBTSection() {
     }).join('');
     rowsHTML += '<tr style="border-bottom:1px solid var(--border);">'
       + '<td style="padding:9px 12px;font-size:12px;font-weight:600;">' + d.emp_code + '</td>'
-      + '<td style="padding:9px 12px;font-size:12px;">' + d.emp_name + '</td>'
+      + '<td style="padding:9px 12px;font-size:12px;">' + d.emp_name + (isExited ? '<span style="margin-left:5px;background:#6b728020;color:#6b7280;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;">' + (ateStatus==='Separated'?'Sep':'FTE') + '</span>' : '') + '</td>'
       + '<td style="padding:9px 12px;font-size:12px;">' + (d.region||'') + '</td>'
       + '<td style="padding:9px 12px;font-size:12px;text-align:right;">&#8377;' + d.total_advance.toLocaleString('en-IN') + '</td>'
       + '<td style="padding:9px 12px;font-size:12px;text-align:right;color:#22c55e;">&#8377;' + d.total_recovery.toLocaleString('en-IN') + '</td>'
       + '<td style="padding:9px 12px;font-size:12px;text-align:right;font-weight:700;color:' + (out>0?'#ef4444':'#22c55e') + ';">&#8377;' + out.toLocaleString('en-IN') + '</td>'
-      + '<td style="padding:9px 12px;font-size:12px;">' + (d.last_advance_date||'') + '</td>'
+      + '<td style="padding:9px 12px;font-size:12px;">' + fmtDMY(d.last_advance_date) + '</td>'
       + '<td style="padding:9px 12px;font-size:12px;"><span style="background:' + lightColor + '20;color:' + lightColor + ';font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;">' + light + '</span></td>'
       + '<td style="padding:9px 12px;font-size:12px;"><button onclick="var e=document.getElementById(\'' + detailId + '\');if(e)e.style.display=e.style.display===\'none\'?\'table-row\':\'none\';" style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer;">Detail</button></td>'
       + '</tr>'
@@ -9452,9 +9460,14 @@ function renderDBTSection() {
   var regionOpts = ['All','North','South','East','West'].map(function(r){
     return '<option value="'+r+'"'+(r===selRegion?' selected':'')+'>'+r+'</option>';
   }).join('');
-  var filterBar = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">'
+  var empOpts = ['All','Active','Exited'].map(function(r){
+    return '<option value="'+r+'"'+(r===selEmp?' selected':'')+'>'+r+'</option>';
+  }).join('');
+  var filterBar = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">'
     + '<span style="font-size:11px;color:var(--muted);">Region:</span>'
     + '<select onchange="window._dbtRegionFilter=this.value;if(typeof renderDBTSection===\'function\')renderDBTSection();" style="padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;">' + regionOpts + '</select>'
+    + '<span style="font-size:11px;color:var(--muted);margin-left:4px;">Employment:</span>'
+    + '<select onchange="window._dbtEmpFilter=this.value;if(typeof renderDBTSection===\'function\')renderDBTSection();" style="padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;">' + empOpts + '</select>'
     + '</div>';
   var html = '<div id="dbt-recovery-section" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:20px;">'
     + '<div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;">DBT RECOVERY CENTRE'
