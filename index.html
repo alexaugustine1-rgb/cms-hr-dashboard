@@ -9341,8 +9341,8 @@ function renderATEMixDashboard() {
   var cardHTML = '';
   regions.forEach(function(region) {
     var regionCases = cases.filter(function(c) { return (c.region||'').trim() === region; });
-    var billable = regionCases.filter(function(c) { return (c.type||c.ate_type||'').toLowerCase() === 'billable'; }).length;
-    var training = regionCases.filter(function(c) { return (c.type||c.ate_type||'').toLowerCase() === 'training'; }).length;
+    var billable = regionCases.filter(function(c) { return (c.deployment_status||'').toLowerCase() === 'billable'; }).length;
+    var training = regionCases.filter(function(c) { return (c.deployment_status||'').toLowerCase() === 'training'; }).length;
     var total = regionCases.length;
     var wi = wiByRegion[region] || {};
     var fte = wi.region_fte_hc ? parseFloat(wi.region_fte_hc) : 0;
@@ -9368,8 +9368,8 @@ function renderATEMixDashboard() {
       + '</div>'
       + '</div>';
   });
-  var totalBillable = cases.filter(function(c){ return (c.type||c.ate_type||'').toLowerCase()==='billable'; }).length;
-  var totalTraining = cases.filter(function(c){ return (c.type||c.ate_type||'').toLowerCase()==='training'; }).length;
+  var totalBillable = cases.filter(function(c){ return (c.deployment_status||'').toLowerCase()==='billable'; }).length;
+  var totalTraining = cases.filter(function(c){ return (c.deployment_status||'').toLowerCase()==='training'; }).length;
   return '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:20px;">'
     + '<div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;">ATE MIX DASHBOARD</div>'
     + '<div style="display:flex;gap:14px;flex-wrap:wrap;">' + cardHTML + '</div>'
