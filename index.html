@@ -6108,8 +6108,9 @@ function ahSetFilter(key, val, btn) {
 
 // ── CONTRACT WORKFORCE SECTION ─────────────────────────────────────────────
 async function loadDBTData() {
-  var role = _sbRole && _sbRole.function_type ? _sbRole.function_type : '';
-  if (role !== 'hrops' && role !== 'payroll') return;
+  var role   = _sbRole ? (_sbRole.role||'') : '';
+  var fnType = _sbRole ? (_sbRole.function_type||'') : '';
+  if (fnType !== 'hrops' && fnType !== 'payroll' && role !== 'admin' && role !== 'executive') return;
   try {
     var res = await _sb.from('ate_advance_log').select('*').order('transaction_date', {ascending: false});
     var rows = (res.data || []);
@@ -9382,8 +9383,9 @@ function renderATEMixDashboard() {
 }
 
 function renderDBTSection() {
-  var role = _sbRole && _sbRole.function_type ? _sbRole.function_type : '';
-  if (role !== 'hrops' && role !== 'payroll') return '';
+  var role   = _sbRole ? (_sbRole.role||'') : '';
+  var fnType = _sbRole ? (_sbRole.function_type||'') : '';
+  if (fnType !== 'hrops' && fnType !== 'payroll' && role !== 'admin' && role !== 'executive') return '';
   var data = window._dbtData || [];
   var el = document.getElementById('dbt-recovery-section');
   var threeMonthsAgo = new Date();
@@ -9391,10 +9393,10 @@ function renderDBTSection() {
   var totalAdv = 0, totalRec = 0, totalOut = 0;
   data.forEach(function(d) { totalAdv += d.total_advance; totalRec += d.total_recovery; totalOut += d.net_outstanding; });
   var summaryHTML = '<div style="display:flex;gap:28px;margin-bottom:16px;padding:14px 18px;background:var(--bg);border-radius:10px;flex-wrap:wrap;">'
-    + '<span style="font-size:12px;color:var(--muted);">Total Disbursed: <b style="color:var(--fg);">&#8377;' + totalAdv.toLocaleString('en-IN') + '</b></span>'
+    + '<span style="font-size:12px;color:var(--muted);">Total Disbursed: <b style="color:var(--text);">&#8377;' + totalAdv.toLocaleString('en-IN') + '</b></span>'
     + '<span style="font-size:12px;color:var(--muted);">Total Recovered: <b style="color:#22c55e;">&#8377;' + totalRec.toLocaleString('en-IN') + '</b></span>'
     + '<span style="font-size:12px;color:var(--muted);">Net Outstanding: <b style="color:' + (totalOut > 0 ? '#ef4444' : '#22c55e') + ';">&#8377;' + totalOut.toLocaleString('en-IN') + '</b></span>'
-    + '<span style="font-size:12px;color:var(--muted);">Employees: <b style="color:var(--fg);">' + data.length + '</b></span>'
+    + '<span style="font-size:12px;color:var(--muted);">Employees: <b style="color:var(--text);">' + data.length + '</b></span>'
     + '</div>';
   var rowsHTML = '';
   data.forEach(function(d, idx) {
@@ -9427,7 +9429,7 @@ function renderDBTSection() {
       + '<td style="padding:9px 12px;font-size:12px;text-align:right;font-weight:700;color:' + (out>0?'#ef4444':'#22c55e') + ';">&#8377;' + out.toLocaleString('en-IN') + '</td>'
       + '<td style="padding:9px 12px;font-size:12px;">' + (d.last_advance_date||'') + '</td>'
       + '<td style="padding:9px 12px;font-size:12px;"><span style="background:' + lightColor + '20;color:' + lightColor + ';font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;">' + light + '</span></td>'
-      + '<td style="padding:9px 12px;font-size:12px;"><button onclick="var e=document.getElementById(\'' + detailId + '\');if(e)e.style.display=e.style.display===\'none\'?\'table-row\':\'none\';" style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--fg);cursor:pointer;">Detail</button></td>'
+      + '<td style="padding:9px 12px;font-size:12px;"><button onclick="var e=document.getElementById(\'' + detailId + '\');if(e)e.style.display=e.style.display===\'none\'?\'table-row\':\'none\';" style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer;">Detail</button></td>'
       + '</tr>'
       + '<tr id="' + detailId + '" style="display:none;background:var(--bg);">'
       + '<td colspan="9" style="padding:10px 18px;">'
@@ -9445,9 +9447,9 @@ function renderDBTSection() {
     + '<th style="text-align:right;padding:9px 12px;">Recovered</th><th style="text-align:right;padding:9px 12px;">Outstanding</th>'
     + '<th style="text-align:left;padding:9px 12px;">Last Advance</th><th style="text-align:left;padding:9px 12px;">Status</th>'
     + '<th style="padding:9px 12px;"></th></tr></thead><tbody>' + rowsHTML + '</tbody></table></div>';
-  var html = '<div id="dbt-recovery-section" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:20px;">'
+  var html = '<div id="dbt-recovery-section" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:20px;">'
     + '<div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;">DBT RECOVERY CENTRE'
-    + '<span style="float:right;font-size:11px;font-weight:400;cursor:pointer;color:var(--primary);" onclick="if(typeof loadDBTData===\'function\')loadDBTData();">&#8635; Refresh</span></div>'
+    + '<span style="float:right;font-size:11px;font-weight:400;cursor:pointer;color:var(--accent);" onclick="if(typeof loadDBTData===\'function\')loadDBTData();">&#8635; Refresh</span></div>'
     + summaryHTML
     + (data.length ? tableHTML : '<div style="color:var(--muted);font-size:13px;">No advance data found.</div>')
     + '</div>';
@@ -9456,10 +9458,11 @@ function renderDBTSection() {
 }
 
 function renderDBTRecoveryCentre() {
-  var role = _sbRole && _sbRole.function_type ? _sbRole.function_type : '';
-  if (role !== 'hrops' && role !== 'payroll') return '';
+  var role   = _sbRole ? (_sbRole.role||'') : '';
+  var fnType = _sbRole ? (_sbRole.function_type||'') : '';
+  if (fnType !== 'hrops' && fnType !== 'payroll' && role !== 'admin' && role !== 'executive') return '';
   if (!window._dbtData) {
-    return '<div id="dbt-recovery-section" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:20px;">'
+    return '<div id="dbt-recovery-section" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:20px;">'
       + '<div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;">DBT RECOVERY CENTRE</div>'
       + '<div style="color:var(--muted);font-size:13px;">Loading advance data…</div>'
       + '</div>';
