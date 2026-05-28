@@ -4269,10 +4269,10 @@ function renderUploadTab() {
         const vf       = (_sbRole&&Array.isArray(_sbRole.visible_functions))
                            ? _sbRole.visible_functions : [];
         const hasAll   = isAdmin || vf.indexOf('all_upload')  >= 0;
-        const hasFnF   = isAdmin || vf.indexOf('fnf_upload')  >= 0;
-        const hasTA    = hasAll  || ft==='payroll' || vf.indexOf('ta_upload') >= 0;
         const isHROps  = hasAll  || ft==='hrops';
         const isPay    = hasAll  || ft==='payroll';
+        const hasFnF   = isAdmin || isHROps || vf.indexOf('fnf_upload') >= 0;
+        const hasTA    = hasAll  || ft==='payroll' || vf.indexOf('ta_upload') >= 0;
         const cards = [];
         const mk=(label,src,file,desc,color='var(--accent)')=>
           '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'+
@@ -4281,13 +4281,20 @@ function renderUploadTab() {
           '<div style="font-size:11px;color:var(--muted2);margin-bottom:3px"><span style="color:var(--muted2)">From: </span>'+src+'</div>'+
           '<div style="font-size:11px;color:var(--muted)">'+desc+'</div>'+
           '</div>';
-        // FnF Settlement — Sheetal only (fnf_upload flag)
+        // FnF Settlement — hrops + admin
         if(hasFnF)
           cards.push(mk('FnF Settlement Report',
             'ZingHR → Payroll → FnF Settlement Report',
             'FnF_DDMMYYYY.xlsx',
             'Download window: Full extract, no date filter. Updates FnF tracker: pending cases, liability amounts (gratuity, leave encashment, net payable), aging bands, and payment dates.',
             '#f59e0b'));
+        // ATE Advance / DBT Recovery — hrops + payroll
+        if(isHROps||isPay)
+          cards.push(mk('ATE Advance / DBT Recovery',
+            'Sheetal (HR Ops) — monthly, from June 2026',
+            'ate_advance_DDMMYYYY.xlsx',
+            'Two-sheet file: "Advance Paid" (Emp Code, Month, Advance Date, Amount, Voucher No) and "Recovery" (Emp Code, Month Recovered, Recovery Date, Amount Recovered, DBT Intimation Ref). Feeds the DBT Recovery Centre.',
+            '#a78bfa'));
         // Employee Master — hrops + payroll + all
         if(isHROps||isPay)
           cards.push(mk('Employee Master',
@@ -11205,10 +11212,10 @@ async function processATEAdvance(wb) {
       var empName  = g(r, ['Emp Name','Employee Name','Name','emp_name']);
       var region   = g(r, ['Region','region']);
       var txDate   = g(r, ['Transaction Date','Date','transaction_date','Advance Date','Recovery Date']);
-      var monthRef = g(r, ['Month Reference','Month','month_reference','Month Ref']);
-      var amtRaw   = g(r, ['Amount','Advance Amount','Recovery Amount','amount']);
+      var monthRef = g(r, ['Month Reference','Month','month_reference','Month Ref','Month Recovered']);
+      var amtRaw   = g(r, ['Amount','Advance Amount','Recovery Amount','Amount Recovered','amount']);
       var amount   = parseFloat(String(amtRaw).replace(/,/g,'')) || 0;
-      var refNo    = g(r, ['Reference No','Ref No','reference_no','CMS Ref']);
+      var refNo    = g(r, ['Reference No','Ref No','reference_no','CMS Ref','Voucher No']);
       var notes    = g(r, ['Notes','Remarks','remarks','notes']);
       var dbtRef   = g(r, ['DBT Intimation Ref','dbt_intimation_ref','DBT Ref','Intimation Ref']);
       var txDateFmt = '';
