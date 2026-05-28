@@ -9387,19 +9387,21 @@ function renderDBTSection() {
   var fnType = _sbRole ? (_sbRole.function_type||'') : '';
   if (fnType !== 'hrops' && fnType !== 'payroll' && role !== 'admin' && role !== 'executive') return '';
   var data = window._dbtData || [];
+  var selRegion = window._dbtRegionFilter || 'All';
+  var filteredData = selRegion === 'All' ? data : data.filter(function(d){ return (d.region||'') === selRegion; });
   var el = document.getElementById('dbt-recovery-section');
   var threeMonthsAgo = new Date();
   threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
   var totalAdv = 0, totalRec = 0, totalOut = 0;
-  data.forEach(function(d) { totalAdv += d.total_advance; totalRec += d.total_recovery; totalOut += d.net_outstanding; });
+  filteredData.forEach(function(d) { totalAdv += d.total_advance; totalRec += d.total_recovery; totalOut += d.net_outstanding; });
   var summaryHTML = '<div style="display:flex;gap:28px;margin-bottom:16px;padding:14px 18px;background:var(--bg);border-radius:10px;flex-wrap:wrap;">'
     + '<span style="font-size:12px;color:var(--muted);">Total Disbursed: <b style="color:var(--text);">&#8377;' + totalAdv.toLocaleString('en-IN') + '</b></span>'
     + '<span style="font-size:12px;color:var(--muted);">Total Recovered: <b style="color:#22c55e;">&#8377;' + totalRec.toLocaleString('en-IN') + '</b></span>'
     + '<span style="font-size:12px;color:var(--muted);">Net Outstanding: <b style="color:' + (totalOut > 0 ? '#ef4444' : '#22c55e') + ';">&#8377;' + totalOut.toLocaleString('en-IN') + '</b></span>'
-    + '<span style="font-size:12px;color:var(--muted);">Employees: <b style="color:var(--text);">' + data.length + '</b></span>'
+    + '<span style="font-size:12px;color:var(--muted);">Employees: <b style="color:var(--text);">' + filteredData.length + '</b></span>'
     + '</div>';
   var rowsHTML = '';
-  data.forEach(function(d, idx) {
+  filteredData.forEach(function(d, idx) {
     var lastDate = d.last_advance_date ? new Date(d.last_advance_date) : null;
     var isRecent = lastDate && lastDate >= threeMonthsAgo;
     var out = d.net_outstanding;
@@ -9447,11 +9449,19 @@ function renderDBTSection() {
     + '<th style="text-align:right;padding:9px 12px;">Recovered</th><th style="text-align:right;padding:9px 12px;">Outstanding</th>'
     + '<th style="text-align:left;padding:9px 12px;">Last Advance</th><th style="text-align:left;padding:9px 12px;">Status</th>'
     + '<th style="padding:9px 12px;"></th></tr></thead><tbody>' + rowsHTML + '</tbody></table></div>';
+  var regionOpts = ['All','North','South','East','West'].map(function(r){
+    return '<option value="'+r+'"'+(r===selRegion?' selected':'')+'>'+r+'</option>';
+  }).join('');
+  var filterBar = '<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">'
+    + '<span style="font-size:11px;color:var(--muted);">Region:</span>'
+    + '<select onchange="window._dbtRegionFilter=this.value;if(typeof renderDBTSection===\'function\')renderDBTSection();" style="padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;">' + regionOpts + '</select>'
+    + '</div>';
   var html = '<div id="dbt-recovery-section" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:20px;">'
     + '<div style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;">DBT RECOVERY CENTRE'
     + '<span style="float:right;font-size:11px;font-weight:400;cursor:pointer;color:var(--accent);" onclick="if(typeof loadDBTData===\'function\')loadDBTData();">&#8635; Refresh</span></div>'
+    + filterBar
     + summaryHTML
-    + (data.length ? tableHTML : '<div style="color:var(--muted);font-size:13px;">No advance data found.</div>')
+    + (filteredData.length ? tableHTML : '<div style="color:var(--muted);font-size:13px;">No advance data found' + (selRegion !== 'All' ? ' for ' + selRegion : '') + '.</div>')
     + '</div>';
   if (el) { el.outerHTML = html; }
   return html;
