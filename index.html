@@ -10059,6 +10059,7 @@ async function processWISuperEmp(wb) {
 
   log('Processing ' + rows.length + ' employee records…', 'info');
 
+  try {
   // Track NewJoinee employees per week for weekly joiner counts
   const joiners_by_week = {}; // weekKey -> count
   const joiners_by_week_region = {}; // weekKey -> {region: count}
@@ -10078,12 +10079,13 @@ async function processWISuperEmp(wb) {
   }
 
   rows.forEach(r => {
-    const empStatusRaw = g(r, 'Employee Status'); // col 2: Existing/NewJoinee/FnF etc
-    const empStatus    = g(r, 'EmployeeStatus');  // col 6: Active/Inactive
+    const empStatusRaw = g(r, 'Employee Status'); // col 3: Existing/NewJoinee/FnF etc
+    const empStatus    = g(r, 'EmployeeStatus');  // col 7: Active/Inactive
 
-    // Track inactive employees with LWD in current year for attrition
-    if (empStatus !== 'Active') {
-      const lwdRaw = g(r, 'LWD', 'Date_Of_Leaving', 'DateOfLeaving', 'Last Working Day');
+    // Use empStatusRaw (Existing/NewJoinee) for HC counting — consistent with processEmployeeMaster
+    // Use empStatus (Active/Inactive) to identify exits for attrition tracking
+    if (empStatusRaw !== 'Existing' && empStatusRaw !== 'NewJoinee') {
+      const lwdRaw = g(r, 'DOL', 'LWD', 'Date_Of_Leaving', 'DateOfLeaving', 'Last Working Day');
       if (lwdRaw) {
         var lwdD = new Date(lwdRaw);
         if (!isNaN(lwdD) && lwdD.getFullYear() === new Date().getFullYear()) {
@@ -10242,6 +10244,10 @@ async function processWISuperEmp(wb) {
     log('Joiner counts by week: '+JSON.stringify(joiners_by_week), 'ok');
   }
 
+  } catch(e) {
+    log('Super Emp upload error: ' + e.message, 'err');
+    console.error('[processWISuperEmp]', e);
+  }
 }
 
 async function processWIEsep(wb) {
