@@ -2010,7 +2010,7 @@ function buildJourneyPlanPanel() {
           :daysSince>14
             ?'<div style="font-size:10px;color:var(--amber);font-weight:600">'+daysSince+'d ago</div>'
             :'<div style="font-size:10px;color:var(--green);font-weight:600">'+daysSince+'d ago</div>')
-      +(lv?'<div style="font-size:9px;color:var(--muted2)">'+esc(lv.submitter)+'</div>':'')
+      +(myLv?'<div style="font-size:9px;color:var(--muted2)">'+esc(myLv.submitter)+'</div>':'')
       +planBtn
       +'</div></div></div>';
 
