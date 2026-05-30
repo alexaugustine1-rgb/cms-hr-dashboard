@@ -3756,6 +3756,23 @@ function renderAbsenteeism(el) {
   }
 
   let data = _absentCases.slice();
+
+  // Exclude pre-2022 records — employees absent since before Jan 2022 are
+  // almost certainly ex-employees (resigned/FnF) whose cases were never resolved.
+  data = data.filter(function(r){ return !r.absent_since || r.absent_since >= '2022-01-01'; });
+
+  // If employee master is loaded, also exclude employees currently in terminal statuses
+  if (typeof _cwData !== 'undefined' && _cwData && _cwData.length) {
+    var _termSet = new Set();
+    _cwData.forEach(function(e){
+      var es = String(e['Employee Status']||'').trim();
+      if (es==='Resigned'||es==='FnF Initiated'||es==='FnF InProcess'||es==='FnF Locked'||es==='Separated'||es==='FnF Completed') {
+        if (e['Employee Code']) _termSet.add(String(e['Employee Code']).trim());
+      }
+    });
+    if (_termSet.size > 0) data = data.filter(function(r){ return !_termSet.has(String(r.emp_code||'').trim()); });
+  }
+
   if (_absentFilter.region !== 'All') data = data.filter(r => r.region === _absentFilter.region);
   if (_absentFilter.tier !== 'All') data = data.filter(r => r.account_tier === _absentFilter.tier);
   if (_absentFilter.status !== 'All') data = data.filter(r => r.status === _absentFilter.status);
@@ -9808,7 +9825,8 @@ function renderATETab(el) {
     var st    = ATE_STATUS_STYLE[r.status] || ATE_STATUS_STYLE['Active'];
     var daysLbl = ateDaysLabel(r);
     var rowBg = alert==='overdue' ? 'rgba(248,113,113,.05)' : alert==='due30' ? 'rgba(245,158,11,.04)' : 'transparent';
-    var uniqueId = 'ate_' + (r.emp_code||i).replace(/[^a-z0-9]/gi,'_');
+    var uniqueId = 'ate_' + String(r.emp_code||i).replace(/[^a-z0-9]/gi,'_');
+    var _saveCall = 'saveATEUpdate(\''+r.id+'\',\''+uniqueId+'\')';
 
     var statusOpts = ATE_STATUS.map(function(s){
       return '<option value="'+s+'"'+(r.status===s?' selected':'')+'>'+s+'</option>';
@@ -9824,11 +9842,14 @@ function renderATETab(el) {
       +'<td style="padding:8px 10px;font-size:11px;font-weight:600;color:'+(alert==='overdue'?'var(--red)':alert==='due30'?'var(--amber)':'var(--muted)')+'">'+esc(daysLbl)+'</td>'
       +'<td style="padding:8px 10px">'+alertBadge(alert)+'</td>'
       +'<td style="padding:8px 10px;min-width:160px">'
-        +'<select id="atesel_'+uniqueId+'" style="width:100%;padding:4px 7px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
+        // Status auto-saves on change — no need to also click Save for status updates
+        +'<select id="atesel_'+uniqueId+'" onchange="'+_saveCall+'" style="width:100%;padding:4px 7px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
         +statusOpts+'</select>'
       +'</td>'
       +'<td style="padding:8px 10px;min-width:180px">'
+        // Notes saved on blur (tab out / click away) or via Save button
         +'<input id="atenote_'+uniqueId+'" type="text" value="'+esc(r.action_notes||'')+'" placeholder="Add notes…" '
+        +'onblur="'+_saveCall+'" '
         +'style="width:100%;padding:4px 7px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
       +'</td>'
       +'<td style="padding:8px 10px;font-size:10px;color:var(--muted2);white-space:nowrap">'
@@ -9836,7 +9857,7 @@ function renderATETab(el) {
         +fmtD(r.action_date)
       +'</td>'
       +'<td style="padding:8px 10px">'
-        +'<button onclick="saveATEUpdate(\''+r.id+'\',\''+uniqueId+'\')" '
+        +'<button onclick="'+_saveCall+'" '
         +'style="padding:4px 12px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;white-space:nowrap">Save</button>'
       +'</td>'
       +'</tr>';
