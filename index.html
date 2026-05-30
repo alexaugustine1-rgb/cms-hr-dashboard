@@ -2034,7 +2034,13 @@ function buildJourneyPlanPanel() {
   plannedCards.sort(function(a,b){ return (a.planDate||'') < (b.planDate||'') ? -1 : 1; });
 
   var html = '<div id="journey-plan-panel" style="margin-bottom:16px">'
-    +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">🗺️ Journey Plan — Platinum &amp; Gold Accounts</div>';
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">🗺️ Journey Plan — Platinum &amp; Gold Accounts'
+    +' <span style="font-size:9px;font-weight:400;color:var(--muted2)">('+pgAccounts.length+' accounts)</span></div>'
+    +'<button onclick="var c=document.getElementById(\'jp-content\');var sh=c.style.display!==\'none\';c.style.display=sh?\'none\':\'block\';this.textContent=sh?\'▶ Show\':\'▼ Collapse\'" '
+    +'style="font-size:10px;color:var(--muted);background:none;border:1px solid var(--border);border-radius:5px;padding:2px 8px;cursor:pointer">▼ Collapse</button>'
+    +'</div>'
+    +'<div id="jp-content">';
 
   if (plannedCards.length) {
     html += '<div style="font-size:10px;font-weight:600;color:#60a5fa;margin-bottom:6px">Planned ('+plannedCards.length+')</div>'
@@ -2057,7 +2063,7 @@ function buildJourneyPlanPanel() {
       +'</div>';
   }
 
-  html += '</div>';
+  html += '</div></div>'; // close jp-content + journey-plan-panel
   return html;
 }
 
@@ -2440,7 +2446,7 @@ function openPlanVisitModal(ci) {
   overlay.setAttribute('style','position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center');
   overlay.onclick = function(e){ if(e.target===overlay) overlay.remove(); };
 
-  var typeOptions = ['Connect','Town Hall','R&R','Induction','Other'].map(function(t){
+  var typeOptions = ['Connect','Town Hall','R&R','Induction','Training','Other'].map(function(t){
     return '<option value="'+t+'"'+(plan&&plan.type===t?' selected':'')+'>'+t+'</option>';
   }).join('');
 
@@ -2596,8 +2602,8 @@ function renderHRBP(w, pw) {
   var _myName = (_sbRole&&_sbRole.display_name)||'';
 
   // ── Visit type lookups ────────────────────────────────────────────────────
-  var _vtypeCol  = {'Connect':'var(--accent)','Town Hall':'#34d399','R&R':'#f59e0b','Induction':'#a78bfa','Other':'var(--muted2)'};
-  var _vtypeIcon = {'Connect':'🤝','Town Hall':'🏛','R&R':'🏆','Induction':'📋','Other':'📌'};
+  var _vtypeCol  = {'Connect':'var(--accent)','Town Hall':'#34d399','R&R':'#f59e0b','Induction':'#a78bfa','Training':'#06b6d4','Other':'var(--muted2)'};
+  var _vtypeIcon = {'Connect':'🤝','Town Hall':'🏛','R&R':'🏆','Induction':'📋','Training':'🎓','Other':'📌'};
   var _tierCol2  = {'Platinum':'#a78bfa','Gold':'#f59e0b','Silver':'#94a3b8','Regular':'var(--muted2)','Internal':'#34d399'};
 
   // ── Site visits filtered ──────────────────────────────────────────────────
@@ -5693,7 +5699,7 @@ if(t==='hrbp'){
       +'<div style="flex:0 0 auto"><label style="font-size:10px;color:var(--muted2);display:block;margin-bottom:3px">Type</label>'
       +'<select id="visitTypeInput" onchange="toggleRRFields(this.value)" style="padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;min-width:130px">'
       +'<option value="Connect">Employee Connect</option><option value="Town Hall">Town Hall</option>'
-      +'<option value="R&R">R&R</option><option value="Induction">Induction</option><option value="Other">Other</option>'
+      +'<option value="R&R">R&R</option><option value="Induction">Induction</option><option value="Training">Training</option><option value="Other">Other</option>'
       +'</select></div>'
       +'</div>'
       +'<div style="margin-bottom:10px">'
