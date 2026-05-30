@@ -2724,20 +2724,29 @@ function renderHRBP(w, pw) {
     +'</div>';
 
   // ── VISIT LOG TABLE (compact, replaces card grid) ─────────────────────────
-  var _svTableRows = _svFiltered.length
-    ? _svFiltered.slice().sort(function(a,b){return (b.visit_date||'')>(a.visit_date||'')?1:-1;}).map(function(sv,ri){
+  var _svSorted = _svFiltered.slice().sort(function(a,b){return (b.visit_date||'')>(a.visit_date||'')?1:-1;});
+  window._jpVisitLog = _svSorted; // global ref for openVisitNoteModal
+  var _svTableRows = _svSorted.length
+    ? _svSorted.map(function(sv,ri){
         var tc  = _tierCol2[sv.account_tier]||'var(--muted2)';
         var vc  = _vtypeCol[sv.visit_type||'Connect']||'var(--muted2)';
         var vi2 = _vtypeIcon[sv.visit_type||'Connect']||'📌';
         var dFmt = sv.visit_date ? new Date(sv.visit_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
         var bg = ri%2===0?'var(--surface2)':'var(--surface3)';
+        var notes = sv.visit_notes||'';
+        var hasMore = notes.length > 0;
         return '<tr style="background:'+bg+';border-left:3px solid '+tc+'">'
           +'<td style="padding:7px 10px;font-size:11px;font-weight:600;color:var(--muted2)">'+esc(dFmt)+'</td>'
           +'<td style="padding:7px 10px"><div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(sv.account_name||'—')+'</div></td>'
           +'<td style="padding:7px 8px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:6px;background:'+tc+'20;color:'+tc+'">'+esc(sv.account_tier||'—')+'</span></td>'
           +'<td style="padding:7px 10px;font-size:11px;color:#a78bfa">'+esc(sv.submitter_name||'—')+'</td>'
           +'<td style="padding:7px 8px"><span style="font-size:10px;padding:1px 6px;border-radius:6px;background:'+vc+'18;color:'+vc+';border:1px solid '+vc+'30">'+vi2+' '+esc(sv.visit_type||'Connect')+'</span></td>'
-          +'<td style="padding:7px 10px;font-size:11px;color:var(--muted);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((sv.visit_notes||'').substring(0,80)||'—')+'</td>'
+          +'<td onclick="openVisitNoteModal('+ri+')" style="padding:7px 10px;'+(hasMore?'cursor:pointer;':'')+'">'
+            +(hasMore
+              ? '<span style="font-size:11px;color:var(--muted)">'+esc(notes.substring(0,80))+(notes.length>80?'…':'')+'</span>'
+                +' <span style="font-size:9px;color:var(--accent);white-space:nowrap">↗ Read</span>'
+              : '<span style="font-size:11px;color:var(--muted2)">—</span>')
+          +'</td>'
           +'</tr>';
       }).join('')
     : '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--muted);font-size:12px">No visits logged'+((_hcR!=='All')?' for '+esc(_hcR):'')+((_hcH!=='All')?' by '+esc(_hcH):'')+'.</td></tr>';
@@ -3356,6 +3365,36 @@ function closeCM(e) {
   if (e.target === document.getElementById('cmOverlay')) {
     document.getElementById('cmOverlay').classList.remove('open');
   }
+}
+
+function openVisitNoteModal(idx) {
+  var sv = (window._jpVisitLog||[])[idx];
+  if (!sv) return;
+  var tierCol = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Regular:'var(--muted2)',Internal:'#34d399'};
+  var tc = tierCol[sv.account_tier]||'var(--muted2)';
+  var modal = document.createElement('div');
+  modal.setAttribute('data-visit-modal','1');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:580px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.5);max-height:80vh;overflow-y:auto">'
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;gap:12px">'
+      +'<div>'
+        +'<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">'+esc(sv.account_name||'—')+'</div>'
+        +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+          +(sv.account_tier?'<span style="font-size:10px;font-weight:700;padding:1px 8px;border-radius:5px;background:'+tc+'20;color:'+tc+'">'+esc(sv.account_tier)+'</span>':'')
+          +'<span style="font-size:11px;color:#a78bfa">'+esc(sv.submitter_name||'')+'</span>'
+          +'<span style="font-size:11px;color:var(--muted2)">'+esc(sv.visit_date||'')+'</span>'
+          +(sv.visit_type?'<span style="font-size:11px;color:var(--muted)">'+esc(sv.visit_type)+'</span>':'')
+        +'</div>'
+      +'</div>'
+      +'<button onclick="document.querySelector(\'[data-visit-modal]\').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;flex-shrink:0;line-height:1">✕</button>'
+    +'</div>'
+    +'<div style="background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:14px 16px">'
+      +'<div style="font-size:9px;font-weight:700;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Visit Notes</div>'
+      +'<div style="font-size:13px;color:var(--text);line-height:1.7;white-space:pre-wrap">'+esc(sv.visit_notes||'No notes recorded.')+'</div>'
+    +'</div>'
+  +'</div>';
+  modal.onclick = function(e){if(e.target===modal)modal.remove();};
+  document.body.appendChild(modal);
 }
 
 function openConnectModal(ciId) {
