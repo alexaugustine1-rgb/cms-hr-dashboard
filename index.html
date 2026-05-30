@@ -9881,8 +9881,16 @@ async function processEmployeeMaster(wb) {
     // Filter by 'Employee Status' col (Existing/NewJoinee only — excludes FnF, Resigned, Hold etc.)
     // Note: 'EmployeeStatus' (no space, col G) = Active/Inactive — different column, not used here
     var activeRows = rows.filter(function(r){
-      var es = String(r['Employee Status']||'').trim();
-      return es === 'Existing' || es === 'NewJoinee';
+      var empStatus = String(r['Employee Status']||'').trim();
+      // DOL-based reclassification: FnF Initiated/InProcess with DOL before
+      // 2025-01-01 are confirmed stale migration artefacts — treat as FnF Locked
+      // Source: E-separation_Updated_May29.xls verified by Alex (29 May 2026)
+      var dolRaw = r['DOL'] || r['Date of Leaving'] || '';
+      var dolYear = dolRaw ? new Date(dolRaw).getFullYear() : 9999;
+      if ((empStatus === 'FnF Initiated' || empStatus === 'FnF InProcess') && dolYear < 2025) {
+        empStatus = 'FnF Locked';
+      }
+      return empStatus === 'Existing' || empStatus === 'NewJoinee';
     });
 
     log('Active rows (Existing + NewJoinee): ' + activeRows.length);
