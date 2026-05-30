@@ -7095,8 +7095,23 @@ function renderResignation(){
   }
   var S=CMS_SUMMARY;
   var data=CMS_RES_DATA.slice();
+  // Recompute days_to_lwd live (stored value is stale from upload time).
+  // Also look up tier from CUSTOMER_TIER_MAP — parser stores 'Regular' as fallback.
+  var _rtToday=new Date(); _rtToday.setHours(0,0,0,0);
+  data=data.map(function(r){
+    var _r=r;
+    if(r.lwd){try{var _d=new Date(r.lwd);if(!isNaN(_d))_r=Object.assign({},_r,{days_to_lwd:Math.floor((_d-_rtToday)/86400000)});}catch(e){}}
+    if((_r.tier==='Regular'||!_r.tier)&&_r.customer){
+      var _cu=_r.customer.toUpperCase().trim();
+      var _t=CUSTOMER_TIER_MAP[_cu];
+      if(!_t){var _ks=Object.keys(CUSTOMER_TIER_MAP);for(var _i=0;_i<_ks.length;_i++){var _k=_ks[_i];if(_k.length>5&&(_cu.indexOf(_k)>=0||_k.indexOf(_cu)>=0)){_t=CUSTOMER_TIER_MAP[_k];break;}}}
+      if(_t)_r=Object.assign({},_r,{tier:_t});
+    }
+    return _r;
+  });
+  // Priority Plat/Gold alert — use full enriched data BEFORE user filters applied
+  var platGoldNoReq=data.filter(function(r){return['Platinum','Gold'].includes(r.tier)&&!r.req_id;});
   // Split: active (future LWD) vs recently left (past LWD)
-  var _today = new Date();
   var dataActive = data.filter(function(r){return (r.days_to_lwd||0)>=0;});
   var dataPast   = data.filter(function(r){return (r.days_to_lwd||0)<0;});
   // R1 process failure: left without R1 approval
@@ -7125,7 +7140,6 @@ function renderResignation(){
     if(ta!==tb) return ta-tb;
     return a.days_to_lwd-b.days_to_lwd;
   });
-  var platGoldNoReq=CMS_RES_DATA.filter(function(r){return['Platinum','Gold'].includes(r.tier)&&!r.req_id;});
   var rf=['All','North','South','East','West'].map(function(v){return _filterBtn(v,_resRegion===v,"_resRegion='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
   var tf=['All','Platinum','Gold','Silver','Regular'].map(function(v){return _filterBtn(v,_resTier===v,"_resTier='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
   var qf=['All','No Req','Req Raised'].map(function(v){return _filterBtn(v,_resReq===v,"_resReq='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
@@ -10704,11 +10718,11 @@ async function processResignationData(wb) {
     return {
       emp_code:     g(r,'EmployeeCode','Employee Code'),
       name:         g(r,'EmployeeName','Employee Name').replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').trim(),
-      designation:  '',
-      location:     '',
+      designation:  g(r,'Designation','DesignationName','Designation Name'),
+      location:     g(r,'Branch','BranchName','Location','Work Location','WorkLocation','City'),
       region:       g(r,'Region'),
       customer:     g(r,'CustomerNa','Customer Name','CustomerName'),
-      tier:         'Regular',
+      tier:         (function(cn){if(!cn)return'Regular';var cu=cn.toUpperCase().trim();var t=CUSTOMER_TIER_MAP[cu];if(!t){var ks=Object.keys(CUSTOMER_TIER_MAP);for(var i=0;i<ks.length;i++){var k=ks[i];if(k.length>5&&(cu.indexOf(k)>=0||k.indexOf(cu)>=0)){t=CUSTOMER_TIER_MAP[k];break;}}}return t||'Regular';})(g(r,'CustomerNa','Customer Name','CustomerName')),
       resign_date:  fmt(res_raw),
       lwd:          fmt(lwd_raw),
       days_since, days_to_lwd,
