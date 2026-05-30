@@ -5986,7 +5986,7 @@ async function renderUsersTab(mc){
     .order('display_name');
   const list=users||[];
   var selfId=_sbUser&&_sbUser.id;
-  var roleOpts_u=['admin','executive','hrbp','viewer'];
+  var roleOpts_u=['admin','executive','hrbp','hrops','ta','facilities','ld','viewer'];
   var fnOpts_u=['hrbp','ta','hrops','payroll','ld','facilities','admin','executive'];
   var regionOpts_u=['Pan India','North','South','East','West'];
   function mkSel_u(opts,cur,uid,fld){
