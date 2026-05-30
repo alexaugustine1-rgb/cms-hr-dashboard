@@ -9452,10 +9452,12 @@ function renderDBTSection() {
   var filteredData = data.filter(function(d){
     if (selRegion !== 'All' && (d.region||'') !== selRegion) return false;
     var st = ateStatusMap[d.emp_code] || '';
-    // Employees absent from ate_tracker (!st) are historical ATEs no longer
-    // in the current roster — treat them as exited so the DBT "Active" filter
-    // aligns with the active count in ATE Management.
-    var isClosed = !st || st === 'Converted to FTE' || st === 'Separated';
+    // "Converted to FTE" employees are still on payroll — their advance is still
+    // recoverable via salary, so they remain visible in the Active filter with
+    // an "FTE" remark badge on their row.
+    // Only Separated employees and historical records (not in ate_tracker) are
+    // truly exited and go to the Exited filter.
+    var isClosed = !st || st === 'Separated';
     if (selEmp === 'Active' && isClosed) return false;
     if (selEmp === 'Exited' && !isClosed) return false;
     return true;
