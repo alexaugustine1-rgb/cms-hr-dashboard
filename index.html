@@ -1970,10 +1970,11 @@ function buildJourneyPlanPanel() {
   var plannedCards = [], overdueCards = [], recentCards = [];
 
   pgAccounts.forEach(function(c, idx){
-    var key = c.n.toUpperCase().trim();
-    var lv = lastVisitMap[key];       // last visit by ANY hrbp — shown on card for context
-    var myLv = myVisitMap[key]||null; // last visit by THIS hrbp — drives overdue/recent classification
-    var plan = visitPlans[key]||null;
+    var visitKey = c.n.toUpperCase().trim();             // name-only — matches lastVisitMap/myVisitMap index
+    var planKey  = (c.r||'').toUpperCase()+'|'+c.n.toUpperCase().trim(); // region+name — unique per region
+    var lv   = lastVisitMap[visitKey];
+    var myLv = myVisitMap[visitKey]||null;
+    var plan = visitPlans[planKey]||null;
     var daysSince = null;
     if (myLv && myLv.date) {
       var lvDate = new Date(myLv.date);
@@ -1981,8 +1982,8 @@ function buildJourneyPlanPanel() {
     }
     var tc = tierCol[c.t]||'var(--muted2)';
 
-    // Store in global map for onclick
-    window._jpMap[idx] = {acct: c, lv: lv, plan: plan, key: key};
+    // Store in global map for onclick — planKey so Save writes to the right bucket
+    window._jpMap[idx] = {acct: c, lv: lv, plan: plan, key: planKey};
 
     // Plan button / badge
     var planBtn = plan
