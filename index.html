@@ -9392,18 +9392,17 @@ function renderATEMixDashboard() {
   var cases = (window._ateCases || []).filter(function(c){
     return c.status !== 'Converted to FTE' && c.status !== 'Separated';
   });
-  var wiData = (window._wiData || []);
+  // Regional FTE HC from the WI global (loaded from Supabase at boot)
+  var _wiRegions = (typeof WI !== 'undefined' && WI && WI.regions) ? WI.regions : {};
   var regions = ['North','South','East','West'];
-  var wiByRegion = {};
-  wiData.forEach(function(w) { if (w.region) wiByRegion[w.region] = w; });
   var cardHTML = '';
   regions.forEach(function(region) {
     var regionCases = cases.filter(function(c) { return (c.region||'').trim() === region; });
     var billable = regionCases.filter(function(c) { return (c.deployment_status||'').toLowerCase() === 'billable'; }).length;
     var training = regionCases.filter(function(c) { return (c.deployment_status||'').toLowerCase() === 'training'; }).length;
     var total = regionCases.length;
-    var wi = wiByRegion[region] || {};
-    var fte = wi.region_fte_hc ? parseFloat(wi.region_fte_hc) : 0;
+    // NATS limit = 10% of active FTE HC in this region (NATS regulation cap)
+    var fte = (_wiRegions[region] && _wiRegions[region].hc) ? _wiRegions[region].hc : 0;
     var natsLimit = fte ? Math.round(fte * 0.10) : 0;
     var headroom = natsLimit ? Math.max(0, natsLimit - training) : 0;
     var usedPct = natsLimit ? Math.min(100, Math.round((training / natsLimit) * 100)) : 0;
