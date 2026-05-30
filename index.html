@@ -4132,7 +4132,7 @@ function renderActionCentre(el) {
   const allOverdue  = allOpen.filter(t=>t.due_date&&new Date(t.due_date)<new Date());
   const allRisks    = allOpen.filter(t=>['risk','payroll_error','statutory'].includes(t.task_type));
   const allEsc      = allOpen.filter(t=>t.task_type==='escalation');
-  const allRolled   = _actionTasks.filter(t=>t.rollover_count>0&&t.status!=='Done'&&t.status!=='Closed');
+  const allRolled   = _actionTasks.filter(t=>t.rollover_count>0&&(t.status==='Open'||t.status==='In Progress'));
 
   // ── Apply filters ──────────────────────────────────────────
   var filtered = _actionTasks.slice();
@@ -4149,11 +4149,11 @@ function renderActionCentre(el) {
   } else if (_acStatus === 'open') {
     filtered = filtered.filter(t=>t.status==='Open'||t.status==='In Progress');
   } else if (_acStatus === 'overdue') {
-    filtered = filtered.filter(t=>t.due_date&&new Date(t.due_date)<new Date()&&t.status!=='Done'&&t.status!=='Closed');
+    filtered = filtered.filter(t=>t.due_date&&new Date(t.due_date)<new Date()&&(t.status==='Open'||t.status==='In Progress'));
   } else if (_acStatus === 'done') {
     filtered = filtered.filter(t=>t.status==='Done'||t.status==='Closed');
   } else if (_acStatus === 'rolledover') {
-    filtered = filtered.filter(t=>t.rollover_count>0&&t.status!=='Done'&&t.status!=='Closed');
+    filtered = filtered.filter(t=>t.rollover_count>0&&(t.status==='Open'||t.status==='In Progress'));
   }
   // function area
   if (_acFnArea)   filtered = filtered.filter(t=>(t.function_area||'General')===_acFnArea);
