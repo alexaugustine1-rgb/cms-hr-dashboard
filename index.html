@@ -906,6 +906,7 @@ var HRBP_ROSTER = [
   {name:'Priya Paul',                     region:'South'},
   {name:'Shambhavi Prathamesh Joshi',     region:'West'},
   {name:'Somasri Sukumar Samanta',        region:'West'},
+  {name:'Prapti Patel',                   region:'West'},
 ];
 let currentWeek = 'W09';
 // Resolve currentWeek to latest available week with data
@@ -1886,7 +1887,7 @@ function buildJourneyPlanPanel() {
 
   if (!pgAccounts.length) return '';
 
-  // Build last visit map from _hrbpSVCache
+  // Build last visit map from _hrbpSVCache (ALL HRBPs — used for display info on cards)
   var lastVisitMap = {}; // account_upper -> {date, submitter}
   (_hrbpSVCache||[]).forEach(function(sv){
     var key = (sv.account_name||'').toUpperCase().trim();
@@ -1905,6 +1906,24 @@ function buildJourneyPlanPanel() {
         lastVisitMap[acct] = {date:dt, submitter:c.name||''};
     });
   });
+  // Build a separate map of THIS HRBP's own visits only — used for section
+  // classification (overdue vs recently visited) so that another HRBP visiting
+  // an account in my region does NOT mark it as "Recently Visited" for me.
+  var _jpMyName = (_sbRole&&_sbRole.display_name)||'';
+  var _jpIsHRBP = role === 'hrbp';
+  var myVisitMap = {};
+  if (_jpIsHRBP && _jpMyName) {
+    (_hrbpSVCache||[]).filter(function(sv){
+      return (sv.submitter_name||'').toLowerCase().trim() === _jpMyName.toLowerCase().trim();
+    }).forEach(function(sv){
+      var key = (sv.account_name||'').toUpperCase().trim();
+      if (!key) return;
+      if (!myVisitMap[key]||sv.visit_date>myVisitMap[key].date)
+        myVisitMap[key] = {date:sv.visit_date, submitter:sv.submitter_name||''};
+    });
+  } else {
+    myVisitMap = lastVisitMap; // admin/exec: all visits used for classification
+  }
 
   // Load visit plans from localStorage
   var visitPlans = {};
@@ -1934,11 +1953,12 @@ function buildJourneyPlanPanel() {
 
   pgAccounts.forEach(function(c, idx){
     var key = c.n.toUpperCase().trim();
-    var lv = lastVisitMap[key];
+    var lv = lastVisitMap[key];       // last visit by ANY hrbp — shown on card for context
+    var myLv = myVisitMap[key]||null; // last visit by THIS hrbp — drives overdue/recent classification
     var plan = visitPlans[key]||null;
     var daysSince = null;
-    if (lv && lv.date) {
-      var lvDate = new Date(lv.date);
+    if (myLv && myLv.date) {
+      var lvDate = new Date(myLv.date);
       if (!isNaN(lvDate)) daysSince = Math.floor((today-lvDate)/86400000);
     }
     var tc = tierCol[c.t]||'var(--muted2)';
@@ -2271,7 +2291,10 @@ async function renderHRBPScorecardIntoDOM() {
   if (!el) return;
 
   var role = (_sbRole&&_sbRole.role)||'';
-  if (role !== 'admin' && role !== 'executive') { el.style.display='none'; return; }
+  var _scMyName = (_sbRole&&_sbRole.display_name)||'';
+  var _scIsHRBP = role === 'hrbp';
+  // Show scorecard for admin/executive (all HRBPs) and hrbp (own scorecard only)
+  if (role !== 'admin' && role !== 'executive' && !_scIsHRBP) { el.style.display='none'; return; }
 
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Computing HRBP scorecards…</div>';
 
@@ -2323,7 +2346,12 @@ async function renderHRBPScorecardIntoDOM() {
     dynMons:        dynMons2,
   };
 
-  var scores = HRBP_ROSTER.map(function(h) {
+  // For an individual HRBP, show only their own scorecard row
+  var _hRoster = _scIsHRBP
+    ? HRBP_ROSTER.filter(function(h){ return h.name.toLowerCase().trim()===_scMyName.toLowerCase().trim(); })
+    : HRBP_ROSTER;
+  if (_scIsHRBP && !_hRoster.length) _hRoster = [{name:_scMyName, region:(_sbRole&&_sbRole.region)||''}];
+  var scores = _hRoster.map(function(h) {
     return {hrbp:h, score:computeHRBPScore(h.name, h.region, sharedData)};
   }).sort(function(a,b){ return b.score.total - a.score.total; });
 
@@ -2819,7 +2847,9 @@ function renderHRBP(w, pw) {
             ? (_hrbpSVCache||[])
             : (_mySVs||[]);
           var visitedSet = {};
-          _scorecardSVs.forEach(function(sv){ if(sv.account_name) visitedSet[sv.account_name.toUpperCase().trim()]=1; });
+          // Only count Plat/Gold accounts visited — same tier filter as totalAccounts
+          _scorecardSVs.filter(function(sv){ return sv.account_tier==='Platinum'||sv.account_tier==='Gold'; })
+            .forEach(function(sv){ if(sv.account_name) visitedSet[sv.account_name.toUpperCase().trim()]=1; });
           var visitedCount = Object.keys(visitedSet).length;
           var overdueCount = Math.max(0, totalAccounts - visitedCount);
           var visitPlans2 = {};
