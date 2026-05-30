@@ -1872,6 +1872,14 @@ function buildJourneyPlanPanel() {
   var role   = (_sbRole&&_sbRole.role)||'';
   // For admin/exec, respect the region filter tab selection (_hrbpConnectRegion)
   var _jpRegion = (role==='admin'||role==='executive') && typeof _hrbpConnectRegion!=='undefined' && _hrbpConnectRegion && _hrbpConnectRegion!=='All' ? _hrbpConnectRegion : region;
+  // If admin/exec selected a specific HRBP and no explicit region filter, infer region from roster
+  var _jpHRBP = (typeof _hrbpSVHRBP!=='undefined') ? _hrbpSVHRBP : 'All';
+  if ((role==='admin'||role==='executive') && _jpHRBP!=='All' && (!_jpRegion||_jpRegion==='All'||_jpRegion==='Pan India')) {
+    var _rEntry = (typeof HRBP_ROSTER!=='undefined'?HRBP_ROSTER:[]).find(function(h){
+      return h.name.toLowerCase().trim()===_jpHRBP.toLowerCase().trim();
+    });
+    if (_rEntry&&_rEntry.region) _jpRegion = _rEntry.region;
+  }
   // Pan India: admin/exec with no region filter, hrops, payroll, or explicit Pan India
   var isPanIndia = ((role==='admin'||role==='executive') && (!_jpRegion||_jpRegion==='All'||_jpRegion==='Pan India'))
     ||fnType==='hrops'||fnType==='payroll'||!_jpRegion||_jpRegion==='All'||_jpRegion==='Pan India';
@@ -1921,8 +1929,18 @@ function buildJourneyPlanPanel() {
       if (!myVisitMap[key]||sv.visit_date>myVisitMap[key].date)
         myVisitMap[key] = {date:sv.visit_date, submitter:sv.submitter_name||''};
     });
+  } else if (_jpHRBP !== 'All') {
+    // admin/exec with a specific HRBP selected — classify visits from their perspective
+    (_hrbpSVCache||[]).filter(function(sv){
+      return (sv.submitter_name||'').toLowerCase().trim() === _jpHRBP.toLowerCase().trim();
+    }).forEach(function(sv){
+      var key = (sv.account_name||'').toUpperCase().trim();
+      if (!key) return;
+      if (!myVisitMap[key]||sv.visit_date>myVisitMap[key].date)
+        myVisitMap[key] = {date:sv.visit_date, submitter:sv.submitter_name||''};
+    });
   } else {
-    myVisitMap = lastVisitMap; // admin/exec: all visits used for classification
+    myVisitMap = lastVisitMap; // admin/exec with all HRBPs: all visits for classification
   }
 
   // Load visit plans from localStorage
