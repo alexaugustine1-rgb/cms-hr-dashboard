@@ -2595,7 +2595,7 @@ function renderHRBP(w, pw) {
         var active = (r==='All'&&_hcR==='All')||(r===_hcR);
         var cnt = r==='All'?_svAll.length:_svAll.filter(function(sv){return sv.region===r;}).length;
         if(r!=='All'&&cnt===0) return '';
-        return '<button onclick="_hrbpConnectRegion=\''+r+'\';_hrbpSVHRBP=\'All\';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#fff':'var(--muted)')+'">'+esc(r)+(cnt>0&&r!=='All'?' ('+cnt+')':'')+'</button>';
+        return '<button onclick="_hrbpConnectRegion=\''+r+'\';_hrbpSVHRBP=\'All\';render();setTimeout(renderHRBPScorecardIntoDOM,100)" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#fff':'var(--muted)')+'">'+esc(r)+(cnt>0&&r!=='All'?' ('+cnt+')':'')+'</button>';
       }).join('');
 
   var _hrbpNames = [];
@@ -2603,7 +2603,7 @@ function renderHRBP(w, pw) {
   (_hcR==='All'?_svAll:_svAll.filter(function(sv){return sv.region===_hcR;}))
     .forEach(function(sv){ if(sv.submitter_name&&!_hrbpSeen[sv.submitter_name]){_hrbpSeen[sv.submitter_name]=1;_hrbpNames.push(sv.submitter_name);} });
   var _hrbpDropdown = !_isHRBP && _hrbpNames.length>1
-    ? '<select onchange="_hrbpSVHRBP=this.value;render()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;min-width:160px"><option value="All"'+(_hcH==='All'?' selected':'')+'>All HRBPs</option>'+_hrbpNames.map(function(n){return '<option value="'+esc(n)+'"'+(_hcH===n?' selected':'')+'>'+esc(n)+'</option>';}).join('')+'</select>'
+    ? '<select onchange="_hrbpSVHRBP=this.value;render();setTimeout(renderHRBPScorecardIntoDOM,100)" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;min-width:160px"><option value="All"'+(_hcH==='All'?' selected':'')+'>All HRBPs</option>'+_hrbpNames.map(function(n){return '<option value="'+esc(n)+'"'+(_hcH===n?' selected':'')+'>'+esc(n)+'</option>';}).join('')+'</select>'
     : '';
 
   // ── Counts ────────────────────────────────────────────────────────────────
@@ -2711,21 +2711,24 @@ function renderHRBP(w, pw) {
           +'<td style="padding:7px 8px"><span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:6px;background:'+tc+'20;color:'+tc+'">'+esc(sv.account_tier||'—')+'</span></td>'
           +'<td style="padding:7px 10px;font-size:11px;color:#a78bfa">'+esc(sv.submitter_name||'—')+'</td>'
           +'<td style="padding:7px 8px"><span style="font-size:10px;padding:1px 6px;border-radius:6px;background:'+vc+'18;color:'+vc+';border:1px solid '+vc+'30">'+vi2+' '+esc(sv.visit_type||'Connect')+'</span></td>'
-          +'<td style="padding:7px 10px;font-size:11px;color:var(--muted);max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((sv.visit_notes||'').substring(0,60)||'—')+'</td>'
-          +'<td style="padding:7px 8px"><button data-acct="'+esc(sv.account_name||'')+'" onclick="openGalleryUploadForAccount(this.dataset.acct)" style="font-size:10px;color:var(--accent);background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:5px;padding:2px 8px;cursor:pointer">📷</button></td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:var(--muted);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((sv.visit_notes||'').substring(0,80)||'—')+'</td>'
           +'</tr>';
       }).join('')
-    : '<tr><td colspan="7" style="padding:30px;text-align:center;color:var(--muted);font-size:12px">No visits logged'+((_hcR!=='All')?' for '+esc(_hcR):'')+((_hcH!=='All')?' by '+esc(_hcH):'')+'.</td></tr>';
+    : '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--muted);font-size:12px">No visits logged'+((_hcR!=='All')?' for '+esc(_hcR):'')+((_hcH!=='All')?' by '+esc(_hcH):'')+'.</td></tr>';
 
   var _visitLogTable = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">'
     +'<table style="width:100%;border-collapse:collapse">'
     +'<thead><tr style="background:var(--surface3);border-bottom:2px solid var(--border)">'
-    +['Date','Account','Tier','HRBP','Type','Notes',''].map(function(h){return '<th style="padding:7px 10px;text-align:left;font-family:DM_Mono,monospace;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);white-space:nowrap">'+h+'</th>';}).join('')
+    +['Date','Account','Tier','HRBP','Type','Notes'].map(function(h){return '<th style="padding:7px 10px;text-align:left;font-family:DM_Mono,monospace;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);white-space:nowrap">'+h+'</th>';}).join('')
     +'</tr></thead><tbody>'+_svTableRows+'</tbody></table></div>';
 
   // ── CONNECT NOTES (weekly submissions) ───────────────────────────────────
-  var _filteredConnects = _hcR==='All' ? _allConnects
-    : _allConnects.filter(function(c){return (c.region||getHRBPRegion(c.name||''))===_hcR;});
+  var _filteredConnects = _allConnects.filter(function(c){
+    var cReg = c.region||getHRBPRegion(c.name||'');
+    if (_hcR!=='All' && cReg!==_hcR) return false;
+    if (_hcH!=='All' && (c.name||'').toLowerCase().trim()!==_hcH.toLowerCase().trim()) return false;
+    return true;
+  });
   var _connectNotesHTML = _filteredConnects.length
     ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+_filteredConnects.map(function(c,i){return buildConnectCard(c,i);}).join('')+'</div>'
     : '<div class="empty-state">No connect notes logged for this region this week.</div>';
