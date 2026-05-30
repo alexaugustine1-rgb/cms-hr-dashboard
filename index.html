@@ -2633,7 +2633,9 @@ function renderHRBP(w, pw) {
   // ── Counts ────────────────────────────────────────────────────────────────
   var _mySVs = (_isHRBP&&_myName)
     ? _svAll.filter(function(sv){return (sv.submitter_name||'').toLowerCase().trim()===_myName.toLowerCase().trim();})
-    : _svAll;
+    : _hcH!=='All'
+      ? _svAll.filter(function(sv){return (sv.submitter_name||'').toLowerCase().trim()===_hcH.toLowerCase().trim();})
+      : _svAll;
   var _svVisitCount = _mySVs.length;
   var _connectVisitCount = w.hrbp_connects.reduce(function(total,c){
     var detail=c.detail||c.activities||'';
@@ -2778,11 +2780,19 @@ function renderHRBP(w, pw) {
          +'<div style="margin-top:16px"><div class="card"><div class="card-header"><div class="card-title">👔 HRBP Escalations to Leadership</div><span class="card-badge red">Review Required</span></div><div class="card-body">'+issueItems+'</div></div></div>');
 
   // ── COVERAGE STRIP (compact, replaces scorecard card) ────────────────────
+  // When a specific HRBP is selected but no region tab is active, infer region from roster
+  var _cvRegion = _hcR;
+  if (_hcH!=='All' && (_cvRegion==='All'||_cvRegion==='Pan India'||!_cvRegion)) {
+    var _cvREntry = (typeof HRBP_ROSTER!=='undefined'?HRBP_ROSTER:[]).find(function(h){
+      return h.name.toLowerCase().trim()===_hcH.toLowerCase().trim();
+    });
+    if (_cvREntry&&_cvREntry.region) _cvRegion = _cvREntry.region;
+  }
   var _cvTotalAccounts = (CUSTOMER_LIST||[]).filter(function(c){
-    return (c.t==='Platinum'||c.t==='Gold') && (_hcR==='All'||_hcR==='Pan India'||c.r===_hcR);
+    return (c.t==='Platinum'||c.t==='Gold') && (_cvRegion==='All'||_cvRegion==='Pan India'||c.r===_cvRegion);
   }).length;
   var _cvVisitedSet = {};
-  (_isAdmin?_svAll:_mySVs).filter(function(sv){return sv.account_tier==='Platinum'||sv.account_tier==='Gold';})
+  _mySVs.filter(function(sv){return sv.account_tier==='Platinum'||sv.account_tier==='Gold';})
     .forEach(function(sv){if(sv.account_name)_cvVisitedSet[(sv.account_name||'').toUpperCase().trim()]=1;});
   var _cvVisited  = Object.keys(_cvVisitedSet).length;
   var _cvOverdue  = Math.max(0,_cvTotalAccounts-_cvVisited);
@@ -2813,7 +2823,7 @@ function renderHRBP(w, pw) {
     +'<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:20px;flex-wrap:wrap">'
     +'<div class="mini-stats" style="grid-template-columns:repeat(3,1fr);flex:1;min-width:300px">'
     +'<div class="mini-stat"><div class="mini-stat-val" style="color:var(--accent)">'+actualVisits+'</div><div class="mini-stat-label">Site Visits</div></div>'
-    +'<div class="mini-stat"><div class="mini-stat-val" style="color:var(--green)">'+w.hrbp_connects.length+'</div><div class="mini-stat-label">Connect Notes</div></div>'
+    +'<div class="mini-stat"><div class="mini-stat-val" style="color:var(--green)">'+_filteredConnects.length+'</div><div class="mini-stat-label">Connect Notes</div></div>'
     +'<div class="mini-stat"><div class="mini-stat-val" style="color:var(--amber)">'+w.hrbp_discipline.filter(function(d){return !isNil(d)&&d.length>10;}).length+'</div><div class="mini-stat-label">ER Cases</div></div>'
     +'</div>'
     +_filterBarHTML
