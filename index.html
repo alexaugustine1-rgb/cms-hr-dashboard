@@ -9494,7 +9494,7 @@ function renderDBTSection() {
     }).join('');
     rowsHTML += '<tr style="border-bottom:1px solid var(--border);">'
       + '<td style="padding:9px 12px;font-size:12px;font-weight:600;">' + d.emp_code + '</td>'
-      + '<td style="padding:9px 12px;font-size:12px;">' + d.emp_name + (isExited ? '<span style="margin-left:5px;background:#6b728020;color:#6b7280;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;">' + (ateStatus==='Separated'?'Sep':'FTE') + '</span>' : '') + '</td>'
+      + '<td style="padding:9px 12px;font-size:12px;">' + d.emp_name + (ateStatus==='Converted to FTE' ? '<span style="margin-left:6px;background:rgba(96,165,250,.18);color:#60a5fa;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;border:1px solid rgba(96,165,250,.4);">Converted to FTE</span>' : ateStatus==='Separated' ? '<span style="margin-left:6px;background:rgba(248,113,113,.15);color:#f87171;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;border:1px solid rgba(248,113,113,.35);">Separated</span>' : '') + '</td>'
       + '<td style="padding:9px 12px;font-size:12px;">' + (d.region||'') + '</td>'
       + '<td style="padding:9px 12px;font-size:12px;text-align:right;">&#8377;' + d.total_advance.toLocaleString('en-IN') + '</td>'
       + '<td style="padding:9px 12px;font-size:12px;text-align:right;color:#22c55e;">&#8377;' + d.total_recovery.toLocaleString('en-IN') + '</td>'
