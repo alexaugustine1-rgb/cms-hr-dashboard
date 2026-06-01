@@ -556,6 +556,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     </div>
     <button id="sbLoginBtn" onclick="sbLogin()"
       style="width:100%;background:#60a5fa;color:#0f1923;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer">SIGN IN</button>
+    <div style="text-align:right;margin-top:10px">
+      <a href="#" onclick="forgotPassword();return false;"
+        style="font-size:12px;color:#8b9db0;text-decoration:none;font-family:DM_Mono,monospace"
+        onmouseover="this.style.color='#60a5fa'" onmouseout="this.style.color='#8b9db0'">Forgot password?</a>
+    </div>
     <div id="sbErr"></div>
   </div>
 </div>
@@ -9294,6 +9299,22 @@ function showSidebarAfterLogin(role) {
       var vis = Array.from(g.querySelectorAll('.sidebar-item')).some(function(i){return i.style.display!=='none';});
       if(!vis) g.style.display='none';
     });
+  }
+}
+
+async function forgotPassword(){
+  var email=document.getElementById('sbEmail').value.trim();
+  var err=document.getElementById('sbErr');
+  err.innerHTML='';
+  if(!email){
+    err.innerHTML='<div style="margin-top:12px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fde68a;font-size:12px;padding:10px 14px;border-radius:8px">Enter your email address above, then click Forgot password.</div>';
+    return;
+  }
+  var result=await _sb.auth.resetPasswordForEmail(email,{redirectTo:'https://cms-hr-dashboard.vercel.app'});
+  if(result.error){
+    err.innerHTML='<div style="margin-top:12px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);color:#fca5a5;font-size:12px;padding:10px 14px;border-radius:8px">'+result.error.message+'</div>';
+  } else {
+    err.innerHTML='<div style="margin-top:12px;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);color:#6ee7b7;font-size:12px;padding:10px 14px;border-radius:8px">Password reset link sent to '+email+'. Check your inbox.</div>';
   }
 }
 
