@@ -7716,16 +7716,21 @@ function renderOD(){
   // ── Region filter
   var rf=['All','North','South','East','West'].map(function(v){return _filterBtn(v,_odRegion===v,"_odRegion='"+v+"';document.getElementById('tab-od').innerHTML=renderOD()");}).join('');
 
-  // ── Build OD/WFH repeat map: emp_code → months where they had OD or WFH
+  // ── Build OD/WFH repeat map: only flag employees who EXCEEDED policy threshold
+  // in months OTHER than the selected one.
+  // OD threshold: od_days > 70% of that month's working days (truly high OD)
+  // WFH threshold: wfh_days > 4 (policy limit)
   const _odRepeatMap = {};
   if (monthly) {
     monthly.months.forEach(function(m) {
+      if (m === selMonth) return; // skip current month — we only care about prior patterns
+      var mWorkDays = (monthly.monthSummary[m] && monthly.monthSummary[m].working_days) || 22;
       (monthly.monthArr[m]||[]).forEach(function(rec) {
         if (!rec.emp) return;
-        if ((rec.od_days||0) > 0 || (rec.wfh_days||0) > 0) {
-          if (!_odRepeatMap[rec.emp]) _odRepeatMap[rec.emp] = [];
-          if (!_odRepeatMap[rec.emp].includes(m)) _odRepeatMap[rec.emp].push(m);
-        }
+        var exceeded = isWFH ? (rec.wfh_days||0) > 4 : (rec.od_days||0) > Math.round(mWorkDays * 0.7);
+        if (!exceeded) return;
+        if (!_odRepeatMap[rec.emp]) _odRepeatMap[rec.emp] = [];
+        if (!_odRepeatMap[rec.emp].includes(m)) _odRepeatMap[rec.emp].push(m);
       });
     });
   }
@@ -7742,10 +7747,10 @@ function renderOD(){
     const approverBadge = r.approver
       ? '<span style="font-size:10px;color:var(--green)">✓ '+esc(r.approver)+'</span>'
       : '<span style="font-size:10px;color:var(--amber)">Pending</span>';
-    // Only flag as repeat if employee appears in months OTHER than the selected one
-    const _otherMonths = r.emp && _odRepeatMap[r.emp] ? _odRepeatMap[r.emp].filter(function(m){return m!==selMonth;}) : [];
-    const repeatBadge  = _otherMonths.length > 0
-      ? '<div title="Also had '+esc(colLabel)+' in: '+_otherMonths.join(', ')+'" style="display:inline-block;margin-top:3px;font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(251,191,36,.15);color:#fbbf24;font-weight:700;cursor:default">🔁 also in '+_otherMonths.slice(-2).join(', ')+'</div>'
+    // Repeat badge — only for employees who exceeded policy threshold in prior months
+    const _priorExcess = (r.emp && _odRepeatMap[r.emp]) ? _odRepeatMap[r.emp] : [];
+    const repeatBadge  = _priorExcess.length > 0
+      ? '<div title="Exceeded '+esc(colLabel)+' policy limit in: '+_priorExcess.join(', ')+'" style="display:inline-block;margin-top:3px;font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(251,191,36,.15);color:#fbbf24;font-weight:700;cursor:default">🔁 High in '+_priorExcess.slice(-2).join(', ')+'</div>'
       : '';
     return '<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 100px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';font-size:12px;align-items:center">'
       +'<div><div style="font-weight:500;color:var(--text)">'+esc(r.name)+'</div>'
