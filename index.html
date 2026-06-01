@@ -3550,6 +3550,8 @@ function render() {
 
   // Load HRBP-Led sessions into L&D tab
   if(typeof loadHrbpLedSessions==='function') loadHrbpLedSessions();
+  // Load OD/WFH HRBP actions
+  if(typeof loadOdActions==='function') loadOdActions();
   // Load async HRBP visit alerts if logged in
   if (typeof _sbUser !== 'undefined' && _sbUser && typeof loadHRBPVisitAlerts === 'function') {
     loadHRBPVisitAlerts();
@@ -4504,7 +4506,7 @@ function switchTab(id, btn) {
   else if(id==='accounts') renderAccountsTab(el);
   else if(id==='gallery') renderGalleryTab();
   else if(id==='resignation'){const mc=document.getElementById('tab-resignation');if(mc)mc.innerHTML=renderResignation();}
-  else if(id==='od'){const mc=document.getElementById('tab-od');if(mc)mc.innerHTML=renderOD();}
+  else if(id==='od'){const mc=document.getElementById('tab-od');if(mc)mc.innerHTML=renderOD();if(typeof loadOdActions==='function')loadOdActions();}
   else if(id==='tapipeline'){const mc=document.getElementById('tab-tapipeline');if(mc)mc.innerHTML=renderTAPipeline();}
   else if(id==='fnf'){const mc=document.getElementById('tab-fnf');if(mc)mc.innerHTML=renderFnF();}
   else if(id==='acct-health'){_ahFilters={region:'All',tier:'All',health:'All'};const mc=document.getElementById('tab-acct-health');if(mc)mc.innerHTML=renderAccountHealth();}
@@ -7752,7 +7754,12 @@ function renderOD(){
     const repeatBadge  = _priorExcess.length > 0
       ? '<div title="Exceeded '+esc(colLabel)+' policy limit in: '+_priorExcess.join(', ')+'" style="display:inline-block;margin-top:3px;font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(251,191,36,.15);color:#fbbf24;font-weight:700;cursor:default">🔁 High in '+_priorExcess.slice(-2).join(', ')+'</div>'
       : '';
-    return '<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 100px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';font-size:12px;align-items:center">'
+    var _act = (window._odActionMap&&window._odActionMap[r.emp+':'+selMonth])||null;
+    var actionBadge = _act
+      ?'<div style="font-size:10px;color:var(--green);margin-top:2px">✓ '+esc(_act.action_taken)+'</div>'
+       +(_act.remarks?'<div style="font-size:9px;color:var(--muted2);margin-top:1px;font-style:italic">'+esc(_act.remarks.substring(0,40))+'</div>':'')
+      :'';
+    return '<div style="display:grid;grid-template-columns:180px 1fr 90px 90px 55px 55px 90px 120px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';font-size:12px;align-items:start">'
       +'<div><div style="font-weight:500;color:var(--text)">'+esc(r.name)+'</div>'
       +(r.emp?'<div style="font-size:10px;color:var(--muted2);font-family:DM Mono,monospace">'+esc(r.emp)+'</div>':'')
       +repeatBadge+'</div>'
@@ -7762,6 +7769,10 @@ function renderOD(){
       +'<div style="font-weight:700;color:'+dayCol+'">'+days+'</div>'
       +'<div style="font-size:11px;color:var(--muted)">'+records+'</div>'
       +'<div>'+approverBadge+(pending>0?'<span style="font-size:9px;color:var(--amber);margin-left:4px">+'+pending+' pending</span>':'')+'</div>'
+      +'<div>'+actionBadge
+      +'<button onclick="openOdActionModal(\''+esc(r.emp||'')+'\',\''+esc(r.name||'')+'\',\''+esc(selMonth)+'\')" '
+      +'style="margin-top:4px;padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">'+(_act?'Edit':'Update')+'</button>'
+      +'</div>'
       +'</div>';
   }).join('');
 
@@ -7786,13 +7797,94 @@ function renderOD(){
     +'<span style="font-size:11px;color:var(--muted)">Region:</span>'+rf+'</div>'
     // Table
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
-    +'<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 100px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['Employee','Account','Region','Designation',colLabel+' Days','Applications','Approver Code'].map(h=>
+    +'<div style="display:grid;grid-template-columns:180px 1fr 90px 90px 55px 55px 90px 120px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+    +['Employee','Account','Region','Designation',colLabel+' Days','Applications','Approver Code','HRBP Action'].map(h=>
       '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>'
     ).join('')+'</div>'
     +(rows||'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>')+'</div>'
     +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+viewArr.length+' employees &middot; '+colLabel+' view &middot; '+selMonth+'</div>'
     +'</div>';
+}
+
+// ── OD/WFH HRBP ACTION MODAL ─────────────────────────────────────────────
+window._odActionMap = {}; // key: emp_code+':'+month_key → action row
+
+async function loadOdActions(){
+  if(!_sb) return;
+  var res = await _sb.from('od_wfh_actions').select('*');
+  if(res.error||!res.data) return;
+  window._odActionMap = {};
+  res.data.forEach(function(r){
+    window._odActionMap[r.emp_code+':'+r.month_key] = r;
+  });
+  // Re-render OD tab if currently active to show badges
+  var odEl = document.getElementById('tab-od');
+  if(odEl && odEl.innerHTML && odEl.innerHTML.indexOf('HRBP Action') > -1){
+    odEl.innerHTML = renderOD();
+  }
+}
+
+function openOdActionModal(empCode, empName, monthKey){
+  var existing = window._odActionMap && window._odActionMap[empCode+':'+monthKey];
+  var m = document.createElement('div');
+  m.id = '_odActionModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center';
+  var actionOpts = ['Genuine OD','WFH due to Emergency','Warning Letter Issued','Counselling Done','Other']
+    .map(function(o){
+      return '<option value="'+o+'"'+(existing&&existing.action_taken===o?' selected':'')+'>'+o+'</option>';
+    }).join('');
+  m.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px 32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.5)">'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">OD/WFH Action</div>'
+    +'<div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:2px">'+esc(empName)+'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:20px;font-family:DM Mono,monospace">'+esc(empCode)+' &nbsp;·&nbsp; '+esc(monthKey)+'</div>'
+    +'<div style="margin-bottom:14px">'
+    +'<label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.6px">Action Taken</label>'
+    +'<select id="_odActDropdown" style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px">'
+    +'<option value="">— Select action —</option>'+actionOpts+'</select></div>'
+    +'<div style="margin-bottom:20px">'
+    +'<label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.6px">Remarks <span style="font-weight:400;text-transform:none">(optional)</span></label>'
+    +'<textarea id="_odActRemarks" rows="3" placeholder="Notes on action taken, follow-up required…" '
+    +'style="width:100%;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical">'+(existing?esc(existing.remarks||''):'')+'</textarea></div>'
+    +'<div style="display:flex;gap:10px;justify-content:flex-end">'
+    +'<button onclick="document.getElementById(\'_odActionModal\').remove()" '
+    +'style="padding:8px 20px;border:1px solid var(--border);border-radius:8px;background:none;color:var(--muted);font-size:13px;cursor:pointer">Cancel</button>'
+    +'<button onclick="saveOdAction(\''+esc(empCode)+'\',\''+esc(empName)+'\',\''+esc(monthKey)+'\')" '
+    +'style="padding:8px 22px;border:none;border-radius:8px;background:var(--accent);color:var(--bg);font-size:13px;font-weight:700;cursor:pointer">Save Action</button>'
+    +'</div></div>';
+  var old = document.getElementById('_odActionModal');
+  if(old) old.remove();
+  document.body.appendChild(m);
+  m.addEventListener('click', function(e){ if(e.target===m) m.remove(); });
+}
+
+async function saveOdAction(empCode, empName, monthKey){
+  var dd = document.getElementById('_odActDropdown');
+  var rm = document.getElementById('_odActRemarks');
+  var action = dd ? dd.value : '';
+  if(!action){ alert('Please select an action'); return; }
+  var remarks = rm ? rm.value.trim() : '';
+  var updaterName = (_sbRole&&(_sbRole.display_name||_sbRole.name))||(_sbUser&&_sbUser.email)||'';
+  var record = {
+    emp_code: empCode, emp_name: empName, month_key: monthKey,
+    action_taken: action, remarks: remarks,
+    updated_by: _sbUser ? _sbUser.id : null,
+    updated_by_name: updaterName,
+    updated_at: new Date().toISOString()
+  };
+  var btn = document.querySelector('#_odActionModal button:last-child');
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  var res = await _sb.from('od_wfh_actions').upsert(record, {onConflict:'emp_code,month_key'});
+  if(res.error){
+    alert('Save failed: '+res.error.message);
+    if(btn){ btn.disabled=false; btn.textContent='Save Action'; }
+    return;
+  }
+  window._odActionMap[empCode+':'+monthKey] = record;
+  var modal = document.getElementById('_odActionModal');
+  if(modal) modal.remove();
+  // Re-render OD tab to show updated badge
+  var odEl = document.getElementById('tab-od');
+  if(odEl) odEl.innerHTML = renderOD();
 }
 
 function renderTAPipeline(){
