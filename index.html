@@ -5351,6 +5351,29 @@ function getCurrentWeekLabel() {
   const fmt=d=>d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
   return fmt(mon)+' – '+fmt(fri);
 }
+// Returns correct Mon–Fri label for any FY2026 week key (used as fallback when Supabase label is wrong/missing)
+function computeWeekLabel(wk) {
+  // Each entry: [year, month(1-based), mondayDate]
+  var WK_MON={
+    'W05':[2026,1,5],'W06':[2026,1,12],'W07':[2026,1,19],'W08':[2026,1,26],
+    'W09':[2026,2,2],'W10':[2026,2,9],'W11':[2026,2,16],'W12':[2026,2,23],
+    'W13':[2026,3,2],'W14':[2026,3,9],'W15':[2026,3,16],'W16':[2026,3,23],'W17':[2026,3,30],
+    'W18':[2026,4,6],'W19':[2026,4,13],'W20':[2026,4,20],'W21':[2026,4,27],
+    'W22':[2026,5,4],'W23':[2026,5,18],'W24':[2026,5,25],
+    'W25':[2026,6,1],'W26':[2026,6,8],'W27':[2026,6,15],'W28':[2026,6,22],
+    'W29':[2026,7,6],'W30':[2026,7,13],'W31':[2026,7,20],'W32':[2026,7,27],
+    'W33':[2026,8,3],'W34':[2026,8,10],'W35':[2026,8,17],'W36':[2026,8,24],
+    'W37':[2026,9,7],'W38':[2026,9,14],'W39':[2026,9,21],'W40':[2026,9,28],
+    'W41':[2026,10,5],'W42':[2026,10,12],'W43':[2026,10,19],'W44':[2026,10,26],
+    'W45':[2026,11,2],'W46':[2026,11,9],'W47':[2026,11,16],'W48':[2026,11,23],
+    'W49':[2026,12,7],'W50':[2026,12,14],'W51':[2026,12,21],'W52':[2026,12,28]
+  };
+  var m=WK_MON[wk]; if(!m) return '';
+  var mon=new Date(m[0],m[1]-1,m[2]);
+  var fri=new Date(m[0],m[1]-1,m[2]+4);
+  var fmt=function(d){return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});};
+  return fmt(mon)+' – '+fmt(fri);
+}
 
 async function renderSubmitTab(mc){
   if(!mc)mc=document.getElementById('tab-submit');
@@ -5388,12 +5411,15 @@ async function renderSubmitTab(mc){
           if (chk.error) {
             // Row doesn't exist — insert it
             var _wn = parseInt(liveWkKey.replace('W',''))||0;
+            var _computedLbl=computeWeekLabel(liveWkKey)||liveLabel;
+            var _computedFrom=_computedLbl.split(' – ')[0]||'';
+            var _computedTo=_computedLbl.split(' – ')[1]||'';
             _sb.from('weekly_reports').insert({
               week_key: liveWkKey,
               week_num: _wn,
-              label: liveLabel,
-              from_label: '',
-              to_label: '',
+              label: _computedLbl,
+              from_label: _computedFrom,
+              to_label: _computedTo,
               total_respondents: 0
             }).then(function(ins) {
               if (!ins.error) console.log('[autoWeek] Created', liveWkKey, 'in weekly_reports');
@@ -5402,7 +5428,17 @@ async function renderSubmitTab(mc){
         });
     }
   }
-  const availWeeks = [...new Set([liveWkKey, ...WEEK_ORDER.slice(-4)])].slice(0,4).sort((a,b)=>{
+  // Always include the previous week so HRBPs can submit for last week even if no Supabase row exists yet
+  var _liveNum=parseInt(liveWkKey.replace('W',''))||0;
+  var _prevWkKey=_liveNum>1?'W'+String(_liveNum-1).padStart(2,'0'):'';
+  if(_prevWkKey&&!WEEK_ORDER.includes(_prevWkKey)){
+    WEEK_ORDER.push(_prevWkKey);
+    var _prevLbl=computeWeekLabel(_prevWkKey);
+    WEEKS_DATA[_prevWkKey]=WEEKS_DATA[_prevWkKey]||{week_key:_prevWkKey,week_num:_liveNum-1,label:_prevLbl,from_label:_prevLbl.split(' – ')[0]||'',to_label:_prevLbl.split(' – ')[1]||'',total_respondents:0};
+    WEEK_NAMES[_prevWkKey]='Week '+(_liveNum-1);
+    WEEK_LABELS[_prevWkKey]=_prevLbl;
+  }
+  const availWeeks = [...new Set([liveWkKey, _prevWkKey, ...WEEK_ORDER.slice(-4)].filter(Boolean))].slice(0,4).sort((a,b)=>{
     const na=parseInt(a.replace('W',''))||0, nb=parseInt(b.replace('W',''))||0; return nb-na;
   });
   _formWeekKey = _formWeekKey || liveWkKey;
@@ -5410,7 +5446,7 @@ async function renderSubmitTab(mc){
   _existingSub=existing||null;
   const fn=FUNCTION_TYPES[fnType]||FUNCTION_TYPES.hrbp;
   const statusHTML=_existingSub?'<span class="wform-status-badge wsb-submitted">✓ Submitted · '+(_existingSub.updated_at||'').substring(0,10)+'</span>':'<span class="wform-status-badge wsb-none">Not submitted yet</span>';
-  mc.innerHTML='<div class="wform-wrap"><div class="wform-header"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report</div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">'+fn.icon+' '+fn.label+'</div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">'+displayName+(region?' · '+region:'')+'</span>'+statusHTML+'</div></div><div style="margin-bottom:20px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div><div class="wform-week-select">'+availWeeks.map(k=>'<button class="wform-week-btn'+(k===_formWeekKey?' active':'')+'" onclick="selectFormWeek(\''+k+'\')">'+(k===liveWkKey?'<b>❖ This Week</b><br><small>'+liveLabel+'</small>':'<b>'+(WEEK_NAMES[k]||k)+'</b><br><small>'+(WEEKS_DATA[k]&&WEEKS_DATA[k].label?WEEKS_DATA[k].label:'')+'</small>')+'</button>').join('')+'</div></div>'+buildFunctionSections(fnType)+'<div class="wform-section"><div class="wform-section-title">📸 Photos</div><div class="wform-row"><label>Upload photos (site visits, R&R, town halls, training)</label><div class="wform-photo-zone" id="formPhotoZone" ondragover="event.preventDefault();this.classList.add(\'drag\')" ondragleave="this.classList.remove(\'drag\')" ondrop="formPhotoDrop(event)"><input type="file" accept="image/*" multiple onchange="formPhotoAdd(this.files)"><div style="font-size:20px;margin-bottom:6px">📷</div><div style="font-size:13px;color:var(--muted)">Drop photos or click to browse</div></div><div class="wform-photo-preview" id="formPhotoPreview"></div></div></div><div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button class="wform-submit-btn" id="formSubmitBtn" onclick="submitWeeklyForm(\''+fnType+'\',\''+region+'\')">'+(_existingSub?'Update Submission':'Submit Report')+'</button>'+(_existingSub?'<span style="font-size:12px;color:var(--muted)">You can update until the week closes</span>':'')+'</div><div id="formSubmitStatus" style="margin-top:12px"></div></div>';
+  mc.innerHTML='<div class="wform-wrap"><div class="wform-header"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Weekly Report</div><div style="font-family:\'Bebas Neue\',sans-serif;font-size:30px;letter-spacing:1px;color:var(--text);margin-bottom:6px">'+fn.icon+' '+fn.label+'</div><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">'+displayName+(region?' · '+region:'')+'</span>'+statusHTML+'</div></div><div style="margin-bottom:20px"><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Select Week</div><div class="wform-week-select">'+availWeeks.map(k=>'<button class="wform-week-btn'+(k===_formWeekKey?' active':'')+'" onclick="selectFormWeek(\''+k+'\')">'+(k===liveWkKey?'<b>❖ This Week</b><br><small>'+liveLabel+'</small>':'<b>'+(WEEK_NAMES[k]||k)+'</b><br><small>'+((WEEKS_DATA[k]&&WEEKS_DATA[k].label)||computeWeekLabel(k)||'')+'</small>')+'</button>').join('')+'</div></div>'+buildFunctionSections(fnType)+'<div class="wform-section"><div class="wform-section-title">📸 Photos</div><div class="wform-row"><label>Upload photos (site visits, R&R, town halls, training)</label><div class="wform-photo-zone" id="formPhotoZone" ondragover="event.preventDefault();this.classList.add(\'drag\')" ondragleave="this.classList.remove(\'drag\')" ondrop="formPhotoDrop(event)"><input type="file" accept="image/*" multiple onchange="formPhotoAdd(this.files)"><div style="font-size:20px;margin-bottom:6px">📷</div><div style="font-size:13px;color:var(--muted)">Drop photos or click to browse</div></div><div class="wform-photo-preview" id="formPhotoPreview"></div></div></div><div style="display:flex;align-items:center;gap:12px;margin-top:8px"><button class="wform-submit-btn" id="formSubmitBtn" onclick="submitWeeklyForm(\''+fnType+'\',\''+region+'\')">'+(_existingSub?'Update Submission':'Submit Report')+'</button>'+(_existingSub?'<span style="font-size:12px;color:var(--muted)">You can update until the week closes</span>':'')+'</div><div id="formSubmitStatus" style="margin-top:12px"></div></div>';
   setVisit(_visitYes);
   // Default visit region selector to HRBP's profile region
   (function(){ var ri=document.getElementById('visitRegionInput'); if(ri&&region) ri.value=region; })();
