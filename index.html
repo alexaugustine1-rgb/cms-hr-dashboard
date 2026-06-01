@@ -7742,9 +7742,10 @@ function renderOD(){
     const approverBadge = r.approver
       ? '<span style="font-size:10px;color:var(--green)">✓ '+esc(r.approver)+'</span>'
       : '<span style="font-size:10px;color:var(--amber)">Pending</span>';
-    const repeatMonths = r.emp && _odRepeatMap[r.emp] && _odRepeatMap[r.emp].length > 1 ? _odRepeatMap[r.emp] : null;
-    const repeatBadge  = repeatMonths
-      ? '<div title="Also had '+colLabel+' in: '+repeatMonths.join(', ')+'" style="display:inline-block;margin-top:3px;font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(251,191,36,.15);color:#fbbf24;font-weight:700;cursor:default">🔁 ×'+repeatMonths.length+' months</div>'
+    // Only flag as repeat if employee appears in months OTHER than the selected one
+    const _otherMonths = r.emp && _odRepeatMap[r.emp] ? _odRepeatMap[r.emp].filter(function(m){return m!==selMonth;}) : [];
+    const repeatBadge  = _otherMonths.length > 0
+      ? '<div title="Also had '+esc(colLabel)+' in: '+_otherMonths.join(', ')+'" style="display:inline-block;margin-top:3px;font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(251,191,36,.15);color:#fbbf24;font-weight:700;cursor:default">🔁 also in '+_otherMonths.slice(-2).join(', ')+'</div>'
       : '';
     return '<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 100px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';font-size:12px;align-items:center">'
       +'<div><div style="font-weight:500;color:var(--text)">'+esc(r.name)+'</div>'
