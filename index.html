@@ -3514,9 +3514,11 @@ function switchTab(id, btn) {
   if(btn) btn.classList.add('active');
   currentTab = id;
   if (id === 'ld' && typeof loadTrainerActivity === 'function') {
-    var sel = document.getElementById('trainerMonthSel');
-    var mon = sel ? sel.value : '2026-05';
-    loadTrainerActivity(mon);
+    setTimeout(function() {
+      var sel = document.getElementById('trainerMonthSel');
+      var mon = sel ? sel.value : '2026-05';
+      loadTrainerActivity(mon);
+    }, 50);
   }
 }
 
