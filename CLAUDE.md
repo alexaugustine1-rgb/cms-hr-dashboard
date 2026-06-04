@@ -23,8 +23,8 @@ Shared with OPS360. Additive only. No drops or type changes.
 - planned_leaves, employee_account_mapping
 
 ## Current File State
-- File: index.html | Lines: 11,016 | Latest commit: 7520369
-- Phases complete: 1, 2, 3
+- File: index.html | Lines: 10,890 | Latest commit: 98d6fad (+ res.error fix pending)
+- Phases complete: 1, 2, 3, 6B-DBT, Trainer Activity (L&D tab)
 - Next: Phase 4 — Account Health tab (read KNOWLEDGE.md for spec)
 
 ## Key Functions

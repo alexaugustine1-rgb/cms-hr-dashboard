@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 2.0 | **Last updated:** 24 May 2026 — end of session
+**Version:** 2.2 | **Last updated:** 04 Jun 2026 — Trainer Activity panel
 
 ---
 
@@ -47,6 +47,39 @@ ATE tracker, Prospective Joiners, Action Centre, Admin/Settings.
 
 ---
 
+## Architecture Notes
+
+### Absent Resolution Chip
+Reads `window._absResolvedCount` and `window._absTotalCount` — set by two separate
+queries in sbBoot() (ILIKE 'resolved%' count + total head count).
+NOT derived from `_absentCases` (that array excludes resolved cases by design).
+Fallback: `_absentCases.length + _resolvedAbs` if counts not ready.
+Do NOT modify loadAbsentCases() query — it intentionally excludes resolved.
+
+### innerHTML Does NOT Execute `<script>` Tags
+Browsers ignore `<script>` blocks injected via innerHTML.
+Any function that must be callable from onclick handlers in dynamically rendered HTML
+MUST be declared as a true global (at top-level script scope), not inside an innerHTML string.
+Confirmed crash pattern: hscToggle was declared inside innerHTML `<script>` — moved to global scope (25 May 2026).
+
+### Role Gate Pattern — Use Both Fields
+`_sbRole.role` and `_sbRole.function_type` are DIFFERENT fields.
+Role gate checks must read both:
+```javascript
+var role   = _sbRole ? (_sbRole.role   || '') : '';
+var fnType = _sbRole ? (_sbRole.function_type || '') : '';
+```
+Comparing only function_type blocks admin users (function_type='admin', not 'hrops').
+
+### HRBP Site Visit Cache
+`_hrbpSVCache` holds ALL site visits from hrbp_site_visits — not week-restricted.
+Journey Plan panel and scorecard both read from this cache.
+loadHRBPSiteVisitsForTab() triggers a deferred re-render of the Journey Plan panel
+(50ms setTimeout) after populating the cache — needed because renderHRBP() fires
+before the async cache is ready.
+
+---
+
 ## Known Crash Patterns — Check Every Edit
 Any of these crashes login with "ReferenceError: sbLogin is not defined":
 - Orphaned em-dash in string concatenation
@@ -58,23 +91,31 @@ before attempting any fix.
 
 ---
 
-## Current File State — 24 May 2026
-- Line count: 10,964 lines (latest confirmed after commit 1ac9369)
-- Latest commit: 1ac9369
-- Local path: D:\Dropbox\CMS_IT_Services\Claude_HR_Automation\
+## Current File State — 04 Jun 2026
+- Line count: 10,890 lines (latest confirmed after commit 98d6fad)
+- Latest commit: 98d6fad (+ res.error diagnostic fix, push pending verify)
+- Local path: D:\Dropbox\CMS_IT_Services\Claude_Projects\Claude_HR_Automation\
   HR_OPS_COMMAND\cms-hr-dashboard\index.html
 
-### Commits This Session
+### Commits — 24 May 2026
 - 13222f4: Overview rework (WH strip removed, trend table, region cards)
 - c739d46: Second KPI row (4 chips added)
 - 1ac9369: Trend table HC/joiners fix + week resolution to latest week
+- 90d1d1b: Absent resolution fix (indexOf), Offer→Join from _taSummaryCache,
+           week selector hidden on Overview, data freshness strip added
+- 7407319: MoM future-month guard, MTD Joiners card, Absent deferred re-render fix
+- 7520369: Absent resolution chip — separate count query in sbBoot
 
-### Pending Claude Code Fixes (not yet committed)
-These prompts are written and ready — paste into Claude Code:
-1. Absent resolution chip: indexOf filter (Unicode safe for em-dash)
-2. Offer→Join chip: reads from _taSummaryCache (data_cache.ta_summary)
-3. Week selector removal from Overview + data freshness strip
-After these three: single commit with all three fixes.
+### Commits — 04 Jun 2026
+- 2e927b3: Feat: Trainer Activity panel — training_sessions table, Maaz Khan + Deepak sessions seeded
+- 98d6fad: Fix: defer loadTrainerActivity 50ms + surface res.error explicitly
+
+### Commits — 25 May 2026
+- 2e230a5: Fix: DBT Recovery Centre visible to admin/executive (role gate + CSS vars)
+- b6427de: Feat: Region filter for DBT Recovery Centre
+- a6de0f5: Fix DBT Recovery Centre: dates DD/MM/YYYY, emp status badge, cleaner traffic lights
+- d91b49c: Upload access for Sheetal: FnF + ATE Advance/DBT Recovery card
+- f63fd50: Fix: hscToggle global scope, Journey Plan moved above connects, visit cache deferred re-render
 
 ---
 
@@ -96,25 +137,20 @@ After these three: single commit with all three fixes.
 ### PHASE 2 — Schema ✅
 All migrations applied. See Supabase Tables section below.
 
-### PHASE 3 — Overview Rework ✅ (partial — 3 fixes pending)
-Completed:
+### PHASE 3 — Overview Rework ✅
 - HC source: active_hc_mar removed entirely from display
 - Workforce Health Indicators strip: REMOVED
 - HRBP Engagement scorecard: REMOVED from Overview
 - Recruiter Leaderboard: REMOVED from Overview (stays on TA tab)
 - Monthly Trend Table: ADDED (6 months, all roles)
 - Region cards: absent count added, 3-col grid
-- Second KPI row (cmdStrip2): 4 chips added
-  Chip 1: Attrition MoM (▲/▼ pp vs prior month)
-  Chip 2: Offer→Join Rate % (pending fix — shows 0% until fixed)
-  Chip 3: Plat/Gold At Risk (absent burden >5%)
-  Chip 4: Absent Resolution % (pending fix — shows 0% until fixed)
-- Week resolution: fixed to latest available week (sbBoot line 9115)
-
-Pending (prompts written, not yet committed):
-- Absent resolution chip filter: indexOf('resolved') Unicode safe
-- Offer→Join chip: read from _taSummaryCache not TA_SUMMARY
-- Week selector: remove from Overview, add data freshness strip
+- Second KPI row (cmdStrip2): 4 chips — Attrition MoM, Offer→Join %, Plat/Gold At Risk, Absent Resolution %
+- Week selector: REMOVED from Overview, replaced with data freshness strip
+- Absent resolution chip: reads _absResolvedCount / _absTotalCount (separate sbBoot queries, indexOf-safe)
+- Offer→Join chip: reads _taSummaryCache (data_cache.ta_summary)
+- MoM future-month guard: _monKeys capped at current month (idx ≤ getMonth())
+- MTD Joiners card added
+- Week resolution: fixed to latest available week
 
 ---
 
@@ -172,17 +208,25 @@ Pending (prompts written, not yet committed):
 - ATE Mix Dashboard (all roles):
   NATS limit = ROUND(region_fte_hc × 0.10) — DYNAMIC from workforce_intel
   Current: West 109/31, South 66/4, East 50/20, North 50/9, Total 275/64
-- DBT Recovery Centre (hrops/payroll only):
+- DBT Recovery Centre ✅ LIVE (25 May 2026):
+  Visible to: hrops, payroll, admin, executive (role gate checks both role + function_type)
   Data from ate_advance_log aggregated per emp_code
-  Net outstanding = total advanced − total recovered
-  Traffic light: green=0, amber=1-2 months, red=3+ months
+  Net outstanding = total_advance − total_recovery
+  Traffic lights: Cleared (green, 0 outstanding) | No Recovery (red, 0 recovered)
+                  Amber (<50% of advance recovered) | Recovering (≥50% recovered)
+  Filters: Region dropdown + Employment status (Active/Exited via _ateCases lookup)
+  Dates: DD/MM/YYYY format via fmtDMY() helper
+  Employment status badge: Sep / FTE badge on exited ATEs
+  Global filter state: window._dbtRegionFilter, window._dbtEmpFilter
 - Bench-to-Billable Pipeline (rmg + hrops)
-- processATEAdvance(wb): two-sheet upload
-  Sheet 1 "Advance Paid": Emp Code, Name, Region, Month, Date, Amount, Voucher
-  Sheet 2 "Recovery": Emp Code, Name, Region, Month Recovered For,
-           Recovery Date, Amount, DBT Intimation Ref, Payroll Ref, Method
+- processATEAdvance(wb): ✅ LIVE — two-sheet upload
+  Sheet 1 "Advance Paid": Emp Code, Employee Name, Region, Month,
+           Advance Date, Amount, Voucher No, Notes
+  Sheet 2 "Recovery": Emp Code, Employee Name, Region, Month Recovered,
+           Recovery Date, Amount Recovered, DBT Intimation Ref, Payroll Ref, Notes
   File detection: ate_advance or ate_dbt in filename
-  Template: ATE_Advance_Upload_Template.xlsx (built, shared with Sheetal)
+  Header auto-detect: scans first 5 rows for "Emp Code" (handles blank row 1)
+  Column aliases cover all confirmed naming variants (Voucher No, Month Recovered, Amount Recovered)
 - Super Emp parser additions:
   Auto-classify deployment_status from training_end_date on upload
   Parse l_level from Designation field: L1/L2/DL1/DL2 keywords
@@ -219,6 +263,14 @@ Pending (prompts written, not yet committed):
 - At-Risk Joiners: DOJ >30 days from offer date (dropout risk flag)
 - DNJ (Did Not Join) tracker
 - Auto-close linked req when joiner's DOJ passes
+
+Current data state (25 May 2026):
+- Schema: 3 new cols added — emp_code, is_duplicate, matched_by
+- 6 duplicates marked, 3 auto-resolved to Joined
+- 84 Joined / 32 Offer Accepted / 3 Dropped Out
+- Display filter: WHERE is_duplicate = false (shows 35 not 41)
+- Process fix needed: TA to update ZingHR stage to "Joined" on joining day
+  (Neha Kaur Sammi to enforce with team)
 
 #### OD/WFH Tab (Phase 8D)
 - OD Backlog strip by region
@@ -273,6 +325,9 @@ Pending (prompts written, not yet committed):
 - elah_deployment: empty — pending Elah parser build (Phase 6)
 - planned_leaves: empty — pending filename prefix from Ramesh
 - account_positions_log: 23 cols, 6 indexes (0 rows — new table)
+- training_sessions: trainer, training_name, month_key, week_key, region, mode, participants
+  31 rows seeded (9 Maaz Khan, 22 Deepak Kumar Shetty) across Feb–May 2026
+  RLS: ts_read_all (SELECT true), ts_insert_ld, ts_update_ld
 
 ### Shared With OPS360 — FLAG BEFORE TOUCHING
 - workforce_intel, absent_cases, resignation_tracker
@@ -395,8 +450,17 @@ Ramesh to upload complete May eSep to reconcile April.
 
 ### ATE Advance Upload (Sheetal — monthly from June 2026)
 - File detection: ate_advance or ate_dbt in filename
-- Parser: processATEAdvance(wb) — NOT YET BUILT (Phase 6B)
-- Template: ATE_Advance_Upload_Template.xlsx (ready, shared with Sheetal)
+- Parser: processATEAdvance(wb) — LIVE (built 25 May 2026)
+- Confirmed column names from ate_advance_25052026.xlsx:
+  Sheet "Advance Paid" (row 1 blank, row 2 headers):
+    Emp Code | Employee Name | Region | Month | Advance Date | Amount | Voucher No | Notes
+  Sheet "Recovery" (row 1 blank, row 2 headers):
+    Emp Code | Employee Name | Region | Month Recovered | Recovery Date |
+    Amount Recovered | DBT Intimation Ref | Payroll Ref | Notes
+- Parser scans first 5 rows to auto-detect header (handles blank row 1)
+- Column aliases handle all naming variants (Voucher No, Month Recovered, Amount Recovered)
+- Upload card visible to: hrops + payroll function types
+- hasFnF now also includes isHROps — Sheetal (hrops) can upload FnF files
 
 ### Planned Leaves (Ramesh — weekly)
 - Parser: NOT YET BUILT | Filename prefix: TBC from Ramesh
@@ -598,6 +662,9 @@ Customer master module (discuss with ZingHR team):
 - planned_leaves parser: filename prefix TBC from Ramesh
 - Somasri Sukumar Samanta: confirm in both HRBP_REGION lookup objects
 - Manage Customer Accounts tab: decision pending on ZingHR attributes
+- Duplicate switchTab: line ~3564 is dead code, line ~4213 is live. Clean up in future session.
+- _monKeys future-month guard in code (idx ≤ getMonth()). WI fallback line ~845 may still
+  contain future-month entries — self-corrects on next Ramesh upload.
 
 ---
 
@@ -617,70 +684,21 @@ analysis outputs (Excel reports, recon files).
 ---
 
 ## Build Sequence — What's Next
-```
-IMMEDIATE (today — pending Claude Code commit):
-  Bugfix 1: Absent resolution chip filter (indexOf, Unicode safe)
-  Bugfix 2: Offer→Join chip (_taSummaryCache from data_cache)
-  Bugfix 3: Week selector removed from Overview + freshness strip
-  Single commit after all three pass node --check
 
-TOMORROW (after Ramesh uploads):
-  Verify 31 tagging fix closes account HC gap
-  Verify ATE deployment status auto-classified correctly
-  Confirm HC scope (FTE only vs all types)
-  Phase 4: Account Health — billing badge + score + lifecycle panel
-  Phase 5: HRBP scorecard redesign
+NEXT SESSION (Phase 4 + 5):
+  Phase 4: Account Health tab — billing type badge, composite score (100pts),
+           Position Lifecycle panel, T&M priority flag in TA aging
+  Phase 5: HRBP scorecard redesign — 5 dimensions, 100pts, calendar month cadence
 
-NEXT SESSIONS:
-  Phase 6: Elah parser + RMG tab + RMG role setup
-  Phase 6B: ATE tab — mix dashboard + DBT recovery + Sheetal parser
-  Phase 7: Workforce Planning
-  Phase 8: TA / Resignation / Prospective Joiners / OD / Absenteeism redesigns
-  Phase 9: Attrition history + prediction
+AFTER RAMESH UPLOADS:
+  Verify 31 ZingHR tagging fixes close the account HC gap
+  Confirm HC scope for monthly trend (FTE only vs all employee types)
+  Upload complete May eSep to reconcile April exits
 
-## File Details — update to:
-Line count: 11,005 lines
-Latest commit: 90d1d1b
-
-## Commits This Session — add:
-- 90d1d1b: Absent resolution fix (indexOf), Offer-Join rate 
-  from _taSummaryCache, week selector hidden on Overview via 
-  switchTab display:none, data freshness strip added
-
-## Phase 3 — change to: ✅ COMPLETE
-All fixes deployed. No pending Claude Code items for Phase 3.
-Dead code note: duplicate switchTab at line 3564 — 
-line 4213 is the live one. Flag for future cleanup.
-
-## Prospective Joiners — add:
-Schema: 3 new cols (emp_code, is_duplicate, matched_by)
-Data: 6 duplicates marked, 3 auto-resolved to Joined
-Current: 84 Joined / 32 Offer Accepted / 3 Dropped Out
-Display: WHERE is_duplicate = false (35 shown, not 41)
-Process fix needed: TA to update ZingHR stage to "Joined" 
-on joining day — Neha Kaur Sammi to enforce
-
-## Additional commits — 24 May 2026 (evening)
-
-7407319: MoM future-month guard (_nowMonIdx filter),
-         MTD Joiners card (reads joiners_by_month),
-         Absent deferred re-render timing fix
-7520369: Absent resolution chip — separate count query
-         (_absResolvedCount + _absTotalCount in sbBoot).
-         loadAbsentCases() query UNCHANGED.
-Final line count: 11,016
-
-## Known debt — add:
-- Hardcoded WI fallback (line ~845) contained Jun/Jul
-  future-month entries — removed from Supabase today.
-  _monKeys now has idx <= getMonth() guard in code.
-  Permanent fix regardless of WI content.
-- Duplicate switchTab function: line 3564 is dead code,
-  line 4213 is live. Clean up in future session.
-
-## Absent resolution chip — architecture note:
-Uses window._absResolvedCount / window._absTotalCount
-set by two separate boot queries (ILIKE resolved% + count head).
-NOT derived from _absentCases (which excludes resolved by design).
-Graceful fallback: _absentCases.length + _resolvedAbs if counts not ready.
-```
+FOLLOWING SESSIONS:
+  Phase 6:   Elah parser (processElahDeployment) + RMG tab + RMG role setup
+             Target: before Elah sunset July 1 2026
+  Phase 6B:  Bench-to-Billable Pipeline (rmg + hrops) — only remaining Phase 6B item
+  Phase 7:   Workforce Planning tab
+  Phase 8:   TA / Resignation / Prospective Joiners / OD / Absenteeism redesigns
+  Phase 9:   Attrition history + prediction (Alex to upload 2-year eSep data first)
