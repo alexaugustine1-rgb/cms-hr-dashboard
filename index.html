@@ -2921,6 +2921,10 @@ async function loadTrainerActivity(monthKey) {
     var q = _sb.from('training_sessions').select('*').order('month_key', {ascending: false});
     if (monthKey && monthKey !== 'all') q = q.eq('month_key', monthKey);
     var res = await q;
+    if (res.error) {
+      panel.innerHTML = '<div style="padding:20px;color:var(--red);font-size:12px">Supabase error: ' + esc(res.error.message) + '</div>';
+      return;
+    }
     var rows = res.data || [];
 
     if (!rows.length) {
