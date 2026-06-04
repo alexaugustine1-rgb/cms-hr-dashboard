@@ -2935,27 +2935,52 @@ async function loadTrainerActivity(monthKey) {
     // Group by trainer
     var byTrainer = {};
     rows.forEach(function(r) {
-      if (!byTrainer[r.trainer]) byTrainer[r.trainer] = {sessions: [], total_pax: 0};
+      if (!byTrainer[r.trainer]) byTrainer[r.trainer] = {sessions: [], total_pax: 0, total_nom: 0};
       byTrainer[r.trainer].sessions.push(r);
-      byTrainer[r.trainer].total_pax += (r.participants || 0);
+      if ((r.count_type || 'Attendees') === 'Nominations') {
+        byTrainer[r.trainer].total_nom += (r.participants || 0);
+      } else {
+        byTrainer[r.trainer].total_pax += (r.participants || 0);
+      }
     });
+
+    var catStyle = {
+      'Technical':    'background:rgba(96,165,250,.15);color:#60a5fa',
+      'Behavioural':  'background:rgba(167,139,250,.15);color:#a78bfa',
+      'OEM':          'background:rgba(251,191,36,.15);color:#f59e0b',
+      'Certification':'background:rgba(52,211,153,.15);color:#34d399'
+    };
 
     // Summary row per trainer
     var trainerCards = Object.keys(byTrainer).sort().map(function(trainer) {
       var td = byTrainer[trainer];
-      var modeCount = {};
-      td.sessions.forEach(function(s) { modeCount[s.mode] = (modeCount[s.mode] || 0) + 1; });
+      var modeCount = {}, catCount = {};
+      td.sessions.forEach(function(s) {
+        modeCount[s.mode] = (modeCount[s.mode] || 0) + 1;
+        var cat = s.category || 'Technical';
+        catCount[cat] = (catCount[cat] || 0) + 1;
+      });
       var modeTags = Object.keys(modeCount).map(function(m) {
         return '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(96,165,250,.12);color:var(--accent);margin-right:4px">' + esc(m) + ' (' + modeCount[m] + ')</span>';
       }).join('');
+      var catTags = Object.keys(catCount).map(function(c) {
+        var s2 = catStyle[c] || 'background:rgba(148,163,184,.15);color:var(--muted)';
+        return '<span style="font-size:10px;padding:2px 8px;border-radius:10px;margin-right:4px;' + s2 + '">' + esc(c) + ' (' + catCount[c] + ')</span>';
+      }).join('');
 
       var sessionRows = td.sessions.map(function(s) {
+        var catS = catStyle[s.category || 'Technical'] || 'background:rgba(148,163,184,.15);color:var(--muted)';
+        var catPill = '<span style="font-size:10px;padding:1px 7px;border-radius:8px;' + catS + '">' + esc(s.category || 'Technical') + '</span>';
+        var paxDisplay = (s.count_type === 'Nominations')
+          ? (s.participants || 0) + '<span style="font-size:10px;color:var(--muted);margin-left:3px">(nom)</span>'
+          : String(s.participants || 0);
         return '<tr style="border-bottom:1px solid rgba(42,61,82,.2)">'
           + '<td style="padding:6px 10px;font-size:12px;color:var(--text)">' + esc(s.training_name) + '</td>'
           + '<td style="padding:6px 10px;font-size:11px;color:var(--muted);text-align:center">' + esc(s.month_key) + (s.week_key ? ' · ' + esc(s.week_key) : '') + '</td>'
           + '<td style="padding:6px 10px;font-size:11px;color:var(--muted);text-align:center">' + esc(s.region || '—') + '</td>'
           + '<td style="padding:6px 10px;font-size:11px;color:var(--muted);text-align:center">' + esc(s.mode || '—') + '</td>'
-          + '<td style="padding:6px 10px;font-size:13px;font-weight:600;color:var(--green);text-align:center">' + (s.participants || 0) + '</td>'
+          + '<td style="padding:6px 10px;text-align:center">' + catPill + '</td>'
+          + '<td style="padding:6px 10px;font-size:13px;font-weight:600;color:var(--green);text-align:center">' + paxDisplay + '</td>'
           + '</tr>';
       }).join('');
 
@@ -2964,10 +2989,12 @@ async function loadTrainerActivity(monthKey) {
         + '<div>'
         + '<div style="font-size:13px;font-weight:600;color:var(--text)">' + esc(trainer) + '</div>'
         + '<div style="margin-top:4px">' + modeTags + '</div>'
+        + '<div style="margin-top:4px">' + catTags + '</div>'
         + '</div>'
         + '<div style="display:flex;gap:20px;text-align:right">'
         + '<div><div style="font-size:20px;font-weight:700;color:var(--accent)">' + td.sessions.length + '</div><div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px">Sessions</div></div>'
-        + '<div><div style="font-size:20px;font-weight:700;color:var(--green)">' + td.total_pax + '</div><div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px">Participants</div></div>'
+        + '<div><div style="font-size:20px;font-weight:700;color:var(--green)">' + td.total_pax + '</div><div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px">Attendees</div></div>'
+        + (td.total_nom > 0 ? '<div><div style="font-size:20px;font-weight:700;color:var(--muted)">' + td.total_nom + '</div><div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px">Nominations</div></div>' : '')
         + '</div>'
         + '</div>'
         + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
@@ -2976,13 +3003,25 @@ async function loadTrainerActivity(monthKey) {
         + '<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Period</th>'
         + '<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Region</th>'
         + '<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Mode</th>'
+        + '<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Type</th>'
         + '<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Participants</th>'
         + '</tr></thead>'
         + '<tbody>' + sessionRows + '</tbody>'
         + '</table></div></div>';
     }).join('');
 
-    panel.innerHTML = trainerCards;
+    // Summary strip
+    var totalSessions = rows.length;
+    var totalAttendees = rows.filter(function(r){ return (r.count_type||'Attendees') !== 'Nominations'; }).reduce(function(a,r){ return a+(r.participants||0); }, 0);
+    var totalNom = rows.filter(function(r){ return r.count_type === 'Nominations'; }).reduce(function(a,r){ return a+(r.participants||0); }, 0);
+    var summaryStrip = '<div style="margin-top:8px;padding:10px 16px;background:var(--surface3);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--muted);display:flex;gap:0;align-items:center">'
+      + '<span style="color:var(--text);font-weight:600">Total Sessions:</span>&nbsp;' + totalSessions
+      + '<span style="margin:0 12px;color:var(--border)">|</span>'
+      + '<span style="color:var(--text);font-weight:600">Confirmed Attendees:</span>&nbsp;' + totalAttendees
+      + (totalNom > 0 ? '<span style="margin:0 12px;color:var(--border)">|</span><span style="color:var(--text);font-weight:600">Nominations:</span>&nbsp;' + totalNom : '')
+      + '</div>';
+
+    panel.innerHTML = trainerCards + summaryStrip;
   } catch(e) {
     panel.innerHTML = '<div style="padding:20px;color:var(--red);font-size:12px">Error loading trainer data: ' + esc(e.message) + '</div>';
   }
@@ -3829,6 +3868,7 @@ function renderAbsenteeism(el) {
 var _actionTasks = [];
 var _tasksLoaded = false;
 var _caseEntries = [];  // structured ER/abscond/retention cases
+var _hrbpTrainingEntries = [];  // structured training sessions from HRBP form
 var _pendingTasks = []; // open tasks from prior weeks shown at top of form
 var _taskFilter = { type: 'all', status: 'open' };
 
@@ -5048,6 +5088,40 @@ function renderLdUpcomingRows(){
 }
 
 
+// ── HRBP TRAINING ENTRIES ─────────────────────────────────────────────────
+function addHrbpTrainingRow(name,participants,account){
+  _hrbpTrainingEntries.push({name:name||'',participants:participants||'',account:account||''});
+  renderHrbpTrainingRows();
+}
+function removeHrbpTrainingRow(i){_hrbpTrainingEntries.splice(i,1);renderHrbpTrainingRows();}
+function renderHrbpTrainingRows(){
+  var cont=document.getElementById('hrbp-training-rows');
+  var hidden=document.getElementById('f_hrbp_training_entries');
+  if(!cont)return;
+  if(!_hrbpTrainingEntries.length){
+    cont.innerHTML='<div style="font-size:11px;color:var(--muted);padding:6px 0;font-style:italic">No sessions added yet — click + Add Training below.</div>';
+  } else {
+    cont.innerHTML=_hrbpTrainingEntries.map(function(e,i){
+      return'<div style="display:grid;grid-template-columns:2fr 80px 1fr 30px;gap:6px;margin-bottom:7px;align-items:center">'
+        +'<input type="text" value="'+esc(e.name)+'" oninput="_hrbpTrainingEntries['+i+'].name=this.value;document.getElementById(\'f_hrbp_training_entries\').value=JSON.stringify(_hrbpTrainingEntries)" placeholder="Training name" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'
+        +'<input type="number" value="'+esc(e.participants)+'" min="0" oninput="_hrbpTrainingEntries['+i+'].participants=this.value;document.getElementById(\'f_hrbp_training_entries\').value=JSON.stringify(_hrbpTrainingEntries)" placeholder="Pax" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;text-align:center">'
+        +'<input type="text" value="'+esc(e.account)+'" oninput="_hrbpTrainingEntries['+i+'].account=this.value;document.getElementById(\'f_hrbp_training_entries\').value=JSON.stringify(_hrbpTrainingEntries)" placeholder="Account (optional)" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'
+        +'<button type="button" onclick="removeHrbpTrainingRow('+i+')" style="background:none;border:1px solid var(--red);border-radius:6px;color:var(--red);cursor:pointer;font-size:15px;padding:2px 6px;line-height:1">&times;</button>'
+        +'</div>';
+    }).join('');
+  }
+  if(hidden)hidden.value=JSON.stringify(_hrbpTrainingEntries);
+}
+function weekLabelToMonthKey(label){
+  if(!label)return new Date().toISOString().substring(0,7);
+  var months={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+  var m=label.match(/(\d+)\s+([A-Za-z]+)\s*(?:–|-)\s*\d+\s+([A-Za-z]+)\s+(\d{4})/);
+  if(m){var mon=months[m[3]]||'01';return m[4]+'-'+mon;}
+  var m2=label.match(/([A-Za-z]+)\s+(\d{4})/);
+  if(m2){var mon2=months[m2[1]]||'01';return m2[2]+'-'+mon2;}
+  return new Date().toISOString().substring(0,7);
+}
+
 // ── WEEK KEY HELPERS (global) ─────────────────────────────────────────────
 function getCurrentWeekKey() {
   var now = new Date();
@@ -5594,6 +5668,12 @@ if(t==='hrbp'){
       +'</div>'
       +'<div class="wform-row" style="margin-top:14px"><label>Key activities &amp; achievements this week</label>'
       +'<textarea id="f_hrbp_activities" style="min-height:72px" placeholder="Onboarding induction · R&amp;R at Grey Orange · Geo-tagging rollout…"></textarea></div>'
+      +'<div class="wform-section"><div class="wform-section-title">Training Conducted This Week</div>'
+      +'<div style="display:grid;grid-template-columns:2fr 80px 1fr 30px;gap:6px;margin-bottom:4px;padding:0 2px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px">Training Name</span><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px;text-align:center">Participants</span><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px">Account</span><span></span></div>'
+      +'<div id="hrbp-training-rows"><div style="font-size:11px;color:var(--muted);padding:6px 0;font-style:italic">No sessions added yet — click + Add Training below.</div></div>'
+      +'<input type="hidden" id="f_hrbp_training_entries" value="[]">'
+      +'<button type="button" onclick="addHrbpTrainingRow()" style="margin-top:8px;padding:6px 14px;background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--accent);font-size:12px;cursor:pointer;font-weight:600">+ Add Training</button>'
+      +'</div>'
       +'<div class="wform-row"><label>Anything else to flag?</label>'
       +'<textarea id="f_anything_else" placeholder="Any other observation, risk, or escalation not covered above…" style="min-height:54px"></textarea></div>'
       +'</div>';
@@ -5677,7 +5757,7 @@ function populateForm(sub){
   renderLdUpcomingRows();
   if(sub.hrbp_site_visited)setVisit(true);
 }
-function getFormValues(fnType){const g=id=>{const el=document.getElementById('f_'+id);return el?el.value:'';};const gi=id=>parseInt(g(id))||0;return{function_type:fnType,hrbp_site_visited:_visitYes,ta_opened:gi('ta_opened'),ta_closed:gi('ta_closed'),ta_offers:gi('ta_offers'),ta_dropouts:gi('ta_dropouts'),ta_dropout_reason:g('ta_dropout_reason'),ta_aging:g('ta_aging'),ta_constraints:g('ta_constraints'),ta_joining_plan:g('ta_joining_plan'),hrbp_connect_details:g('hrbp_connect_details'),hrbp_discipline:g('hrbp_discipline'),hrbp_retention:g('hrbp_retention'),hrbp_issues:g('hrbp_issues'),hrbp_risks:g('hrbp_risks'),hrbp_activities:g('hrbp_activities'),payroll_hc:gi('payroll_hc'),payroll_errors:gi('payroll_errors'),payroll_month:g('payroll_month'),payroll_risks:g('payroll_risks'),payroll_pending:g('payroll_pending'),payroll_statutory:g('payroll_statutory'),hrops_onboard:gi('hrops_onboard'),hrops_fnf:g('hrops_fnf'),hrops_compliance:g('hrops_compliance'),hrops_gaps:g('hrops_gaps'),hrops_esc_count:gi('hrops_esc_count'),hrops_esc_details:g('hrops_esc_details'),ld_sessions:gi('ld_sessions'),ld_coverage:g('ld_coverage'),ld_details:g('ld_details'),ld_upcoming:g('ld_upcoming'),ld_gaps:g('ld_gaps'),ld_risks:g('ld_risks'),admin_issues:g('admin_issues'),admin_savings:g('admin_savings'),anything_else:g('anything_else'),hrbp_abscond:g('hrbp_abscond'),hrbp_case_entries:JSON.stringify(_caseEntries||[])};}
+function getFormValues(fnType){const g=id=>{const el=document.getElementById('f_'+id);return el?el.value:'';};const gi=id=>parseInt(g(id))||0;return{function_type:fnType,hrbp_site_visited:_visitYes,ta_opened:gi('ta_opened'),ta_closed:gi('ta_closed'),ta_offers:gi('ta_offers'),ta_dropouts:gi('ta_dropouts'),ta_dropout_reason:g('ta_dropout_reason'),ta_aging:g('ta_aging'),ta_constraints:g('ta_constraints'),ta_joining_plan:g('ta_joining_plan'),hrbp_connect_details:g('hrbp_connect_details'),hrbp_discipline:g('hrbp_discipline'),hrbp_retention:g('hrbp_retention'),hrbp_issues:g('hrbp_issues'),hrbp_risks:g('hrbp_risks'),hrbp_activities:g('hrbp_activities'),payroll_hc:gi('payroll_hc'),payroll_errors:gi('payroll_errors'),payroll_month:g('payroll_month'),payroll_risks:g('payroll_risks'),payroll_pending:g('payroll_pending'),payroll_statutory:g('payroll_statutory'),hrops_onboard:gi('hrops_onboard'),hrops_fnf:g('hrops_fnf'),hrops_compliance:g('hrops_compliance'),hrops_gaps:g('hrops_gaps'),hrops_esc_count:gi('hrops_esc_count'),hrops_esc_details:g('hrops_esc_details'),ld_sessions:gi('ld_sessions'),ld_coverage:g('ld_coverage'),ld_details:g('ld_details'),ld_upcoming:g('ld_upcoming'),ld_gaps:g('ld_gaps'),ld_risks:g('ld_risks'),admin_issues:g('admin_issues'),admin_savings:g('admin_savings'),anything_else:g('anything_else'),hrbp_abscond:g('hrbp_abscond'),hrbp_case_entries:JSON.stringify(_caseEntries||[]),hrbp_training_entries:document.getElementById('f_hrbp_training_entries')?.value||'[]'};}
 
 async function submitWeeklyForm(fnType,region){
   const btn=document.getElementById('formSubmitBtn'),st=document.getElementById('formSubmitStatus');
@@ -5699,6 +5779,20 @@ async function submitWeeklyForm(fnType,region){
     });
     await _sb.from('hrbp_site_visits').insert(vRecs);
     _visitEntries=[];if(typeof renderVisitEntries==='function')renderVisitEntries();
+  }
+  if(fnType==='hrbp'){
+    var _trainingEntries=[];try{_trainingEntries=JSON.parse(document.getElementById('f_hrbp_training_entries')?.value||'[]');}catch(e){}
+    if(_trainingEntries.length>0){
+      var _wkLabelForMonth=(WEEKS_DATA[_formWeekKey]&&WEEKS_DATA[_formWeekKey].label)||'';
+      var _monthKey=weekLabelToMonthKey(_wkLabelForMonth);
+      var _trainerName=(record.submitter_name)||(_sbUser&&_sbUser.email)||'HRBP';
+      var _trainerRegion=(_sbRole&&_sbRole.region)||region||'Pan India';
+      var _tRecs=_trainingEntries.filter(function(t){return t.name&&t.name.trim();}).map(function(t){
+        return{month_key:_monthKey,week_key:_formWeekKey,training_name:t.name.trim(),trainer:_trainerName,participants:parseInt(t.participants)||0,region:_trainerRegion,mode:'Classroom',category:'Behavioural',count_type:'Attendees',notes:t.account?'Account: '+t.account:null,created_by:(_sbUser&&_sbUser.email)||'hrbp'};
+      });
+      if(_tRecs.length>0)await _sb.from('training_sessions').insert(_tRecs);
+      _hrbpTrainingEntries=[];if(typeof renderHrbpTrainingRows==='function')renderHrbpTrainingRows();
+    }
   }
   if(_formPhotos.length>0){st.innerHTML='<div style="font-size:12px;color:var(--muted)">Uploading photos…</div>';for(let i=0;i<_formPhotos.length;i++){const{file,caption,event_type}=_formPhotos[i];const ext=file.name.split('.').pop();const path=_formWeekKey+'/'+Date.now()+'_'+i+'.'+ext;const{error:upErr}=await _sb.storage.from('hrbp-photos').upload(path,file,{contentType:file.type});if(!upErr){const{data:urlData}=_sb.storage.from('hrbp-photos').getPublicUrl(path);await _sb.from('hrbp_photos').insert({week_key:_formWeekKey,week_num:wData?.week_num||0,uploaded_by:_sbUser.id,uploader_name:record.submitter_name,uploader_region:region||_sbRole.region||'',photo_url:urlData.publicUrl,caption,event_type:event_type||'site_visit'});}}_formPhotos=[];}
   await rebuildWeekFromSubmissions(_formWeekKey);
