@@ -2769,16 +2769,13 @@ function renderHRBP(w, pw) {
 // ─── RENDER L&D ────────────────────────────────────────────────
 function renderLD(w, pw) {
   if (!w) return '<div style="padding:40px;text-align:center;color:var(--muted)">No week data loaded.</div>';
-  // ld_details may be a JSONB array of strings or a single string
-  const _ldArr = Array.isArray(w.ld_details) ? w.ld_details : (w.ld_details ? [w.ld_details] : []);
-  const details = _ldArr.join('\n\n');
 
-  // Parse upcoming programs — structured JSON first, legacy free-text fallback
+  // Parse pipeline programs from ld_upcoming (legacy + new format)
+  // Used only for the Upcoming section — structured data now in training_pipeline
   const programs = [];
   const seen = new Set();
   (w.ld_upcoming||[]).forEach(function(item){
     if(!item) return;
-    // Try structured JSON (new format)
     try {
       var parsed = JSON.parse(item);
       if(Array.isArray(parsed)){
@@ -2787,13 +2784,19 @@ function renderLD(w, pw) {
           var key = p.name.toLowerCase().trim();
           if(seen.has(key)) return;
           seen.add(key);
-          var dateStr = p.date ? new Date(p.date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—';
-          programs.push({name:p.name, date:dateStr, region:p.region||'Pan-India', mode:p.mode||'', pax:p.pax||''});
+          var dateStr = p.date
+            ? new Date(p.date).toLocaleDateString('en-IN',
+                {day:'2-digit',month:'short',year:'numeric'})
+            : '—';
+          programs.push({
+            name:p.name, date:dateStr,
+            region:p.region||'Pan India',
+            mode:p.mode||'', pax:p.pax||''
+          });
         });
         return;
       }
     } catch(e) {}
-    // Legacy free-text fallback — split on newlines and show as-is
     String(item).split('\n').forEach(function(line){
       var l = line.trim();
       if(!l || l.match(/^(serial|name of|#|\d+\s+name)/i)) return;
@@ -2801,123 +2804,24 @@ function renderLD(w, pw) {
       if(seen.has(key)) return;
       seen.add(key);
       var dateM = l.match(/(\d{2}-\d{2}-\d{4})/);
-      var name = dateM ? l.replace(dateM[0],'').replace(/^[\d\.\s\t\-]+/,'').trim() : l.replace(/^[\d\.\s\t\-]+/,'').trim();
-      var date = dateM ? dateM[0] : (l.match(/online|self.paced/i) ? 'Online / Self-Paced' : '—');
-      if(name && !name.match(/^name/i)) programs.push({name:name, date:date, region:'—', mode:'', pax:''});
+      var name = dateM
+        ? l.replace(dateM[0],'').replace(/^[\d\.\s\t\-]+/,'').trim()
+        : l.replace(/^[\d\.\s\t\-]+/,'').trim();
+      var date = dateM ? dateM[0]
+        : (l.match(/online|self.paced/i) ? 'Online / Self-Paced' : '—');
+      if(name && !name.match(/^name/i))
+        programs.push({name:name, date:date, region:'—', mode:'', pax:''});
     });
   });
 
-  // Assign region from program name keywords
-  function inferRegion(name) {
-    const n = name.toLowerCase();
-    if (n.includes('east') || n.includes('lic east') || n.includes('patna') || n.includes('kolkata')) return 'East';
-    if (n.includes('west') || n.includes('mumbai') || n.includes('pune') || n.includes('mahape')) return 'West';
-    if (n.includes('north') || n.includes('delhi') || n.includes('noida') || n.includes('gurugram')) return 'North';
-    if (n.includes('south') || n.includes('chennai') || n.includes('bangalore') || n.includes('hyderabad')) return 'South';
-    return 'Pan-India';
-  }
-
-  // Deduplicate and group by region
-  const seenGrouped = new Set();
-  const grouped = {};
-  const REGION_ORDER = ['North','South','East','West','Pan-India'];
-  REGION_ORDER.forEach(r => grouped[r] = []);
-  programs.forEach(p => {
-    const key = p.name.toLowerCase().trim();
-    if (seenGrouped.has(key)) return;
-    seenGrouped.add(key);
-    const region = inferRegion(p.name);
-    grouped[region].push(p);
-  });
-
-  const upcomingHtml = REGION_ORDER
-    .filter(r => grouped[r] && grouped[r].length > 0)
-    .map(r => {
-      const map = {'North':'N','South':'S','East':'E','West':'W','Pan-India':'P'};
-      const rows = grouped[r].map(p => `
-        <div class="ld-prog">
-          <div class="ld-prog-name">${esc(p.name)}</div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">
-            <div class="ld-prog-date">${esc(p.date)}</div>
-            ${p.mode?`<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:rgba(96,165,250,.1);color:var(--accent)">${esc(p.mode)}</span>`:''}
-            ${p.pax?`<span style="font-size:10px;color:var(--muted)">👥 ${esc(p.pax)} pax</span>`:''}
-          </div>
-        </div>`).join('');
-      return `
-        <div class="ld-rblock">
-          <div class="ld-rhead">
-            <span class="rtag rtag-${map[r]}">${r}</span>
-            <span class="ld-rcount">${grouped[r].length} program${grouped[r].length>1?'s':''}</span>
-          </div>
-          ${rows}
-        </div>`;
-    }).join('') || '<div class="empty-state">No upcoming programs listed.</div>';
-
+  // ── KPI cards — sessions/coverage loaded async by loadLDTab()
   return `
-    <div class="section-label">L&D Activity · ${esc(w.label)}</div>
-    <div class="kpi-grid">
-      <div class="kpi-card blue animate d1">
-        <div class="kpi-icon">📚</div><div class="kpi-label">Sessions Conducted</div>
-        <div class="kpi-value">${w.ld_sessions}</div>
-        ${wowBadge(w.ld_sessions, pw.ld_sessions)}
-      </div>
-      <div class="kpi-card green animate d2">
-        <div class="kpi-icon">👥</div><div class="kpi-label">Attendance / Coverage</div>
-        <div class="kpi-value">${parseInt(w.ld_coverage)||'—'}</div>
-        <div class="kpi-wow neutral">Attendees this week</div>
-      </div>
-      <div class="kpi-card purple animate d3">
-        <div class="kpi-icon">📅</div><div class="kpi-label">Upcoming Programs</div>
-        <div class="kpi-value">${programs.length||'—'}</div>
-        <div class="kpi-wow neutral">Next 2–4 weeks</div>
-      </div>
-      <div class="kpi-card amber animate d4">
-        <div class="kpi-icon">🚧</div><div class="kpi-label">Capability Gaps Raised</div>
-        <div class="kpi-value">${w.ld_gaps.length}</div>
-        <div class="kpi-wow ${w.ld_gaps.length>0?'warn':'neutral'}">${w.ld_gaps.length>0?'Needs attention':'None flagged'}</div>
-      </div>
-      <div class="kpi-card red animate d5">
-        <div class="kpi-icon">⚠️</div><div class="kpi-label">L&D Risks / Dependencies</div>
-        <div class="kpi-value">${w.ld_risks.length}</div>
-        <div class="kpi-wow ${w.ld_risks.length>0?'down':'neutral'}">${w.ld_risks.length>0?'Follow up needed':'Clear'}</div>
-      </div>
-    </div>
-
-    <div class="section-label">Training Details & Pipeline</div>
-    <div class="two-col">
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">📋 This Week's Training Activity</div>
-        </div>
-        <div class="card-body">
-          ${details ? details.split('\n').filter(l=>l.trim()).map(l=>`<div class="flag-row"><div class="flag-icon">📌</div><div class="flag-text">${esc(l.trim())}</div></div>`).join('') : '<div class="empty-state">No training details logged this week.</div>'}
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">📆 Upcoming Programs</div>
-          <span class="card-badge blue">${programs.length} total · By Region</span>
-        </div>
-        <div class="card-body">${upcomingHtml}</div>
-      </div>
-    </div>
-
-    ${(w.ld_gaps.length > 0 || w.ld_risks.length > 0) ? `
-    <div class="section-label">Gaps & Risks</div>
-    <div class="card">
-      <div class="card-header"><div class="card-title">🚧 L&D Gaps & Dependencies</div><span class="card-badge amber">Action Needed</span></div>
-      <div class="card-body">
-        <div class="risk-list">
-          ${w.ld_gaps.map(g=>`<div class="risk-item high"><span class="risk-tag">Capability Gap</span><span class="risk-detail">${esc(trim(g,350))}</span></div>`).join('')}
-          ${w.ld_risks.map(r=>`<div class="risk-item medium"><span class="risk-tag">L&D Risk</span><span class="risk-detail">${esc(trim(r,350))}</span></div>`).join('')}
-        </div>
-      </div>
-    </div>` : ''}
-
-    <div class="section-label">Trainer Activity
-      <span style="margin-left:10px">
-        <select id="trainerMonthSel" onchange="loadTrainerActivity(this.value)"
-          style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface3);color:var(--text)">
+    <div class="section-label">L&D Activity
+      <span style="float:right;display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:0;text-transform:none;font-family:inherit">View</span>
+        <select id="ldMonthSel"
+          onchange="loadLDTab(this.value)"
+          style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface3);color:var(--text);font-family:inherit">
           <option value="2026-05">May 2026</option>
           <option value="2026-04">April 2026</option>
           <option value="2026-03">March 2026</option>
@@ -2926,123 +2830,282 @@ function renderLD(w, pw) {
         </select>
       </span>
     </div>
-    <div id="trainerActivityPanel">
-      <div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Loading trainer data…</div>
-    </div>`;
+
+    <div class="kpi-grid">
+      <div class="kpi-card blue animate d1">
+        <div class="kpi-icon">📚</div>
+        <div class="kpi-label">Sessions Conducted</div>
+        <div class="kpi-value" id="ld-kpi-sessions">—</div>
+        <div class="kpi-wow neutral" id="ld-kpi-sessions-sub">Loading…</div>
+      </div>
+      <div class="kpi-card green animate d2">
+        <div class="kpi-icon">👥</div>
+        <div class="kpi-label">Total Participants</div>
+        <div class="kpi-value" id="ld-kpi-pax">—</div>
+        <div class="kpi-wow neutral" id="ld-kpi-pax-sub">Loading…</div>
+      </div>
+      <div class="kpi-card purple animate d3">
+        <div class="kpi-icon">⏳</div>
+        <div class="kpi-label">Pipeline (Planned)</div>
+        <div class="kpi-value" id="ld-kpi-pipeline">—</div>
+        <div class="kpi-wow neutral" id="ld-kpi-pipeline-sub">Loading…</div>
+      </div>
+      <div class="kpi-card amber animate d4">
+        <div class="kpi-icon">📊</div>
+        <div class="kpi-label">Plan vs Actual</div>
+        <div class="kpi-value" id="ld-kpi-planvact">—</div>
+        <div class="kpi-wow neutral" id="ld-kpi-planvact-sub">Loading…</div>
+      </div>
+      <div class="kpi-card red animate d5">
+        <div class="kpi-icon">🚧</div>
+        <div class="kpi-label">Gaps & Risks</div>
+        <div class="kpi-value">${w.ld_gaps.length + w.ld_risks.length}</div>
+        <div class="kpi-wow ${(w.ld_gaps.length+w.ld_risks.length)>0?'warn':'neutral'}">
+          ${(w.ld_gaps.length+w.ld_risks.length)>0?'Action needed':'Clear'}
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Training Sessions</div>
+    <div id="ldSessionsPanel">
+      <div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Loading sessions…</div>
+    </div>
+
+    <div class="section-label">Training Pipeline
+      <span style="float:right">
+        <span id="ld-pipeline-badge" style="font-family:DM Mono,monospace;font-size:9px;padding:3px 8px;border-radius:20px;font-weight:500;background:var(--accent-glow,rgba(59,158,255,.1));color:var(--accent);border:1px solid rgba(59,158,255,.3)">Loading…</span>
+      </span>
+    </div>
+    <div id="ldPipelinePanel">
+      <div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Loading pipeline…</div>
+    </div>
+
+    ${(w.ld_gaps.length > 0 || w.ld_risks.length > 0) ? `
+    <div class="section-label">Gaps & Risks</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🚧 L&D Gaps & Dependencies</div>
+        <span class="card-badge amber">Action Needed</span>
+      </div>
+      <div class="card-body">
+        <div class="risk-list">
+          ${w.ld_gaps.map(g=>`<div class="risk-item high"><span class="risk-tag">Capability Gap</span><span class="risk-detail">${esc(trim(g,350))}</span></div>`).join('')}
+          ${w.ld_risks.map(r=>`<div class="risk-item medium"><span class="risk-tag">L&D Risk</span><span class="risk-detail">${esc(trim(r,350))}</span></div>`).join('')}
+        </div>
+      </div>
+    </div>` : ''}`;
 }
 
-// ── TRAINER ACTIVITY PANEL ────────────────────────────────────────────────────
-async function loadTrainerActivity(monthKey) {
-  var panel = document.getElementById('trainerActivityPanel');
+// ── L&D TAB LOADER ───────────────────────────────────────────
+async function loadLDTab(monthKey) {
+  // Default to current month if not specified
+  var mk = monthKey || '2026-05';
+
+  // Sync the month selector if it exists
+  var sel = document.getElementById('ldMonthSel');
+  if (sel && sel.value !== mk) sel.value = mk;
+
+  // Load sessions and pipeline in parallel
+  await Promise.all([
+    _loadLDSessions(mk),
+    _loadLDPipeline(mk),
+  ]);
+}
+
+async function _loadLDSessions(mk) {
+  var panel = document.getElementById('ldSessionsPanel');
   if (!panel) return;
+
   try {
-    var q = _sb.from('training_sessions').select('*').order('month_key', {ascending: false});
-    if (monthKey && monthKey !== 'all') q = q.eq('month_key', monthKey);
+    var q = _sb.from('training_sessions').select('*')
+      .order('month_key', {ascending:false})
+      .order('trainer',   {ascending:true});
+    if (mk && mk !== 'all') q = q.eq('month_key', mk);
     var res = await q;
-    if (res.error) {
-      panel.innerHTML = '<div style="padding:20px;color:var(--red);font-size:12px">Supabase error: ' + esc(res.error.message) + '</div>';
-      return;
-    }
     var rows = res.data || [];
 
     if (!rows.length) {
-      panel.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No training sessions recorded for this period.</div>';
+      panel.innerHTML = '<div class="empty-state">No sessions recorded for this period.</div>';
       return;
     }
 
-    // Group by trainer
-    var byTrainer = {};
+    // Update KPI cards
+    var totalSessions = rows.length;
+    var totalPax = rows.reduce(function(s,r){ return s+(r.participants||0); }, 0);
+    var elSess  = document.getElementById('ld-kpi-sessions');
+    var elSessS = document.getElementById('ld-kpi-sessions-sub');
+    var elPax   = document.getElementById('ld-kpi-pax');
+    var elPaxS  = document.getElementById('ld-kpi-pax-sub');
+    if (elSess)  elSess.textContent  = totalSessions;
+    if (elSessS) elSessS.textContent = mk === 'all' ? 'All time' : _fmtMonthKey(mk);
+    if (elPax)   elPax.textContent   = totalPax;
+    if (elPaxS)  elPaxS.textContent  = 'Batch size total';
+
+    // Category breakdown
+    var catCount = {};
+    var catPax   = {};
     rows.forEach(function(r) {
-      if (!byTrainer[r.trainer]) byTrainer[r.trainer] = {sessions: [], total_pax: 0, total_nom: 0};
-      byTrainer[r.trainer].sessions.push(r);
-      if ((r.count_type || 'Attendees') === 'Nominations') {
-        byTrainer[r.trainer].total_nom += (r.participants || 0);
-      } else {
-        byTrainer[r.trainer].total_pax += (r.participants || 0);
-      }
+      var c = r.category || 'Technical';
+      catCount[c] = (catCount[c]||0) + 1;
+      catPax[c]   = (catPax[c]||0)   + (r.participants||0);
     });
 
-    var catStyle = {
-      'Technical':    'background:rgba(96,165,250,.15);color:#60a5fa',
-      'Behavioural':  'background:rgba(167,139,250,.15);color:#a78bfa',
-      'OEM':          'background:rgba(251,191,36,.15);color:#f59e0b',
-      'Certification':'background:rgba(52,211,153,.15);color:#34d399'
+    var catColors = {
+      Technical:    {bg:'rgba(96,165,250,.12)',  color:'var(--accent)'},
+      Behavioural:  {bg:'rgba(167,139,250,.12)', color:'var(--purple,#a78bfa)'},
+      OEM:          {bg:'rgba(245,158,11,.12)',   color:'var(--amber,#f59e0b)'},
+      Certification:{bg:'rgba(34,211,160,.12)',   color:'var(--green)'},
+      Induction:    {bg:'rgba(244,63,94,.12)',    color:'var(--red)'},
+      Compliance:   {bg:'rgba(245,158,11,.12)',   color:'var(--amber,#f59e0b)'},
     };
 
-    // Summary row per trainer
-    var trainerCards = Object.keys(byTrainer).sort().map(function(trainer) {
-      var td = byTrainer[trainer];
-      var modeCount = {}, catCount = {};
-      td.sessions.forEach(function(s) {
-        modeCount[s.mode] = (modeCount[s.mode] || 0) + 1;
-        var cat = s.category || 'Technical';
-        catCount[cat] = (catCount[cat] || 0) + 1;
-      });
-      var modeTags = Object.keys(modeCount).map(function(m) {
-        return '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(96,165,250,.12);color:var(--accent);margin-right:4px">' + esc(m) + ' (' + modeCount[m] + ')</span>';
-      }).join('');
-      var catTags = Object.keys(catCount).map(function(c) {
-        var s2 = catStyle[c] || 'background:rgba(148,163,184,.15);color:var(--muted)';
-        return '<span style="font-size:10px;padding:2px 8px;border-radius:10px;margin-right:4px;' + s2 + '">' + esc(c) + ' (' + catCount[c] + ')</span>';
-      }).join('');
-
-      var sessionRows = td.sessions.map(function(s) {
-        var catS = catStyle[s.category || 'Technical'] || 'background:rgba(148,163,184,.15);color:var(--muted)';
-        var catPill = '<span style="font-size:10px;padding:1px 7px;border-radius:8px;' + catS + '">' + esc(s.category || 'Technical') + '</span>';
-        var paxDisplay = (s.count_type === 'Nominations')
-          ? (s.participants || 0) + '<span style="font-size:10px;color:var(--muted);margin-left:3px">(nom)</span>'
-          : String(s.participants || 0);
-        return '<tr style="border-bottom:1px solid rgba(42,61,82,.2)">'
-          + '<td style="padding:6px 10px;font-size:12px;color:var(--text)">' + esc(s.training_name) + '</td>'
-          + '<td style="padding:6px 10px;font-size:11px;color:var(--muted);text-align:center">' + esc(s.month_key) + (s.week_key ? ' · ' + esc(s.week_key) : '') + '</td>'
-          + '<td style="padding:6px 10px;font-size:11px;color:var(--muted);text-align:center">' + esc(s.region || '—') + '</td>'
-          + '<td style="padding:6px 10px;font-size:11px;color:var(--muted);text-align:center">' + esc(s.mode || '—') + '</td>'
-          + '<td style="padding:6px 10px;text-align:center">' + catPill + '</td>'
-          + '<td style="padding:6px 10px;font-size:13px;font-weight:600;color:var(--green);text-align:center">' + paxDisplay + '</td>'
-          + '</tr>';
-      }).join('');
-
-      return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px">'
-        + '<div style="padding:12px 16px;background:var(--surface3);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
-        + '<div>'
-        + '<div style="font-size:13px;font-weight:600;color:var(--text)">' + esc(trainer) + '</div>'
-        + '<div style="margin-top:4px">' + modeTags + '</div>'
-        + '<div style="margin-top:4px">' + catTags + '</div>'
-        + '</div>'
-        + '<div style="display:flex;gap:20px;text-align:right">'
-        + '<div><div style="font-size:20px;font-weight:700;color:var(--accent)">' + td.sessions.length + '</div><div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px">Sessions</div></div>'
-        + '<div><div style="font-size:20px;font-weight:700;color:var(--green)">' + td.total_pax + '</div><div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px">Attendees</div></div>'
-        + (td.total_nom > 0 ? '<div><div style="font-size:20px;font-weight:700;color:var(--muted)">' + td.total_nom + '</div><div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px">Nominations</div></div>' : '')
-        + '</div>'
-        + '</div>'
-        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
-        + '<thead><tr style="border-bottom:1px solid var(--border)">'
-        + '<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Training Name</th>'
-        + '<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Period</th>'
-        + '<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Region</th>'
-        + '<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Mode</th>'
-        + '<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Type</th>'
-        + '<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">Participants</th>'
-        + '</tr></thead>'
-        + '<tbody>' + sessionRows + '</tbody>'
-        + '</table></div></div>';
+    var catStrip = Object.keys(catCount).map(function(c) {
+      var col = catColors[c] || {bg:'rgba(96,165,250,.1)',color:'var(--accent)'};
+      return '<div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;background:'+col.bg+'">'
+        +'<span style="font-size:18px;font-weight:700;color:'+col.color+'">'+catCount[c]+'</span>'
+        +'<div><div style="font-size:11px;font-weight:600;color:var(--text)">'+esc(c)+'</div>'
+        +'<div style="font-size:10px;color:var(--muted)">'+catPax[c]+' pax</div></div>'
+        +'</div>';
     }).join('');
 
-    // Summary strip
-    var totalSessions = rows.length;
-    var totalAttendees = rows.filter(function(r){ return (r.count_type||'Attendees') !== 'Nominations'; }).reduce(function(a,r){ return a+(r.participants||0); }, 0);
-    var totalNom = rows.filter(function(r){ return r.count_type === 'Nominations'; }).reduce(function(a,r){ return a+(r.participants||0); }, 0);
-    var summaryStrip = '<div style="margin-top:8px;padding:10px 16px;background:var(--surface3);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--muted);display:flex;gap:0;align-items:center">'
-      + '<span style="color:var(--text);font-weight:600">Total Sessions:</span>&nbsp;' + totalSessions
-      + '<span style="margin:0 12px;color:var(--border)">|</span>'
-      + '<span style="color:var(--text);font-weight:600">Confirmed Attendees:</span>&nbsp;' + totalAttendees
-      + (totalNom > 0 ? '<span style="margin:0 12px;color:var(--border)">|</span><span style="color:var(--text);font-weight:600">Nominations:</span>&nbsp;' + totalNom : '')
-      + '</div>';
+    var tableRows = rows.map(function(r) {
+      var cat = r.category || 'Technical';
+      var col = (catColors[cat]||{color:'var(--accent)'}).color;
+      var bg  = (catColors[cat]||{bg:'rgba(96,165,250,.1)'}).bg;
+      var ctLabel = r.count_type === 'Nominations'
+        ? '<span style="font-size:9px;color:var(--muted);margin-left:3px">(nom)</span>' : '';
+      return '<tr style="border-bottom:1px solid rgba(42,61,82,.2)">'
+        +'<td style="padding:7px 10px;font-size:12px;color:var(--text)">'+esc(r.training_name)+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(r.trainer)+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted);text-align:center">'+esc(r.region||'Pan India')+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted);text-align:center">'+esc(r.mode||'—')+'</td>'
+        +'<td style="padding:7px 10px;text-align:center"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:'+bg+';color:'+col+'">'+esc(cat)+'</span></td>'
+        +'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--green);text-align:center">'+(r.participants||0)+ctLabel+'</td>'
+        +'<td style="padding:7px 10px;font-size:10px;color:var(--muted);text-align:center">'+(r.duration_hours?r.duration_hours+'h':'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:10px;color:var(--muted);text-align:center">'
+        +(r.account?'<span style="padding:2px 6px;border-radius:4px;background:var(--surface3);font-size:9px">'+esc(r.account)+'</span>':'Pan India')+'</td>'
+        +'<td style="padding:7px 10px;font-size:10px;color:var(--muted);text-align:center">'+(r.month_key||'')+(r.week_key?' · '+r.week_key:'')+'</td>'
+        +'</tr>';
+    }).join('');
 
-    panel.innerHTML = trainerCards + summaryStrip;
+    panel.innerHTML =
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'+catStrip+'</div>'
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+      +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+      +'<thead><tr style="border-bottom:1px solid var(--border);background:var(--surface3)">'
+      +_ldTh('Training')+_ldTh('Trainer')+_ldTh('Region','center')
+      +_ldTh('Mode','center')+_ldTh('Category','center')
+      +_ldTh('Pax','center')+_ldTh('Hrs','center')
+      +_ldTh('Account','center')+_ldTh('Period','center')
+      +'</tr></thead>'
+      +'<tbody>'+tableRows+'</tbody>'
+      +'</table></div>'
+      +'<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:20px;font-size:11px;color:var(--muted)">'
+      +'<span><b style="color:var(--text)">'+totalSessions+'</b> sessions</span>'
+      +'<span style="color:var(--border)">|</span>'
+      +'<span><b style="color:var(--text)">'+totalPax+'</b> total participants</span>'
+      +'<span style="color:var(--border)">|</span>'
+      +'<span><b style="color:var(--text)">'+Object.keys(catCount).length+'</b> categories</span>'
+      +'</div></div>';
+
   } catch(e) {
-    panel.innerHTML = '<div style="padding:20px;color:var(--red);font-size:12px">Error loading trainer data: ' + esc(e.message) + '</div>';
+    var p2 = document.getElementById('ldSessionsPanel');
+    if (p2) p2.innerHTML = '<div style="padding:20px;color:var(--red);font-size:12px">Error loading sessions: '+esc(e.message)+'</div>';
   }
+}
+
+async function _loadLDPipeline(mk) {
+  var panel  = document.getElementById('ldPipelinePanel');
+  var badge  = document.getElementById('ld-pipeline-badge');
+  var kpPlan = document.getElementById('ld-kpi-pipeline');
+  var kpSub  = document.getElementById('ld-kpi-pipeline-sub');
+  if (!panel) return;
+
+  try {
+    var q = _sb.from('training_pipeline').select('*')
+      .in('status', ['Planned','Confirmed'])
+      .order('planned_date', {ascending:true});
+    var res = await q;
+    var rows = res.data || [];
+
+    var qAll = _sb.from('training_pipeline').select('*');
+    var resAll = await qAll;
+    var allRows = resAll.data || [];
+
+    var conducted = allRows.filter(function(r){ return r.status==='Conducted'; }).length;
+    var totalPlan = allRows.length;
+    var pvaRate   = totalPlan > 0 ? Math.round(conducted/totalPlan*100)+'%' : '—';
+    if (kpPlan) kpPlan.textContent = rows.length;
+    if (kpSub)  kpSub.textContent  = rows.length+' open items';
+    var elPva  = document.getElementById('ld-kpi-planvact');
+    var elPvaS = document.getElementById('ld-kpi-planvact-sub');
+    if (elPva)  elPva.textContent  = pvaRate;
+    if (elPvaS) elPvaS.textContent = conducted+' of '+totalPlan+' planned conducted';
+    if (badge)  badge.textContent  = rows.length+' open';
+
+    if (!rows.length) {
+      panel.innerHTML = '<div class="empty-state">No programs in pipeline. Add programs via the LD or HRBP weekly form.</div>';
+      return;
+    }
+
+    var statusColors = {
+      Planned:   {bg:'rgba(96,165,250,.1)',  color:'var(--accent)'},
+      Confirmed: {bg:'rgba(34,211,160,.1)',   color:'var(--green)'},
+      Postponed: {bg:'rgba(245,158,11,.1)',   color:'var(--amber,#f59e0b)'},
+      Cancelled: {bg:'rgba(244,63,94,.1)',    color:'var(--red)'},
+      Conducted: {bg:'rgba(34,211,160,.1)',   color:'var(--green)'},
+    };
+    var priorityColors = { High:'var(--red)', Medium:'var(--amber,#f59e0b)', Low:'var(--muted)' };
+
+    var pipeRows = rows.map(function(r) {
+      var sc = statusColors[r.status] || statusColors.Planned;
+      var pc = priorityColors[r.priority] || 'var(--muted)';
+      var dt = r.planned_date
+        ? new Date(r.planned_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
+        : '—';
+      return '<tr style="border-bottom:1px solid rgba(42,61,82,.2)">'
+        +'<td style="padding:7px 10px;font-size:12px;color:var(--text)">'+esc(r.training_name)+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(r.trainer)+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted);text-align:center">'+esc(dt)+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted);text-align:center">'+esc(r.region||'Pan India')+'</td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted);text-align:center">'+esc(r.category||'—')+'</td>'
+        +'<td style="padding:7px 10px;text-align:center"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:'+sc.bg+';color:'+sc.color+'">'+esc(r.status)+'</span></td>'
+        +'<td style="padding:7px 10px;text-align:center"><span style="font-size:10px;font-weight:600;color:'+pc+'">'+esc(r.priority||'Medium')+'</span></td>'
+        +'<td style="padding:7px 10px;font-size:11px;color:var(--muted);text-align:center">'+(r.expected_pax||'—')+'</td>'
+        +'<td style="padding:7px 10px;font-size:10px;color:var(--muted);text-align:center">'
+        +(r.account?'<span style="padding:2px 6px;border-radius:4px;background:var(--surface3);font-size:9px">'+esc(r.account)+'</span>':'—')+'</td>'
+        +'</tr>';
+    }).join('');
+
+    panel.innerHTML =
+      '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+      +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+      +'<thead><tr style="border-bottom:1px solid var(--border);background:var(--surface3)">'
+      +_ldTh('Program')+_ldTh('Trainer')
+      +_ldTh('Planned Date','center')+_ldTh('Region','center')
+      +_ldTh('Category','center')+_ldTh('Status','center')
+      +_ldTh('Priority','center')+_ldTh('Exp Pax','center')
+      +_ldTh('Account','center')
+      +'</tr></thead>'
+      +'<tbody>'+pipeRows+'</tbody>'
+      +'</table></div></div>';
+
+  } catch(e) {
+    if (panel) panel.innerHTML = '<div style="padding:20px;color:var(--red);font-size:12px">Error loading pipeline: '+esc(e.message)+'</div>';
+  }
+}
+
+function _ldTh(label, align) {
+  return '<th style="padding:7px 10px;text-align:'+(align||'left')+';font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.8px">'+label+'</th>';
+}
+
+function _fmtMonthKey(mk) {
+  if (!mk || mk === 'all') return 'All time';
+  try {
+    var parts = mk.split('-');
+    var d = new Date(parseInt(parts[0]), parseInt(parts[1])-1, 1);
+    return d.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  } catch(e2) { return mk; }
 }
 
 // ─── MAIN RENDER ──────────────────────────────────────────────
@@ -3558,11 +3621,11 @@ function render() {
   if (typeof _sbUser !== 'undefined' && _sbUser && typeof loadHRBPVisitAlerts === 'function') {
     loadHRBPVisitAlerts();
   }
-  // Auto-load trainer activity after every render (LD tab content resets on each render)
-  if (typeof loadTrainerActivity === 'function') {
+  // Auto-load LD tab data after every render (tab content resets on each render)
+  if (typeof loadLDTab === 'function') {
     setTimeout(function() {
-      var sel = document.getElementById('trainerMonthSel');
-      loadTrainerActivity(sel ? sel.value : '2026-05');
+      var sel = document.getElementById('ldMonthSel');
+      loadLDTab(sel ? sel.value : '2026-05');
     }, 100);
   }
   // Animate bars
@@ -3581,12 +3644,10 @@ function switchTab(id, btn) {
   document.getElementById(`tab-${id}`).classList.add('active');
   if(btn) btn.classList.add('active');
   currentTab = id;
-  if (id === 'ld' && typeof loadTrainerActivity === 'function') {
-    setTimeout(function() {
-      var sel = document.getElementById('trainerMonthSel');
-      var mon = sel ? sel.value : '2026-05';
-      loadTrainerActivity(mon);
-    }, 50);
+  if (id === 'ld' && typeof loadLDTab === 'function') {
+    var sel = document.getElementById('ldMonthSel');
+    var mon = sel ? sel.value : '2026-05';
+    loadLDTab(mon);
   }
 }
 
@@ -4272,7 +4333,7 @@ function switchTab(id, btn) {
   }
 
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadActionTasks, 100); }
-  else if(id==='ld') { setTimeout(function(){ var sel=document.getElementById('trainerMonthSel'); loadTrainerActivity(sel?sel.value:'2026-05'); }, 50); }
+  else if(id==='ld') { setTimeout(function(){ var sel=document.getElementById('ldMonthSel'); loadLDTab(sel?sel.value:'2026-05'); }, 50); }
   else if(id==='users') renderUsersTab(el);
   else if(id==='accounts') renderAccountsTab(el);
   else if(id==='gallery') renderGalleryTab();
