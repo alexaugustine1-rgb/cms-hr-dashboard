@@ -3501,6 +3501,13 @@ function render() {
   if (typeof _sbUser !== 'undefined' && _sbUser && typeof loadHRBPVisitAlerts === 'function') {
     loadHRBPVisitAlerts();
   }
+  // Auto-load trainer activity after every render (LD tab content resets on each render)
+  if (typeof loadTrainerActivity === 'function') {
+    setTimeout(function() {
+      var sel = document.getElementById('trainerMonthSel');
+      loadTrainerActivity(sel ? sel.value : '2026-05');
+    }, 100);
+  }
   // Animate bars
   setTimeout(() => {
     document.querySelectorAll('.progress-bar-fill').forEach(bar => {
