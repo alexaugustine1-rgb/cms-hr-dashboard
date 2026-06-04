@@ -23,8 +23,8 @@ Shared with OPS360. Additive only. No drops or type changes.
 - planned_leaves, employee_account_mapping
 
 ## Current File State
-- File: index.html | Lines: 10,890 | Latest commit: 98d6fad (+ res.error fix pending)
-- Phases complete: 1, 2, 3, 6B-DBT, Trainer Activity (L&D tab)
+- File: index.html | Lines: 11,250 | Latest commit: c67b8b8
+- Phases complete: 1, 2, 3, 6B-DBT, L&D Tab Redesign (full)
 - Next: Phase 4 — Account Health tab (read KNOWLEDGE.md for spec)
 
 ## Key Functions
@@ -36,8 +36,11 @@ Shared with OPS360. Additive only. No drops or type changes.
 - processReqTAT(): search "async function processReqTAT"
 - processCandidate(): search "async function processCandidate"
 - handleUploadFile(): search "function handleUploadFile"
-- switchTab() LIVE: line 4213 (line 3564 is dead code)
+- switchTab() LIVE: search "function switchTab" — second occurrence is live
 - computeHRBPScore(): search "function computeHRBPScore"
+- loadLDTab(): search "async function loadLDTab" — drives full L&D tab
+- _loadLDSessions(): search "async function _loadLDSessions"
+- _loadLDPipeline(): search "async function _loadLDPipeline"
 - CUSTOMER_LIST: global, populated at boot from customer_accounts
 - TA_ACTIVE_REQS: global, populated by processReqTAT
 - _absentCases: global, populated by loadAbsentCases()
@@ -47,7 +50,15 @@ Shared with OPS360. Additive only. No drops or type changes.
 - Absent resolution chip: reads window._absResolvedCount and
   window._absTotalCount — set in sbBoot() separately.
   Do NOT modify loadAbsentCases() query.
-- Duplicate switchTab: line 3564 is dead code, 4213 is live.
+- Duplicate switchTab: BOTH now call loadLDTab. Second definition is live.
+- L&D tab: renderLD() returns static shell only. loadLDTab() loads all
+  data async (training_sessions + training_pipeline). Fires on render()
+  and switchTab('ld'). Month selector id = ldMonthSel.
+- HRBP form has TWO training sections:
+  1. "Training Conducted This Week" → f_hrbp_training_entries → training_sessions
+  2. "Training Programs Planned / Conducted" → f_hrbp_pipeline → training_pipeline
+- LD form: f_ld_pipeline (structured grid) replaces old f_ld_upcoming free-text.
+  f_ld_upcoming hidden input kept for backward compat.
 
 ## Supabase
 - Project ID: mzyrcrkwgbqgwajkjdnp

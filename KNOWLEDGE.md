@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 2.2 | **Last updated:** 04 Jun 2026 — Trainer Activity panel
+**Version:** 2.3 | **Last updated:** 05 Jun 2026 — Full L&D tab redesign
 
 ---
 
@@ -71,6 +71,42 @@ var fnType = _sbRole ? (_sbRole.function_type || '') : '';
 ```
 Comparing only function_type blocks admin users (function_type='admin', not 'hrops').
 
+### L&D Tab Architecture (redesigned 05 Jun 2026)
+`renderLD(w, pw)` returns a static shell only — 5 KPI chips show "—/Loading…",
+two panel divs (`ldSessionsPanel`, `ldPipelinePanel`) show "Loading…" placeholders.
+
+`loadLDTab(monthKey)` drives all data loading:
+- Called by: render() (100ms after every full render), switchTab('ld'), ldMonthSel onChange
+- Fires both `_loadLDSessions(mk)` and `_loadLDPipeline(mk)` in parallel
+- Month selector id: `ldMonthSel` (was trainerMonthSel — removed)
+
+`_loadLDSessions(mk)`:
+- Queries training_sessions filtered by month_key
+- Updates ld-kpi-sessions + ld-kpi-pax KPI chips
+- Renders: category strip + 9-col unified table + summary bar
+
+`_loadLDPipeline(mk)`:
+- Queries training_pipeline WHERE status IN ('Planned','Confirmed')
+- Also queries all rows for Plan vs Actual calc
+- Updates ld-kpi-pipeline + ld-kpi-planvact KPI chips + ld-pipeline-badge
+- Renders 9-col pipeline table with status/priority colour coding
+
+Constants: `LD_TRAINERS` (7 names) + `LD_CATEGORIES` (6 types)
+Helpers: `_ldTh(label, align)`, `_fmtMonthKey(mk)`, `weekLabelToMonthKey(label)`
+
+### L&D Form Data Flow
+LD form (Deepak submits weekly):
+- f_ld_pipeline (structured grid) → training_pipeline on submit
+- f_ld_upcoming (hidden, kept for compat) — no longer shown in form UI
+- ld_sessions + ld_coverage still written to weekly_submissions (KPI cards NOT
+  driven by these anymore — now driven by training_sessions aggregate)
+
+HRBP form (each HRBP submits weekly):
+- Section 1 "Training Conducted": f_hrbp_training_entries → training_sessions
+  (writes: trainer=submitter_name, category=Behavioural, mode=Classroom)
+- Section 2 "Training Planned": f_hrbp_pipeline → training_pipeline
+  (writes: status=Planned, priority=Medium by default)
+
 ### HRBP Site Visit Cache
 `_hrbpSVCache` holds ALL site visits from hrbp_site_visits — not week-restricted.
 Journey Plan panel and scorecard both read from this cache.
@@ -91,9 +127,9 @@ before attempting any fix.
 
 ---
 
-## Current File State — 04 Jun 2026
-- Line count: 10,890 lines (latest confirmed after commit 98d6fad)
-- Latest commit: 98d6fad (+ res.error diagnostic fix, push pending verify)
+## Current File State — 05 Jun 2026
+- Line count: 11,250 lines (latest confirmed after commit c67b8b8)
+- Latest commit: c67b8b8
 - Local path: D:\Dropbox\CMS_IT_Services\Claude_Projects\Claude_HR_Automation\
   HR_OPS_COMMAND\cms-hr-dashboard\index.html
 
@@ -106,9 +142,16 @@ before attempting any fix.
 - 7407319: MoM future-month guard, MTD Joiners card, Absent deferred re-render fix
 - 7520369: Absent resolution chip — separate count query in sbBoot
 
+### Commits — 05 Jun 2026
+- 4af7593: Feat: HRBP training form → training_sessions, category breakdown in trainer panel
+- 9f7255e: Feat: training_pipeline table + structured pipeline forms (LD+HRBP), weekLabelToMonthKey helper
+- c67b8b8: Feat: Full L&D tab redesign — loadLDTab() unified sessions + pipeline panels, KPI async
+
 ### Commits — 04 Jun 2026
 - 2e927b3: Feat: Trainer Activity panel — training_sessions table, Maaz Khan + Deepak sessions seeded
 - 98d6fad: Fix: defer loadTrainerActivity 50ms + surface res.error explicitly
+- a11002f: Fix: auto-load trainer activity in render() — tab content resets on week-change
+- 5af6dec: Fix: loadTrainerActivity wired into live switchTab (line 4170)
 
 ### Commits — 25 May 2026
 - 2e230a5: Fix: DBT Recovery Centre visible to admin/executive (role gate + CSS vars)
@@ -325,9 +368,17 @@ Current data state (25 May 2026):
 - elah_deployment: empty — pending Elah parser build (Phase 6)
 - planned_leaves: empty — pending filename prefix from Ramesh
 - account_positions_log: 23 cols, 6 indexes (0 rows — new table)
-- training_sessions: trainer, training_name, month_key, week_key, region, mode, participants
+- training_sessions: trainer, training_name, month_key, week_key, region, mode, participants,
+  category, count_type, duration_hours, is_mandatory, account, notes, created_by
   31 rows seeded (9 Maaz Khan, 22 Deepak Kumar Shetty) across Feb–May 2026
-  RLS: ts_read_all (SELECT true), ts_insert_ld, ts_update_ld
+  Also written by: HRBP form (f_hrbp_training_entries → submitWeeklyForm)
+  RLS: ts_read_all (SELECT authenticated), ts_insert_ld, ts_update_ld
+- training_pipeline: training_name, planned_date, trainer, region, mode, category,
+  expected_pax, duration_hours, is_mandatory, account, priority, dependency,
+  status (Planned/Confirmed/Conducted/Postponed/Cancelled), postponed_to,
+  cancel_reason, session_id (FK→training_sessions), created_week_key, updated_week_key
+  Written by: LD form (f_ld_pipeline) + HRBP form (f_hrbp_pipeline) → submitWeeklyForm
+  RLS: tp_read_all, tp_insert_auth, tp_update_auth (all authenticated)
 
 ### Shared With OPS360 — FLAG BEFORE TOUCHING
 - workforce_intel, absent_cases, resignation_tracker
