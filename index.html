@@ -4207,6 +4207,7 @@ function switchTab(id, btn) {
   }
 
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadActionTasks, 100); }
+  else if(id==='ld') { setTimeout(function(){ var sel=document.getElementById('trainerMonthSel'); loadTrainerActivity(sel?sel.value:'2026-05'); }, 50); }
   else if(id==='users') renderUsersTab(el);
   else if(id==='accounts') renderAccountsTab(el);
   else if(id==='gallery') renderGalleryTab();
