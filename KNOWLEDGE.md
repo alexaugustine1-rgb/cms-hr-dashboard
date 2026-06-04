@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 2.3 | **Last updated:** 05 Jun 2026 — Full L&D tab redesign
+**Version:** 2.4 | **Last updated:** 05 Jun 2026 — HRBP schema (Session 1 of 4)
 
 ---
 
@@ -142,7 +142,13 @@ before attempting any fix.
 - 7407319: MoM future-month guard, MTD Joiners card, Absent deferred re-render fix
 - 7520369: Absent resolution chip — separate count query in sbBoot
 
-### Commits — 05 Jun 2026
+### Commits — 05 Jun 2026 (schema only — no index.html change)
+- HRBP schema Session 1: hrbp_site_visits extended (6 cols), hrbp_visit_plans created,
+  hrbp_er_cases created (trigger-based days_open/sla_breached),
+  hrbp_retention_cases + hrbp_discipline_cases created,
+  hrbp_photos.site_visit_id FK added
+
+### Commits — 05 Jun 2026 (index.html)
 - 4af7593: Feat: HRBP training form → training_sessions, category breakdown in trainer panel
 - 9f7255e: Feat: training_pipeline table + structured pipeline forms (LD+HRBP), weekLabelToMonthKey helper
 - c67b8b8: Feat: Full L&D tab redesign — loadLDTab() unified sessions + pipeline panels, KPI async
@@ -356,7 +362,27 @@ Current data state (25 May 2026):
 - prospective_joiners: upcoming joiners per account
 - ate_tracker: ATE cases with 14 new columns added 24 May
 - ate_advance_log: Sheetal's monthly advance + recovery log (0 rows — pending first upload)
-- hrbp_site_visits: visit details per submitter per account
+- hrbp_site_visits: visit details per submitter per account (18 cols after 05 Jun ALTER)
+  Added cols: hrbp_name, hrbp_user_id, key_discussion, issues_flagged, issue_details, updated_at
+  hrbp_name backfilled from submitter_name. RLS: hsv_read/insert/update_auth (authenticated)
+- hrbp_visit_plans: Plat/Gold visit planning by HRBP (0 rows — new)
+  Key cols: account_name, account_tier (Platinum/Gold), region, hrbp_name, planned_date,
+  status (Planned/Completed/Cancelled/Rescheduled), site_visit_id FK→hrbp_site_visits
+  RLS: hvp_read/insert/update_auth (authenticated)
+- hrbp_er_cases: structured ER cases per HRBP per week (0 rows — new)
+  Key cols: employee_name/code, case_type, status, opened_date, resolved_date,
+  days_open + sla_breached (auto-computed by trigger _hec_compute_days, SLA=7 days)
+  RLS: hec_read/insert/update_auth (authenticated)
+- hrbp_retention_cases: at-risk employee tracking per HRBP (0 rows — new)
+  Key cols: employee_name/code, account_name, risk_level (High/Medium/Watch),
+  conversation_summary, action_taken, followup_date, followup_done, resolved
+  RLS: hrc_read/insert/update_auth (authenticated)
+- hrbp_discipline_cases: disciplinary actions per HRBP (0 rows — new)
+  Key cols: employee_name/code, account_name, incident_type, incident_date,
+  action_taken (Verbal Warning/Written Warning/SCN/Suspension/Termination/Counselling/Other),
+  status (Open/In Progress/Closed/Appealed)
+  RLS: hdc_read/insert/update_auth (authenticated)
+- hrbp_photos: existing — added site_visit_id FK→hrbp_site_visits (05 Jun)
 - workforce_intel: HC, attrition, wage bill (id='current')
 - resignation_tracker: resignation cases
 - req_tracker: open requisitions
