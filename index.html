@@ -1712,17 +1712,81 @@ function isNil(s) {
 // ── HRBP SITE VISITS TAB LOADER ─────────────────────────────────────────
 var _hrbpSVCache = []; // ALL site visits from hrbp_site_visits table (not week-restricted)
 var _hrbpSubTab = 'connects'; // active HRBP sub-tab
+var _hrbpVPCache = []; // visit plans from hrbp_visit_plans
 async function loadHRBPSiteVisitsForTab() {
   if (!_sbUser || !_sb) return;
   try {
     var wk = currentWeek || '';
     // Fetch ALL site visits (no week filter) + fresh weekly_reports row in parallel
-    var [svRes, wrRes, subRes] = await Promise.all([
+    var _vpQuery = _sb.from('hrbp_visit_plans')
+      .select('*')
+      .in('status', ['Planned','Rescheduled'])
+      .order('planned_date', {ascending: true});
+    // HRBPs only see their own plans; admin/exec see all
+    var _vpIsHRBP = _sbRole && _sbRole.role === 'hrbp';
+    if (_vpIsHRBP && _sbRole.display_name) {
+      _vpQuery = _vpQuery.eq('hrbp_name', _sbRole.display_name);
+    }
+    var [svRes, wrRes, subRes, vpRes] = await Promise.all([
       _sb.from('hrbp_site_visits').select('*').order('visit_date', {ascending: false}),
       _sb.from('weekly_reports').select('*').eq('week_key', wk).single(),
-      _sb.from('weekly_submissions').select('submitter_name,region,function_type,hrbp_connect_details,hrbp_activities,hrbp_issues,hrbp_discipline,hrbp_site_visited').eq('week_key', wk).eq('function_type','hrbp')
+      _sb.from('weekly_submissions').select('submitter_name,region,function_type,hrbp_connect_details,hrbp_activities,hrbp_issues,hrbp_discipline,hrbp_site_visited').eq('week_key', wk).eq('function_type','hrbp'),
+      _vpQuery
     ]);
     if (!svRes.error && svRes.data) _hrbpSVCache = svRes.data;
+    if (!vpRes.error && vpRes.data) _hrbpVPCache = vpRes.data;
+    // One-time migration: if localStorage has plans and
+    // Supabase has none yet, migrate them
+    if (_hrbpVPCache.length === 0) {
+      try {
+        var _lsPlans = JSON.parse(
+          localStorage.getItem('cms_hrbp_visit_plans')||'{}'
+        );
+        var _lsKeys = Object.keys(_lsPlans);
+        if (_lsKeys.length > 0) {
+          var _migrRecs = [];
+          _lsKeys.forEach(function(k){
+            var p = _lsPlans[k];
+            // Find matching account in CUSTOMER_LIST
+            var acct = (CUSTOMER_LIST||[]).find(function(c){
+              return c.n.toUpperCase().trim() === k;
+            });
+            if (!acct) return;
+            _migrRecs.push({
+              account_name:  acct.n,
+              account_tier:  acct.t,
+              region:        acct.r||(_sbRole&&_sbRole.region)||'',
+              hrbp_name:     (_sbRole&&_sbRole.display_name)||'',
+              hrbp_user_id:  (_sbUser&&_sbUser.id)||null,
+              planned_date:  p.date||null,
+              status:        'Planned',
+              notes:         p.notes||'',
+              created_at:    p.savedAt||new Date().toISOString(),
+              updated_at:    new Date().toISOString()
+            });
+          });
+          if (_migrRecs.length > 0) {
+            var migrRes = await _sb.from('hrbp_visit_plans')
+              .insert(_migrRecs);
+            if (!migrRes.error) {
+              // Clear localStorage after successful migration
+              localStorage.removeItem('cms_hrbp_visit_plans');
+              // Reload cache with migrated data
+              var vpRes2 = await _sb.from('hrbp_visit_plans')
+                .select('*')
+                .in('status', ['Planned','Rescheduled'])
+                .order('planned_date', {ascending:true});
+              if (!vpRes2.error && vpRes2.data)
+                _hrbpVPCache = vpRes2.data;
+              console.info('[journeyPlan] Migrated',
+                _migrRecs.length, 'plans from localStorage');
+            }
+          }
+        }
+      } catch(e) {
+        console.warn('[journeyPlan migration]', e);
+      }
+    }
     // Refresh WEEKS_DATA with latest DB row (fixes stale in-memory data)
     if (!wrRes.error && wrRes.data) {
       WEEKS_DATA[wk] = wrRes.data;
@@ -1795,9 +1859,20 @@ function buildJourneyPlanPanel() {
     });
   });
 
-  // Load visit plans from localStorage
+  // Load visit plans from Supabase cache (keyed by account_name upper)
   var visitPlans = {};
-  try { visitPlans = JSON.parse(localStorage.getItem('cms_hrbp_visit_plans')||'{}'); } catch(e){}
+  (_hrbpVPCache||[]).forEach(function(vp){
+    var k = (vp.account_name||'').toUpperCase().trim();
+    if (k) visitPlans[k] = {
+      id:       vp.id,
+      date:     vp.planned_date||'',
+      type:     vp.notes||'',
+      notes:    vp.notes||'',
+      status:   vp.status||'Planned',
+      hrbp:     vp.hrbp_name||'',
+      savedAt:  vp.created_at||''
+    };
+  });
 
   var today = new Date();
   var tierCol = {Platinum:'#a78bfa',Gold:'#f59e0b'};
@@ -2265,34 +2340,60 @@ function openPlanVisitModal(ci) {
   document.body.appendChild(overlay);
 }
 
-function _savePlanAndClose(ci) {
+async function _savePlanAndClose(ci) {
   var entry = (window._jpMap||{})[ci];
   if (!entry) return;
   var dateVal = (document.getElementById('_pvDate')||{}).value||'';
   if (!dateVal) { alert('Please select a visit date.'); return; }
   var typeVal = (document.getElementById('_pvType')||{}).value||'Connect';
   var notesVal = (document.getElementById('_pvNotes')||{}).value||'';
-  var key = entry.key;
-  var plans = {};
-  try { plans = JSON.parse(localStorage.getItem('cms_hrbp_visit_plans')||'{}'); } catch(e){}
-  plans[key] = {date:dateVal, type:typeVal, notes:notesVal, savedAt:new Date().toISOString()};
-  localStorage.setItem('cms_hrbp_visit_plans', JSON.stringify(plans));
+  var acct = entry.acct;
+  var key  = entry.key;
+  // Check if a plan already exists for this account in cache
+  var existing = (_hrbpVPCache||[]).find(function(vp){
+    return (vp.account_name||'').toUpperCase().trim() === key;
+  });
+  var rec = {
+    account_name:  acct.n,
+    account_tier:  acct.t,
+    region:        acct.r || (_sbRole&&_sbRole.region)||'',
+    hrbp_name:     (_sbRole&&_sbRole.display_name)||'',
+    hrbp_user_id:  (_sbUser&&_sbUser.id)||null,
+    planned_date:  dateVal,
+    status:        'Planned',
+    notes:         notesVal,
+    updated_at:    new Date().toISOString()
+  };
+  try {
+    if (existing && existing.id) {
+      await _sb.from('hrbp_visit_plans').update(rec).eq('id', existing.id);
+    } else {
+      rec.created_at = new Date().toISOString();
+      await _sb.from('hrbp_visit_plans').insert(rec);
+    }
+  } catch(e) { console.warn('[savePlan]', e); }
   var overlay = document.getElementById('_jpModalOverlay');
   if (overlay) overlay.remove();
-  render();
+  await loadHRBPSiteVisitsForTab();
 }
 
-function _cancelPlan(ci) {
+async function _cancelPlan(ci) {
   var entry = (window._jpMap||{})[ci];
   if (!entry) return;
   var key = entry.key;
-  var plans = {};
-  try { plans = JSON.parse(localStorage.getItem('cms_hrbp_visit_plans')||'{}'); } catch(e){}
-  delete plans[key];
-  localStorage.setItem('cms_hrbp_visit_plans', JSON.stringify(plans));
+  var existing = (_hrbpVPCache||[]).find(function(vp){
+    return (vp.account_name||'').toUpperCase().trim() === key;
+  });
+  if (existing && existing.id) {
+    try {
+      await _sb.from('hrbp_visit_plans')
+        .update({status:'Cancelled', updated_at: new Date().toISOString()})
+        .eq('id', existing.id);
+    } catch(e) { console.warn('[cancelPlan]', e); }
+  }
   var overlay = document.getElementById('_jpModalOverlay');
   if (overlay) overlay.remove();
-  render();
+  await loadHRBPSiteVisitsForTab();
 }
 
 // ─── RENDER HRBP ──────────────────────────────────────────────
@@ -2724,9 +2825,9 @@ function renderHRBP(w, pw) {
     _scorecardSVs.forEach(function(sv){ if(sv.account_name) visitedSet[sv.account_name.toUpperCase().trim()]=1; });
     var visitedCount = Object.keys(visitedSet).length;
     var overdueCount = Math.max(0, totalAccounts - visitedCount);
-    var visitPlans2 = {};
-    try { visitPlans2 = JSON.parse(localStorage.getItem('cms_hrbp_visit_plans')||'{}'); } catch(e){}
-    var plannedCount = Object.keys(visitPlans2).length;
+    var plannedCount = (_hrbpVPCache||[]).filter(function(vp){
+      return vp.status === 'Planned' || vp.status === 'Rescheduled';
+    }).length;
     return '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">'
       +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
       +'<div style="font-size:22px;font-weight:700;color:var(--accent)">'+totalAccounts+'</div>'
