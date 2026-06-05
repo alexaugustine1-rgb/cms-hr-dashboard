@@ -1711,6 +1711,7 @@ function isNil(s) {
 
 // ── HRBP SITE VISITS TAB LOADER ─────────────────────────────────────────
 var _hrbpSVCache = []; // ALL site visits from hrbp_site_visits table (not week-restricted)
+var _hrbpSubTab = 'connects'; // active HRBP sub-tab
 async function loadHRBPSiteVisitsForTab() {
   if (!_sbUser || !_sb) return;
   try {
@@ -2670,76 +2671,111 @@ function renderHRBP(w, pw) {
   // Activities from connects
   const activityItems=(_allConnects||[]).filter(function(c){return c.activities&&c.activities.trim()&&c.activities.length>5;}).map(function(c){return c.activities.split('\n').filter(function(l){return l.trim().length>5;}).map(function(l){return `<div class="attr-row"><div class="attr-icon">📌</div><div class="attr-body"><div class="attr-text">${esc(trim(l.trim(),160))}</div><div class="attr-meta">${esc(c.name||'')} ${rtag(c.region||'')}</div></div></div>`;}).join('');}).join('');
 
-  return `
+  // ── Sub-tab nav ──────────────────────────────────────────────
+  const _tabs = [
+    {id:'connects',    label:'🤝 Connects'},
+    {id:'journey',     label:'🗓️ Journey Plan'},
+    {id:'peoplerisk',  label:'⚠️ People Risk'},
+    {id:'scorecard',   label:'🏆 Scorecard'},
+  ];
+  const _tabNav = '<div style="display:flex;gap:4px;margin-bottom:20px;background:var(--surface3);'
+    +'border:1px solid var(--border);border-radius:12px;padding:5px">'
+    + _tabs.map(function(t){
+        const active = _hrbpSubTab === t.id;
+        return '<button onclick="_hrbpSubTab=\''+t.id+'\';render()" '
+          +'style="flex:1;padding:8px 10px;border-radius:8px;border:none;cursor:pointer;'
+          +'font-size:12px;font-weight:'+(active?'700':'500')+';'
+          +'background:'+(active?'var(--accent)':'transparent')+';'
+          +'color:'+(active?'#fff':'var(--muted)')+';transition:all .15s">'
+          +t.label+'</button>';
+      }).join('')
+    +'</div>';
 
+  // ── Connects sub-tab ─────────────────────────────────────────
+  const _connectsPanel = `
     <div class="section-label">HRBP Numbers · ${esc(w.label)}</div>
     <div class="mini-stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--accent)">${actualVisits}</div><div class="mini-stat-label">Site Visits / Connects</div></div>
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--green)">${w.hrbp_connects.length}</div><div class="mini-stat-label">Detailed Connects Logged</div></div>
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--amber)">${w.hrbp_discipline.filter(d=>!isNil(d)&&d.length>10).length}</div><div class="mini-stat-label">ER / Discipline Cases</div></div>
     </div>
-
     ${_leaderboard}
-
-    <div class="two-col">
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">🗓️ Employee & Site Connects</div>
-          <span class="card-badge green">${w.hrbp_visits} visits</span>
-        </div>
-        <div class="card-body">${connectItems}</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🗓️ Employee & Site Connects</div>
+        <span class="card-badge green">${w.hrbp_visits} visits</span>
       </div>
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">📊 Coverage Scorecard</div>
-        </div>
-        <div class="card-body">${(function(){
-          var fnType2 = (_sbRole&&_sbRole.function_type)||'';
-          var role2   = (_sbRole&&_sbRole.role)||'';
-          var isPanIndia2 = role2==='admin'||role2==='executive'||fnType2==='hrops'||fnType2==='payroll'
-            ||!_hcR||_hcR==='All'||_hcR==='Pan India';
-          var totalAccounts = (CUSTOMER_LIST||[]).filter(function(c){
-            return (c.t==='Platinum'||c.t==='Gold') && (isPanIndia2 || c.r===_hcR);
-          }).length;
-          // Scope visited accounts to this HRBP's own visits; admin/exec see all-India
-          var _scorecardSVs = (isPanIndia2 && !(role2==='hrbp'))
-            ? (_hrbpSVCache||[])
-            : (_mySVs||[]);
-          var visitedSet = {};
-          _scorecardSVs.forEach(function(sv){ if(sv.account_name) visitedSet[sv.account_name.toUpperCase().trim()]=1; });
-          var visitedCount = Object.keys(visitedSet).length;
-          var overdueCount = Math.max(0, totalAccounts - visitedCount);
-          var visitPlans2 = {};
-          try { visitPlans2 = JSON.parse(localStorage.getItem('cms_hrbp_visit_plans')||'{}'); } catch(e){}
-          var plannedCount = Object.keys(visitPlans2).length;
-          return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-            +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
-            +'<div style="font-size:22px;font-weight:700;color:var(--accent)">'+totalAccounts+'</div>'
-            +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Total Plat/Gold</div>'
-            +'</div>'
-            +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
-            +'<div style="font-size:22px;font-weight:700;color:var(--green)">'+visitedCount+'</div>'
-            +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Visited</div>'
-            +'</div>'
-            +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
-            +'<div style="font-size:22px;font-weight:700;color:var(--red)">'+overdueCount+'</div>'
-            +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Overdue</div>'
-            +'</div>'
-            +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
-            +'<div style="font-size:22px;font-weight:700;color:#60a5fa">'+plannedCount+'</div>'
-            +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Planned</div>'
-            +'</div>'
-            +'</div>';
-        })()}</div>
-      </div>
-    </div>
+      <div class="card-body">${connectItems}</div>
+    </div>`;
 
-    ${buildJourneyPlanPanel()}
+  // ── Journey Plan sub-tab ─────────────────────────────────────
+  const _coverageGrid = (function(){
+    var fnType2 = (_sbRole&&_sbRole.function_type)||'';
+    var role2   = (_sbRole&&_sbRole.role)||'';
+    var isPanIndia2 = role2==='admin'||role2==='executive'||fnType2==='hrops'||fnType2==='payroll'
+      ||!_hcR||_hcR==='All'||_hcR==='Pan India';
+    var totalAccounts = (CUSTOMER_LIST||[]).filter(function(c){
+      return (c.t==='Platinum'||c.t==='Gold') && (isPanIndia2 || c.r===_hcR);
+    }).length;
+    var _scorecardSVs = (isPanIndia2 && !(role2==='hrbp'))
+      ? (_hrbpSVCache||[])
+      : (_mySVs||[]);
+    var visitedSet = {};
+    _scorecardSVs.forEach(function(sv){ if(sv.account_name) visitedSet[sv.account_name.toUpperCase().trim()]=1; });
+    var visitedCount = Object.keys(visitedSet).length;
+    var overdueCount = Math.max(0, totalAccounts - visitedCount);
+    var visitPlans2 = {};
+    try { visitPlans2 = JSON.parse(localStorage.getItem('cms_hrbp_visit_plans')||'{}'); } catch(e){}
+    var plannedCount = Object.keys(visitPlans2).length;
+    return '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">'
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
+      +'<div style="font-size:22px;font-weight:700;color:var(--accent)">'+totalAccounts+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Total Plat/Gold</div>'
+      +'</div>'
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
+      +'<div style="font-size:22px;font-weight:700;color:var(--green)">'+visitedCount+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Visited</div>'
+      +'</div>'
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
+      +'<div style="font-size:22px;font-weight:700;color:var(--red)">'+overdueCount+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Overdue</div>'
+      +'</div>'
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center">'
+      +'<div style="font-size:22px;font-weight:700;color:#60a5fa">'+plannedCount+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);margin-top:2px">Planned</div>'
+      +'</div>'
+      +'</div>';
+  })();
 
-    <div id="hrbp-scorecard-panel" style="margin-bottom:18px"></div>
+  const _journeyPanel = `
+    <div class="section-label">Journey Plan · Coverage</div>
+    ${_coverageGrid}
+    ${buildJourneyPlanPanel()}`;
 
-    ${(w.hrbp_case_entries&&w.hrbp_case_entries.length)?`<div style="margin-bottom:16px">`+`<div class="section-label">ER Case Entries</div>`+w.hrbp_case_entries.map(function(c){const sev=c.severity||'Medium';const sevCol=sev==='Critical'?'var(--red)':sev==='High'?'var(--amber)':'var(--muted)';return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${sevCol};border-radius:8px;padding:10px 14px;margin-bottom:8px">`+`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">`+`<div style="font-size:12px;font-weight:600;color:var(--text)">${esc(c.employee||'')} &mdash; ${esc(c.account||'')}</div>`+`<div style="display:flex;gap:5px">`+`<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(148,163,184,.1);color:var(--muted);font-weight:600">${esc(c.caseType||'')}</span>`+`<span style="font-size:9px;padding:1px 7px;border-radius:10px;font-weight:600;color:${sevCol};background:${sevCol}18">${esc(sev)}</span>`+`</div></div>`+`<div style="font-size:11px;color:var(--muted);line-height:1.5">${esc(trim(c.description||'',200))}</div>`+`<div style="font-size:10px;color:var(--muted2);margin-top:3px">${esc(c.by||'')} ${c.region?rtag(c.region):''}</div>`+`</div>`;}).join('')+`</div>`:''}
-    <div class="section-label">Employee Relations & Retention</div>
+  // ── People Risk sub-tab ──────────────────────────────────────
+  const _erCaseEntries = (w.hrbp_case_entries&&w.hrbp_case_entries.length)
+    ? `<div style="margin-bottom:16px">`
+      +`<div class="section-label">ER Case Entries</div>`
+      +w.hrbp_case_entries.map(function(c){
+          const sev=c.severity||'Medium';
+          const sevCol=sev==='Critical'?'var(--red)':sev==='High'?'var(--amber)':'var(--muted)';
+          return `<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${sevCol};border-radius:8px;padding:10px 14px;margin-bottom:8px">`
+            +`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">`
+            +`<div style="font-size:12px;font-weight:600;color:var(--text)">${esc(c.employee||'')} &mdash; ${esc(c.account||'')}</div>`
+            +`<div style="display:flex;gap:5px">`
+            +`<span style="font-size:9px;padding:1px 7px;border-radius:10px;background:rgba(148,163,184,.1);color:var(--muted);font-weight:600">${esc(c.caseType||'')}</span>`
+            +`<span style="font-size:9px;padding:1px 7px;border-radius:10px;font-weight:600;color:${sevCol};background:${sevCol}18">${esc(sev)}</span>`
+            +`</div></div>`
+            +`<div style="font-size:11px;color:var(--muted);line-height:1.5">${esc(trim(c.description||'',200))}</div>`
+            +`<div style="font-size:10px;color:var(--muted2);margin-top:3px">${esc(c.by||'')} ${c.region?rtag(c.region):''}</div>`
+            +`</div>`;
+        }).join('')
+      +`</div>`
+    : '';
+
+  const _peopleRiskPanel = `
+    <div class="section-label">Employee Relations &amp; Retention</div>
+    ${_erCaseEntries}
     <div class="two-col">
       <div class="card">
         <div class="card-header">
@@ -2755,7 +2791,6 @@ function renderHRBP(w, pw) {
         <div class="card-body">${retentionItems}</div>
       </div>
     </div>
-
     <div class="section-label">Open Issues Needing Leadership Support</div>
     <div class="card">
       <div class="card-header">
@@ -2764,6 +2799,25 @@ function renderHRBP(w, pw) {
       </div>
       <div class="card-body">${issueItems}</div>
     </div>`;
+
+  // ── Scorecard sub-tab ────────────────────────────────────────
+  const _scorecardPanel = `
+    <div class="section-label">HRBP Performance Scorecard</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">
+      Scores are visible to all HRBPs. Updated weekly after submission deadline.
+    </div>
+    <div id="hrbp-scorecard-panel" style="margin-bottom:18px"></div>`;
+
+  // ── Active panel ─────────────────────────────────────────────
+  const _activePanel = _hrbpSubTab === 'journey'
+    ? _journeyPanel
+    : _hrbpSubTab === 'peoplerisk'
+      ? _peopleRiskPanel
+      : _hrbpSubTab === 'scorecard'
+        ? _scorecardPanel
+        : _connectsPanel;
+
+  return _tabNav + _activePanel;
 }
 
 // ─── RENDER L&D ────────────────────────────────────────────────
@@ -3617,6 +3671,10 @@ function render() {
     catch(e) { console.error('[render] tab', tab, 'crashed:', e.message); }
   });
 
+  // Auto-load HRBP scorecard when Scorecard sub-tab is active
+  if (typeof _hrbpSubTab !== 'undefined' && _hrbpSubTab === 'scorecard' && typeof renderHRBPScorecardIntoDOM === 'function') {
+    setTimeout(renderHRBPScorecardIntoDOM, 50);
+  }
   // Load async HRBP visit alerts if logged in
   if (typeof _sbUser !== 'undefined' && _sbUser && typeof loadHRBPVisitAlerts === 'function') {
     loadHRBPVisitAlerts();
@@ -9304,6 +9362,7 @@ function snavClick(id, el) {
   // Switch tab content
   switchTab(id);
   // Re-render static tabs so region/filter changes are applied
+  if(id==='hrbp') _hrbpSubTab = 'connects';
   var staticTabs = ['overview','risks','workforce','resignation','od','fnf','ld','hrbp','acct-health','tapipeline','ta','ops'];
   if(staticTabs.indexOf(id) >= 0 && typeof render === 'function') render();
   // Async tabs handled separately
