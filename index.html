@@ -2273,9 +2273,6 @@ async function renderHRBPScorecardIntoDOM() {
   var el = document.getElementById('hrbp-scorecard-panel');
   if (!el) return;
 
-  var role = (_sbRole&&_sbRole.role)||'';
-  if (role !== 'admin' && role !== 'executive') { el.style.display='none'; return; }
-
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">Computing HRBP scorecards…</div>';
 
   var wkKeys = Object.keys(WEEKS_DATA||{}).sort();
@@ -2326,10 +2323,15 @@ async function renderHRBPScorecardIntoDOM() {
     dynMons:        dynMons2,
   };
 
-  var scores = HRBP_ROSTER.map(function(h) {
+  var scores = (typeof HRBP_ROSTER !== 'undefined' ? HRBP_ROSTER : []).map(function(h) {
     return {hrbp:h, score:computeHRBPScore(h.name, h.region, sharedData)};
   }).sort(function(a,b){ return b.score.total - a.score.total; });
 
+  if (!scores.length) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">'
+      +'No scorecard data yet — scores are computed after weekly submissions are received.</div>';
+    return;
+  }
   el.innerHTML = renderScorecardHTML(scores, last4);
 }
 
@@ -2580,11 +2582,11 @@ function renderHRBP(w, pw) {
   }
   const _allConnects = w.hrbp_connects || [];
   const _isHRBP = typeof _sbRole !== 'undefined' && _sbRole && _sbRole.role === 'hrbp';
-  // Region filter: HRBP users locked to their own region; admin/exec use the filter variable
-  const _hcR = _isHRBP
-    ? (_sbRole.region || 'All')
-    : ((typeof _hrbpConnectRegion !== 'undefined' && _hrbpConnectRegion && _hrbpConnectRegion !== 'All')
-        ? _hrbpConnectRegion
+  // Region filter: all roles can filter; HRBPs default to own region if no filter set
+  const _hcR = (typeof _hrbpConnectRegion !== 'undefined' && _hrbpConnectRegion && _hrbpConnectRegion !== 'All')
+    ? _hrbpConnectRegion
+    : (_isHRBP
+        ? (_sbRole.region || 'All')
         : (typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India' ? _sbRole.region : 'All'));
   // HRBP name filter (admin/exec only)
   const _hcH = (typeof _hrbpSVHRBP !== 'undefined') ? _hrbpSVHRBP : 'All';
@@ -2600,14 +2602,12 @@ function renderHRBP(w, pw) {
 
   // ── Filter bar ──────────────────────────────────────────────────────────
   // Region tabs
-  const _regionTabsHtml = _isHRBP
-    ? '<span style="font-size:11px;font-weight:700;padding:3px 14px;border-radius:20px;background:rgba(96,165,250,.12);color:var(--accent);border:1px solid rgba(96,165,250,.3)">'+esc(_hcR)+' Region</span>'
-    : ['All','North','South','East','West'].map(function(r){
-        const active = (r === 'All' && _hcR === 'All') || (r === _hcR);
-        const cnt = r === 'All' ? _svAll.length : _svAll.filter(function(sv){ return sv.region === r; }).length;
-        if (r !== 'All' && cnt === 0) return '';
-        return '<button onclick="_hrbpConnectRegion=\''+r+'\';_hrbpSVHRBP=\'All\';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#fff':'var(--muted)')+'">'+esc(r)+(cnt>0&&r!=='All'?' ('+cnt+')':'')+'</button>';
-      }).join('');
+  const _regionTabsHtml = ['All','North','South','East','West'].map(function(r){
+      const active = (r === 'All' && _hcR === 'All') || (r === _hcR);
+      const cnt = r === 'All' ? _svAll.length : _svAll.filter(function(sv){ return sv.region === r; }).length;
+      if (r !== 'All' && cnt === 0) return '';
+      return '<button onclick="_hrbpConnectRegion=\''+r+'\';_hrbpSVHRBP=\'All\';render()" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#fff':'var(--muted)')+'">'+esc(r)+(cnt>0&&r!=='All'?' ('+cnt+')':'')+'</button>';
+    }).join('');
 
   // HRBP dropdown — built from distinct names in filtered-by-region pool
   const _hrbpNames = [];
@@ -2619,7 +2619,7 @@ function renderHRBP(w, pw) {
         _hrbpNames.push(sv.submitter_name);
       }
     });
-  const _hrbpDropdown = !_isHRBP && _hrbpNames.length > 1
+  const _hrbpDropdown = _hrbpNames.length > 1
     ? '<select onchange="_hrbpSVHRBP=this.value;render()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;min-width:160px">'
       + '<option value="All"' + (_hcH==='All'?' selected':'')+'>All HRBPs</option>'
       + _hrbpNames.map(function(n){ return '<option value="'+esc(n)+'"'+(_hcH===n?' selected':'')+'>'+esc(n)+'</option>'; }).join('')
@@ -2818,7 +2818,7 @@ function renderHRBP(w, pw) {
     {id:'scorecard',   label:'🏆 Scorecard'},
   ];
   const _tabNav = '<div style="display:flex;gap:4px;margin-bottom:20px;background:var(--surface3);'
-    +'border:1px solid var(--border);border-radius:12px;padding:5px">'
+    +'border:1px solid var(--border);border-radius:12px;padding:5px;width:100%;box-sizing:border-box">'
     + _tabs.map(function(t){
         const active = _hrbpSubTab === t.id;
         return '<button onclick="_hrbpSubTab=\''+t.id+'\';render()" '
@@ -2834,7 +2834,7 @@ function renderHRBP(w, pw) {
   const _connectsPanel = `
     <div class="section-label">HRBP Numbers · ${esc(w.label)}</div>
     <div class="mini-stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
-      <div class="mini-stat"><div class="mini-stat-val" style="color:var(--accent)">${actualVisits}</div><div class="mini-stat-label">Site Visits / Connects</div></div>
+      <div class="mini-stat"><div class="mini-stat-val" style="color:var(--accent)">${actualVisits}</div><div class="mini-stat-label">Site Visits (All Time)</div></div>
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--green)">${w.hrbp_connects.length}</div><div class="mini-stat-label">Detailed Connects Logged</div></div>
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--amber)">${w.hrbp_discipline.filter(d=>!isNil(d)&&d.length>10).length}</div><div class="mini-stat-label">ER / Discipline Cases</div></div>
     </div>
