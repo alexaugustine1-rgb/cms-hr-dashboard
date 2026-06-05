@@ -1713,6 +1713,44 @@ function isNil(s) {
 var _hrbpSVCache = []; // ALL site visits from hrbp_site_visits table (not week-restricted)
 var _hrbpSubTab = 'connects'; // active HRBP sub-tab
 var _hrbpVPCache = []; // visit plans from hrbp_visit_plans
+var _wfhOdActions = {}; // emp_name → action for current month/view
+async function loadWFHODActions(monthKey, viewType) {
+  if (!_sbUser || !_sb) return;
+  try {
+    var res = await _sb.from('wfh_od_actions')
+      .select('emp_name,action')
+      .eq('month_key', monthKey)
+      .eq('view_type', viewType);
+    _wfhOdActions = {};
+    if (!res.error && res.data) {
+      res.data.forEach(function(r){
+        _wfhOdActions[r.emp_name.trim()] = r.action;
+      });
+    }
+  } catch(e) { console.warn('[loadWFHODActions]', e); }
+}
+
+async function saveODAction(empName, monthKey, viewType, region, action) {
+  if (!_sbUser || !_sb || !action) return;
+  var actioner = (_sbRole&&_sbRole.display_name)||_sbUser.email||'';
+  try {
+    await _sb.from('wfh_od_actions').upsert({
+      emp_name:       empName,
+      month_key:      monthKey,
+      view_type:      viewType,
+      region:         region,
+      action:         action,
+      actioned_by:    actioner,
+      actioned_by_id: _sbUser.id,
+      updated_at:     new Date().toISOString()
+    }, { onConflict: 'emp_name,month_key,view_type' });
+    _wfhOdActions[empName.trim()] = action;
+    // Re-render the tab to reflect updated action colour
+    var el = document.getElementById('tab-od');
+    if (el) el.innerHTML = renderOD();
+  } catch(e) { console.warn('[saveODAction]', e); }
+}
+
 async function loadHRBPSiteVisitsForTab() {
   if (!_sbUser || !_sb) return;
   try {
@@ -4498,7 +4536,15 @@ function switchTab(id, btn) {
   else if(id==='accounts') renderAccountsTab(el);
   else if(id==='gallery') renderGalleryTab();
   else if(id==='resignation'){const mc=document.getElementById('tab-resignation');if(mc)mc.innerHTML=renderResignation();}
-  else if(id==='od'){const mc=document.getElementById('tab-od');if(mc)mc.innerHTML=renderOD();}
+  else if(id==='od'){
+    var _odEl=document.getElementById('tab-od');
+    if(_odEl){
+      _odEl.innerHTML=renderOD();
+      var _odMk=(window._odMonth)||'';
+      var _odVt=(_odView==='WFH')?'WFH':'OD';
+      if(_odMk) loadWFHODActions(_odMk,_odVt);
+    }
+  }
   else if(id==='tapipeline'){const mc=document.getElementById('tab-tapipeline');if(mc)mc.innerHTML=renderTAPipeline();}
   else if(id==='fnf'){const mc=document.getElementById('tab-fnf');if(mc)mc.innerHTML=renderFnF();}
   else if(id==='acct-health'){_ahFilters={region:'All',tier:'All',health:'All'};const mc=document.getElementById('tab-acct-health');if(mc)mc.innerHTML=renderAccountHealth();}
@@ -6225,10 +6271,13 @@ async function submitWeeklyForm(fnType,region){
   }
   // ── Write ER cases to hrbp_er_cases ──────────────────────
   if(fnType==='hrbp'&&(_caseEntries||[]).length>0){
+    // ER cases (excluding Discipline) → hrbp_er_cases
     var _erRecs=(_caseEntries||[])
-      .filter(function(ce){return ce.caseType!=='Retention';})
+      .filter(function(ce){
+        return ce.caseType!=='Retention'&&ce.caseType!=='Discipline';
+      })
       .map(function(ce){
-        var _ctMap={ER:'Misconduct',Abscond:'Absenteeism',Discipline:'Misconduct',Other:'Other'};
+        var _ctMap={ER:'Misconduct',Abscond:'Absenteeism',Other:'Other'};
         return{
           week_key:     _formWeekKey,
           region:       region||_sbRole.region||'',
@@ -6243,6 +6292,32 @@ async function submitWeeklyForm(fnType,region){
         };
       });
     if(_erRecs.length>0)await _sb.from('hrbp_er_cases').insert(_erRecs);
+    // Discipline entries → hrbp_discipline_cases
+    var _discRecs=(_caseEntries||[])
+      .filter(function(ce){return ce.caseType==='Discipline';})
+      .map(function(ce){
+        var _sevToAction={
+          High:'Show Cause Notice',
+          Critical:'Show Cause Notice',
+          Medium:'Verbal Warning',
+          Low:'Counselling'
+        };
+        return{
+          week_key:      _formWeekKey,
+          region:        region||_sbRole.region||'',
+          hrbp_name:     record.submitter_name,
+          hrbp_user_id:  _sbUser.id,
+          employee_name: ce.employee||'Not specified',
+          employee_code: null,
+          account_name:  ce.account||null,
+          incident_type: 'Misconduct',
+          description:   ce.description||'',
+          action_taken:  _sevToAction[ce.severity]||'Verbal Warning',
+          status:        'Open'
+        };
+      });
+    if(_discRecs.length>0)
+      await _sb.from('hrbp_discipline_cases').insert(_discRecs);
   }
 
   // ── Write retention cases to hrbp_retention_cases ────────
@@ -7764,7 +7839,7 @@ function renderOD(){
 
   // ── Month selector buttons
   const monthBtns = months.map(m =>
-    '<button onclick="window._odMonth=\''+m+'\';document.getElementById(\'tab-od\').innerHTML=renderOD()" '
+    '<button onclick="window._odMonth=\''+m+'\';document.getElementById(\'tab-od\').innerHTML=renderOD();loadWFHODActions(\''+m+'\',_odView===\'WFH\'?\'WFH\':\'OD\')" '
     +'style="padding:6px 14px;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;'
     +'background:'+(m===selMonth?'var(--accent)':'var(--surface3)')+';'
     +'color:'+(m===selMonth?'var(--bg)':'var(--muted)')+';font-family:\'DM Mono\',monospace;letter-spacing:.5px">'+m+'</button>'
@@ -7773,8 +7848,8 @@ function renderOD(){
   // ── View toggle
   const viewToggle =
     '<div style="display:flex;gap:0;background:var(--surface3);border:1px solid var(--border);border-radius:8px;padding:3px;width:fit-content">'
-    +'<button onclick="_odView=\'OD\';document.getElementById(\'tab-od\').innerHTML=renderOD()" style="padding:7px 24px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:'+(!isWFH?'var(--accent)':'transparent')+';color:'+(!isWFH?'var(--bg)':'var(--muted)')+';font-family:\'DM Mono\',monospace;letter-spacing:.5px">Outdoor Duty</button>'
-    +'<button onclick="_odView=\'WFH\';document.getElementById(\'tab-od\').innerHTML=renderOD()" style="padding:7px 24px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:'+(isWFH?'var(--accent)':'transparent')+';color:'+(isWFH?'var(--bg)':'var(--muted)')+';font-family:\'DM Mono\',monospace;letter-spacing:.5px">WFH</button>'
+    +'<button onclick="_odView=\'OD\';document.getElementById(\'tab-od\').innerHTML=renderOD();loadWFHODActions(window._odMonth||\'\',' + '\'OD\')" style="padding:7px 24px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:'+(!isWFH?'var(--accent)':'transparent')+';color:'+(!isWFH?'var(--bg)':'var(--muted)')+';font-family:\'DM Mono\',monospace;letter-spacing:.5px">Outdoor Duty</button>'
+    +'<button onclick="_odView=\'WFH\';document.getElementById(\'tab-od\').innerHTML=renderOD();loadWFHODActions(window._odMonth||\'\',' + '\'WFH\')" style="padding:7px 24px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:'+(isWFH?'var(--accent)':'transparent')+';color:'+(isWFH?'var(--bg)':'var(--muted)')+';font-family:\'DM Mono\',monospace;letter-spacing:.5px">WFH</button>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--muted2);margin-bottom:12px">Data as of '+(function(d){if(!d)return'--';var _dt=new Date(d);return _dt.getDate().toString().padStart(2,'0')+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_dt.getMonth()]+' '+_dt.getFullYear();})(window.OD_CACHE_DATE||null)+'</div>';
 
@@ -7810,11 +7885,20 @@ function renderOD(){
   }
 
   // ── Policy flags
+  // Multi-instance count for KPI summary
+  const _multiCount = viewArr.filter(r => r.multi > 2).length;
   const flags = [];
   if (!isWFH && summary.high_od > 0) {
     flags.push('<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:10px 14px;font-size:12px">'
       +'<span style="color:var(--amber);font-weight:600">⚠ '+summary.high_od+' employees</span>'
       +' had OD applications on every working day this month ('+workDays+'+ days). Likely full-time field roles — verify account assignment is correct in ZingHR.</div>');
+  }
+  if (_multiCount > 0) {
+    flags.push('<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3);'
+      +'border-radius:8px;padding:10px 14px;font-size:12px">'
+      +'<span style="color:var(--amber);font-weight:600">⚠ '+_multiCount+' employee'
+      +(_multiCount>1?'s':'')+' with repeat multi-day '+(isWFH?'WFH':'OD')+' applications</span>'
+      +' this month. Review for pattern abuse or legitimate field roles.</div>');
   }
   if (isWFH && summary.wfh_excess > 0) {
     flags.push('<div style="background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;font-size:12px">'
@@ -7873,14 +7957,39 @@ function renderOD(){
     const approverBadge = r.approver
       ? '<span style="font-size:10px;color:var(--green)">✓ '+esc(r.approver)+'</span>'
       : '<span style="font-size:10px;color:var(--amber)">Pending</span>';
-    return '<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 100px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';font-size:12px;align-items:center">'
+    var multiBadge = (r.multi && r.multi > 2)
+      ? '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;'
+        +'background:rgba(251,191,36,.15);color:var(--amber);border:1px solid rgba(251,191,36,.4);'
+        +'margin-left:4px;white-space:nowrap">'+r.multi+'× multi</span>'
+      : '';
+    var _odAction = (typeof _wfhOdActions !== 'undefined' && _wfhOdActions)
+      ? _wfhOdActions[r.name.trim()] : null;
+    var _isActioner = typeof _sbRole !== 'undefined' && _sbRole
+      && (_sbRole.role==='admin'||_sbRole.role==='executive'||_sbRole.function_type==='hrbp');
+    var actionCell = _isActioner
+      ? '<select onchange="saveODAction(\''+r.name.replace(/'/g,"\\'")+'\',' +
+          '\''+selMonth+'\',\''+(!isWFH?'OD':'WFH')+'\',\''+esc(r.region)+'\',this.value)" '
+        +'style="font-size:10px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border);'
+        +'border-radius:5px;color:'+(_odAction?'var(--green)':'var(--muted)')+';cursor:pointer;max-width:130px">'
+        +'<option value="">— Action —</option>'
+        +['Under Review','Counselled','Manager Notified','Warning Issued',
+          'Escalated to HR','No Action Required'].map(function(a){
+            return '<option value="'+a+'"'+(_odAction===a?' selected':'')+'>'+a+'</option>';
+          }).join('')
+        +'</select>'
+      : (_odAction
+          ? '<span style="font-size:10px;color:var(--green)">✓ '+esc(_odAction)+'</span>'
+          : '');
+    return '<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 80px 140px;'
+      +'padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';font-size:12px;align-items:center">'
       +'<div style="font-weight:500;color:var(--text)">'+esc(r.name)+'</div>'
       +'<div><div style="font-size:11px;color:var(--muted)">'+esc(r.customer||'—')+'</div></div>'
       +'<div style="font-size:11px;color:var(--muted)">'+esc(r.region)+'</div>'
       +'<div style="font-size:11px;color:var(--muted2)">'+esc(r.desig||'—')+'</div>'
-      +'<div style="font-weight:700;color:'+dayCol+'">'+days+'</div>'
+      +'<div style="font-weight:700;color:'+dayCol+'">'+days+multiBadge+'</div>'
       +'<div style="font-size:11px;color:var(--muted)">'+records+'</div>'
       +'<div>'+approverBadge+(pending>0?'<span style="font-size:9px;color:var(--amber);margin-left:4px">+'+pending+' pending</span>':'')+'</div>'
+      +'<div>'+actionCell+'</div>'
       +'</div>';
   }).join('');
 
@@ -7905,8 +8014,8 @@ function renderOD(){
     +'<span style="font-size:11px;color:var(--muted)">Region:</span>'+rf+'</div>'
     // Table
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
-    +'<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 100px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['Employee','Account','Region','Designation',colLabel+' Days','Applications','Approver Code'].map(h=>
+    +'<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 80px 140px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+    +['Employee','Account','Region','Designation',colLabel+' Days','Applications','Approver','HRBP Action'].map(h=>
       '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>'
     ).join('')+'</div>'
     +(rows||'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>')+'</div>'

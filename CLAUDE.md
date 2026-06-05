@@ -64,3 +64,29 @@ Shared with OPS360. Additive only. No drops or type changes.
 - Project ID: mzyrcrkwgbqgwajkjdnp
 - pg_trgm extension: enabled
 - execute_sql for DML | apply_migration for DDL
+
+## OVERWRITE PREVENTION — MANDATORY
+
+Features get silently lost when sessions rewrite the full file.
+These rules are non-negotiable:
+
+1. str_replace ONLY. Never write the full file. If a task
+   feels like it needs a full rewrite, STOP and tell Alex
+   instead of proceeding.
+
+2. Before every session: note the current line count of
+   index.html. If the output file differs by more than 50
+   lines from the input, STOP — do not commit. A change of
+   50+ lines likely means a full rewrite happened silently.
+
+3. Features known to have been lost in past rewrites and
+   must be preserved:
+   - HRBP action dropdown on OD/WFH tab (wfh_od_actions)
+   - _wfhOdActions cache + saveODAction() function
+   - loadWFHODActions() function
+   - multi-instance badge in renderOD rows
+   These must be present in index.html at every commit.
+
+4. Before committing, grep for these function names:
+   grep -n "saveODAction\|loadWFHODActions\|_wfhOdActions\|multiBadge" index.html
+   If any return 0 results, DO NOT commit.
