@@ -3947,6 +3947,7 @@ function renderAbsenteeism(el) {
 var _actionTasks = [];
 var _tasksLoaded = false;
 var _caseEntries = [];  // structured ER/abscond/retention cases
+var _retentionEntries = []; // structured retention cases
 var _hrbpTrainingEntries = [];  // structured training sessions from HRBP form
 var _pendingTasks = []; // open tasks from prior weeks shown at top of form
 var _taskFilter = { type: 'all', status: 'open' };
@@ -5842,6 +5843,58 @@ if(t==='hrbp'){
       +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
       +'<button type="button" onclick="addCaseEntry()" style="padding:7px 16px;background:var(--accent);border:none;border-radius:7px;color:var(--bg);font-size:12px;font-weight:600;cursor:pointer">+ Add Case</button>'
       +'</div></div>';
+    // ── Retention Watch ───────────────────────────────────────
+    var retHTML=''
+      +'<div class="wform-section">'
+      +'<div class="wform-section-title">Retention Watch</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'
+      +'Log at-risk employees you spoke to this week. Each entry is tracked until resolved.</div>'
+      +'<div id="retentionEntries" style="margin-bottom:10px"></div>'
+      +'<div style="background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'
+      +'<div style="font-size:11px;font-weight:600;color:var(--muted2);margin-bottom:10px;'
+      +'text-transform:uppercase;letter-spacing:.8px">Add At-Risk Employee</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Employee Name *</label>'
+      +'<input type="text" id="retEmpName" placeholder="Full name…" '
+      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);'
+      +'border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Emp Code (optional)</label>'
+      +'<input type="text" id="retEmpCode" placeholder="11XXXXXX…" '
+      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);'
+      +'border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Account</label>'
+      +'<input type="text" id="retAcctName" placeholder="Account name…" '
+      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);'
+      +'border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Risk Level</label>'
+      +'<select id="retRiskLevel" style="width:100%;padding:7px 10px;background:var(--surface2);'
+      +'border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px">'
+      +'<option value="Watch">Watch</option>'
+      +'<option value="Medium">Medium</option>'
+      +'<option value="High">High</option>'
+      +'</select></div>'
+      +'<div style="grid-column:span 2"><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Action Taken</label>'
+      +'<input type="text" id="retActionTaken" placeholder="Spoke to manager, offered L2 move…" '
+      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);'
+      +'border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-bottom:10px">'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Conversation Summary</label>'
+      +'<textarea id="retConvSummary" rows="2" placeholder="Key concerns raised, themes discussed…" '
+      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);'
+      +'border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical"></textarea></div>'
+      +'<div><label style="font-size:11px;color:var(--muted2);display:block;margin-bottom:4px">Follow-up Date</label>'
+      +'<input type="date" id="retFollowupDate" '
+      +'style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);'
+      +'border-radius:7px;color:var(--text);font-size:12px;box-sizing:border-box"></div>'
+      +'</div>'
+      +'<button type="button" onclick="addRetentionEntry()" '
+      +'style="padding:7px 16px;background:var(--accent);border:none;border-radius:7px;'
+      +'color:var(--bg);font-size:12px;font-weight:600;cursor:pointer">+ Add to Watch List</button>'
+      +'</div></div>';
+
     // ── Issues & Priorities ───────────────────────────────────
     var issHTML=''
       +'<div class="wform-section">'
@@ -5893,7 +5946,7 @@ if(t==='hrbp'){
       +'<div class="wform-row"><label>Anything else to flag?</label>'
       +'<textarea id="f_anything_else" placeholder="Any other observation, risk, or escalation not covered above…" style="min-height:54px"></textarea></div>'
       +'</div>';
-    return pendingHTML + jpPanelHTML + visitHTML + erHTML + issHTML + buildActionsSection();
+    return pendingHTML + jpPanelHTML + visitHTML + erHTML + retHTML + issHTML + buildActionsSection();
   }
   if(t==='payroll'){
     var pendingHTML='<div id="pendingTasksSection"></div>';
@@ -5991,11 +6044,70 @@ async function submitWeeklyForm(fnType,region){
         var rrMeta='[[RR]]'+JSON.stringify({venue:v.rr_venue||'',headcount:v.rr_headcount||'',feedback:v.rr_feedback||'',cost:v.rr_cost||''});
         notes=rrMeta+(notes?'\n'+notes:'');
       }
-      return{week_key:_formWeekKey,week_label:wkDt?wkDt.label:_formWeekKey,submitted_by:_sbUser.id,submitter_name:record.submitter_name,region:v.region||region||_sbRole.region||'',account_name:v.account,account_tier:v.tier,visit_date:v.date||new Date().toISOString().split('T')[0],visit_notes:notes,visit_type:v.visit_type||'Connect'};
+      return{
+          week_key:       _formWeekKey,
+          week_label:     wkDt ? wkDt.label : _formWeekKey,
+          submitted_by:   _sbUser.id,
+          submitter_name: record.submitter_name,
+          hrbp_name:      record.submitter_name,
+          region:         v.region||region||_sbRole.region||'',
+          account_name:   v.account,
+          account_tier:   v.tier,
+          visit_date:     v.date||new Date().toISOString().split('T')[0],
+          visit_notes:    notes,
+          visit_type:     v.visit_type||'Connect',
+          key_discussion: v.notes||'',
+          issues_flagged: !!(v.issues_flagged),
+          issue_details:  v.issue_details||''
+        };
     });
     await _sb.from('hrbp_site_visits').insert(vRecs);
     _visitEntries=[];if(typeof renderVisitEntries==='function')renderVisitEntries();
   }
+  // ── Write ER cases to hrbp_er_cases ──────────────────────
+  if(fnType==='hrbp'&&(_caseEntries||[]).length>0){
+    var _erRecs=(_caseEntries||[])
+      .filter(function(ce){return ce.caseType!=='Retention';})
+      .map(function(ce){
+        var _ctMap={ER:'Misconduct',Abscond:'Absenteeism',Discipline:'Misconduct',Other:'Other'};
+        return{
+          week_key:     _formWeekKey,
+          region:       region||_sbRole.region||'',
+          hrbp_name:    record.submitter_name,
+          hrbp_user_id: _sbUser.id,
+          employee_name:ce.employee||'Not specified',
+          employee_code:null,
+          case_type:    _ctMap[ce.caseType]||'Other',
+          description:  ce.description||'',
+          status:       'Open',
+          opened_date:  new Date().toISOString().split('T')[0]
+        };
+      });
+    if(_erRecs.length>0)await _sb.from('hrbp_er_cases').insert(_erRecs);
+  }
+
+  // ── Write retention cases to hrbp_retention_cases ────────
+  if(fnType==='hrbp'&&(_retentionEntries||[]).length>0){
+    var _retRecs=_retentionEntries.map(function(re){
+      return{
+        week_key:            _formWeekKey,
+        region:              region||_sbRole.region||'',
+        hrbp_name:           record.submitter_name,
+        hrbp_user_id:        _sbUser.id,
+        employee_name:       re.employee_name,
+        employee_code:       re.employee_code||null,
+        account_name:        re.account_name||null,
+        risk_level:          re.risk_level||'Watch',
+        conversation_summary:re.conversation_summary||'',
+        action_taken:        re.action_taken||'',
+        followup_date:       re.followup_date||null
+      };
+    });
+    await _sb.from('hrbp_retention_cases').insert(_retRecs);
+    _retentionEntries=[];
+    if(typeof renderRetentionEntries==='function')renderRetentionEntries();
+  }
+
   if(fnType==='hrbp'){
     var _trainingEntries=[];try{_trainingEntries=JSON.parse(document.getElementById('f_hrbp_training_entries')?.value||'[]');}catch(e){}
     if(_trainingEntries.length>0){
@@ -6149,6 +6261,8 @@ async function submitWeeklyForm(fnType,region){
     if(_tb.length>0){
       await _sb.from('action_tasks').insert(_tb);
       _caseEntries=[];if(typeof renderCaseEntries==='function')renderCaseEntries();
+      _retentionEntries=[];
+      if(typeof renderRetentionEntries==='function')renderRetentionEntries();
       _ldPipelineEntries=[];
       _hrbpPipelineEntries=[];
       if(typeof renderLdPipelineRows==='function')renderLdPipelineRows();
@@ -7967,6 +8081,59 @@ function renderCaseEntries(){
           +'border-radius:6px;background:none;color:var(--muted);font-size:11px;cursor:pointer">✕</button>'
           +'</div>';
       }).join('');
+}
+
+function addRetentionEntry(){
+  var empName=(document.getElementById('retEmpName')||{}).value||'';
+  var empCode=(document.getElementById('retEmpCode')||{}).value||'';
+  var acctName=(document.getElementById('retAcctName')||{}).value||'';
+  var risk=(document.getElementById('retRiskLevel')||{}).value||'Watch';
+  var conv=(document.getElementById('retConvSummary')||{}).value||'';
+  var action=(document.getElementById('retActionTaken')||{}).value||'';
+  var followup=(document.getElementById('retFollowupDate')||{}).value||'';
+  if(!empName.trim()){alert('Employee name is required.');return;}
+  _retentionEntries.push({
+    employee_name:empName.trim(),
+    employee_code:empCode.trim(),
+    account_name:acctName.trim(),
+    risk_level:risk,
+    conversation_summary:conv.trim(),
+    action_taken:action.trim(),
+    followup_date:followup||null
+  });
+  renderRetentionEntries();
+  ['retEmpName','retEmpCode','retAcctName','retConvSummary',
+   'retActionTaken','retFollowupDate'].forEach(function(id){
+    var el=document.getElementById(id);if(el)el.value='';
+  });
+}
+
+function removeRetentionEntry(i){
+  _retentionEntries.splice(i,1);renderRetentionEntries();
+}
+
+function renderRetentionEntries(){
+  var c=document.getElementById('retentionEntries');
+  if(!c)return;
+  var riskCol={High:'var(--red)',Medium:'var(--amber)',Watch:'var(--muted)'};
+  c.innerHTML=_retentionEntries.length===0
+    ?'<div style="font-size:11px;color:var(--muted);padding:6px 0;font-style:italic">No retention cases added yet.</div>'
+    :_retentionEntries.map(function(e,i){
+      var col=riskCol[e.risk_level]||'var(--muted)';
+      return '<div style="display:flex;align-items:flex-start;justify-content:space-between;'
+        +'padding:8px 10px;background:var(--surface3);border:1px solid var(--border);'
+        +'border-left:3px solid '+col+';border-radius:8px;margin-bottom:6px;gap:10px">'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(e.employee_name)
+        +(e.employee_code?' <span style="font-size:10px;color:var(--muted)">('+esc(e.employee_code)+')</span>':'')+'</div>'
+        +(e.account_name?'<div style="font-size:11px;color:var(--muted)">'+esc(e.account_name)+'</div>':'')
+        +'<div style="font-size:10px;font-weight:700;color:'+col+';margin-top:2px">'+e.risk_level+' Risk</div>'
+        +(e.conversation_summary?'<div style="font-size:11px;color:var(--muted2);margin-top:3px">'+esc(e.conversation_summary.substring(0,100))+'</div>':'')
+        +'</div>'
+        +'<button onclick="removeRetentionEntry('+i+')" style="flex-shrink:0;background:none;border:none;'
+        +'color:var(--muted);font-size:14px;cursor:pointer;padding:0 4px">✕</button>'
+        +'</div>';
+    }).join('');
 }
 
 function renderVisitEntries(){
