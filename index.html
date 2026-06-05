@@ -9897,6 +9897,8 @@ async function sbSignOut(){await _sb.auth.signOut();document.getElementById('das
 // ══════════════════════════════════════════════════════════════════════════
 var _ateCases  = [];
 var _ateLoaded = false;
+var _ateAdvanceLog  = []; // rows from ate_advance_log
+var _ateAdvLoaded   = false;
 
 var ATE_STATUS = ['Active','Conversion Initiated','Converted to FTE','Separated'];
 // Date formatter: YYYY-MM-DD → DD/MM/YYYY
@@ -9914,6 +9916,20 @@ var ATE_STATUS_STYLE = {
   'Separated':            {col:'#94a3b8', bg:'rgba(148,163,184,.12)'}
 };
 
+async function loadATEAdvanceLog() {
+  if (_ateAdvLoaded) return;
+  if (!_sbUser || !_sb) return;
+  try {
+    var res = await _sb.from('ate_advance_log')
+      .select('*')
+      .order('transaction_date', { ascending: false });
+    if (!res.error && res.data) {
+      _ateAdvanceLog = res.data;
+      _ateAdvLoaded  = true;
+    }
+  } catch(e) { console.warn('[ATEAdv]', e); }
+}
+
 async function loadATECases() {
   const el = document.getElementById('tab-ate');
   if (!el) return;
@@ -9926,6 +9942,7 @@ async function loadATECases() {
     if (error) throw error;
     _ateCases  = data || [];
     _ateLoaded = true;
+    await loadATEAdvanceLog();
     renderATETab(el);
   } catch(e) {
     console.error('[ATE]', e);
@@ -10129,14 +10146,152 @@ function renderATETab(el) {
     +'</div></div>'
     +'<div style="margin-top:8px;font-size:10px;color:var(--muted2)">Rows sorted by Training End Date (earliest first). Status updates save directly to database.</div>'
     +'</div>'
-    // Visual divider between ATE and Contract sections
-    +'<div style="margin:32px 0 0 0;border-top:2px solid var(--border);padding-top:24px">'
-      +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">'
-        +'<div style="background:var(--amber);color:#000;font-size:9px;font-weight:700;letter-spacing:1.5px;padding:3px 10px;border-radius:4px;text-transform:uppercase">Contract Workforce</div>'
-        +'<div style="font-size:10px;color:var(--muted2)">FTC · Consultants · Contract employees — separate from ATE above</div>'
-      +'</div>'
-    +'</div>'
-    +'<div id="cw-section"><div style="padding:40px;text-align:center;color:var(--muted)">Loading Contract Workforce…</div></div>';
+    // ── ATE Advance / DBT Panel ──────────────────────────────
+    + (function(){
+        if (!_ateAdvanceLog || !_ateAdvanceLog.length) return '';
+
+        // Aggregate per emp_code: total advance, total recovery, net outstanding
+        var _advMap = {}; // emp_code → {name, region, advance, recovery, lastDate, lastRef, txCount}
+        _ateAdvanceLog.forEach(function(tx){
+          var k = tx.emp_code || tx.emp_name || '';
+          if (!k) return;
+          if (!_advMap[k]) _advMap[k] = {
+            emp_code: tx.emp_code||'', name: tx.emp_name||'',
+            region: tx.region||'', advance:0, recovery:0,
+            lastDate:'', lastRef:'', txCount:0
+          };
+          var am = parseFloat(tx.amount)||0;
+          if (tx.transaction_type === 'advance')  _advMap[k].advance  += am;
+          if (tx.transaction_type === 'recovery') _advMap[k].recovery += am;
+          _advMap[k].txCount++;
+          if (!_advMap[k].lastDate || tx.transaction_date > _advMap[k].lastDate) {
+            _advMap[k].lastDate = tx.transaction_date;
+            _advMap[k].lastRef  = tx.reference_no||'';
+          }
+        });
+
+        // Apply region filter
+        var _advRows = Object.values(_advMap);
+        var _fReg = el.getAttribute('data-filter-region')||'All';
+        if (_fReg !== 'All') _advRows = _advRows.filter(function(r){ return r.region === _fReg; });
+
+        // Sort: highest outstanding first
+        _advRows.sort(function(a,b){
+          return (b.advance-b.recovery) - (a.advance-a.recovery);
+        });
+
+        // Summary KPIs
+        var _totAdv = _advRows.reduce(function(s,r){ return s+r.advance; },0);
+        var _totRec = _advRows.reduce(function(s,r){ return s+r.recovery; },0);
+        var _totOut = _totAdv - _totRec;
+        var _empCnt = _advRows.length;
+        var _fullRec= _advRows.filter(function(r){ return r.recovery>=r.advance&&r.advance>0; }).length;
+        var _noRec  = _advRows.filter(function(r){ return r.recovery===0&&r.advance>0; }).length;
+
+        function fmtINR(n){
+          if (!n && n!==0) return '—';
+          return '₹'+Math.round(n).toLocaleString('en-IN');
+        }
+
+        var kpis = [
+          ['Total Disbursed', fmtINR(_totAdv), 'var(--accent)'],
+          ['Total Recovered', fmtINR(_totRec), 'var(--green)'],
+          ['Net Outstanding', fmtINR(_totOut), _totOut>0?'var(--amber)':'var(--green)'],
+          ['Employees', _empCnt, 'var(--purple)'],
+          ['Fully Recovered', _fullRec, 'var(--green)'],
+          ['No Recovery Yet', _noRec, _noRec>0?'var(--red)':'var(--muted)'],
+        ].map(function(arr){
+          return '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+arr[2]+';border-radius:8px;padding:10px 12px;text-align:center">'
+            +'<div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:'+arr[2]+';line-height:1">'+arr[1]+'</div>'
+            +'<div style="font-family:DM Mono,monospace;font-size:9px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-top:3px">'+arr[0]+'</div>'
+            +'</div>';
+        }).join('');
+
+        var advTableRows = _advRows.map(function(r){
+          var net = r.advance - r.recovery;
+          var pct = r.advance > 0 ? Math.round(r.recovery/r.advance*100) : 0;
+          var netCol = net <= 0 ? 'var(--green)' : net > 10000 ? 'var(--red)' : 'var(--amber)';
+          var barW = Math.min(100, pct);
+
+          // Match to ate_tracker for deployment status
+          var tracker = _ateCases.find(function(t){
+            return (t.emp_code && t.emp_code === r.emp_code) ||
+                   (t.name && t.name.toLowerCase().trim() === r.name.toLowerCase().trim());
+          });
+          var deployBadge = tracker && tracker.deployment_status
+            ? '<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(96,165,250,.12);color:#60a5fa;font-weight:600;margin-left:4px">'+esc(tracker.deployment_status)+'</span>'
+            : '';
+
+          return '<tr style="border-bottom:1px solid var(--border)">'
+            +'<td style="padding:7px 10px;font-size:12px;font-weight:600;color:var(--text)">'+esc(r.name)
+              +(r.emp_code?'<div style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace">'+esc(r.emp_code)+'</div>':'')
+              +deployBadge+'</td>'
+            +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(r.region)+'</td>'
+            +'<td style="padding:7px 10px;font-size:12px;font-weight:600;color:var(--text)">'+fmtINR(r.advance)+'</td>'
+            +'<td style="padding:7px 10px;font-size:12px;color:var(--green)">'+fmtINR(r.recovery)+'</td>'
+            +'<td style="padding:7px 10px;font-size:12px;font-weight:700;color:'+netCol+'">'+fmtINR(net)+'</td>'
+            +'<td style="padding:7px 10px;min-width:120px">'
+              +'<div style="display:flex;align-items:center;gap:6px">'
+              +'<div style="flex:1;background:var(--surface);border-radius:3px;height:5px;overflow:hidden">'
+              +'<div style="height:100%;width:'+barW+'%;background:var(--green);border-radius:3px"></div>'
+              +'</div>'
+              +'<span style="font-size:10px;color:var(--muted);white-space:nowrap">'+pct+'%</span>'
+              +'</div>'
+            +'</td>'
+            +'<td style="padding:7px 10px;font-size:10px;color:var(--muted2);font-family:DM Mono,monospace">'+esc(r.lastDate||'—')+'</td>'
+            +'<td style="padding:7px 10px;font-size:10px;color:var(--muted2)">'+r.txCount+'</td>'
+            +'</tr>';
+        }).join('');
+
+        // Upload button — payroll/admin/executive only
+        var _canUpload = typeof _sbRole !== 'undefined' && _sbRole
+          && (_sbRole.role==='admin'||_sbRole.role==='executive'
+              ||_sbRole.function_type==='payroll'||_sbRole.function_type==='hrops');
+        var uploadBtn = _canUpload
+          ? '<label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;'
+            +'background:var(--surface3);border:1px solid var(--border);border-radius:6px;font-size:11px;'
+            +'font-weight:600;color:var(--accent)">'
+            +'📤 Upload Advance File'
+            +'<input type="file" accept=".xlsx,.xls,.csv" style="display:none" '
+            +'onchange="processATEAdvance(this.files[0])">'
+            +'</label>'
+          : '';
+
+        return '<div style="margin:32px 0 0 0;border-top:2px solid var(--border);padding-top:24px">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap">'
+            +'<div style="display:flex;align-items:center;gap:12px">'
+              +'<div style="background:var(--accent);color:#fff;font-size:9px;font-weight:700;'
+                +'letter-spacing:1.5px;padding:3px 10px;border-radius:4px;text-transform:uppercase">DBT Advance</div>'
+              +'<div style="font-size:10px;color:var(--muted2)">ATE advance disbursements &amp; recovery tracking · '+_ateAdvanceLog.length+' transactions</div>'
+            +'</div>'
+            +uploadBtn
+          +'</div>'
+          +'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px">'+kpis+'</div>'
+          +'<div id="ate-adv-parse-log"></div>'
+          +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+          +'<div style="overflow-x:auto">'
+          +'<table style="width:100%;border-collapse:collapse;min-width:700px">'
+          +'<thead><tr style="border-bottom:2px solid var(--border);background:var(--surface3)">'
+          +['Employee','Region','Disbursed','Recovered','Outstanding','Recovery %','Last Txn','Txns'].map(function(h){
+            return '<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted2);'
+              +'font-weight:600;text-transform:uppercase;letter-spacing:.7px">'+h+'</th>';
+          }).join('')
+          +'</tr></thead>'
+          +'<tbody>'+advTableRows+'</tbody>'
+          +'</table>'
+          +'</div></div>'
+          +'<div style="margin-top:6px;font-size:10px;color:var(--muted2)">Sorted by outstanding amount descending. '
+          +'Recovery % = total recovered / total disbursed per employee.</div>'
+          +'</div>'
+          // Contract Workforce divider (preserved)
+          +'<div style="margin:32px 0 0 0;border-top:2px solid var(--border);padding-top:24px">'
+            +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">'
+              +'<div style="background:var(--amber);color:#000;font-size:9px;font-weight:700;letter-spacing:1.5px;padding:3px 10px;border-radius:4px;text-transform:uppercase">Contract Workforce</div>'
+              +'<div style="font-size:10px;color:var(--muted2)">FTC · Consultants · Contract employees — separate from ATE above</div>'
+            +'</div>'
+          +'</div>'
+          +'<div id="cw-section"><div style="padding:40px;text-align:center;color:var(--muted)">Loading Contract Workforce…</div></div>';
+      })();
   // Load contract workforce async
   setTimeout(loadContractWorkforce, 200);
 }
@@ -10191,6 +10346,122 @@ async function saveATEUpdate(id, uniqueId) {
   }
   if (btn) { btn.textContent = 'Saved ✓'; btn.style.background = 'var(--green)'; }
   setTimeout(function(){ renderATETab(document.getElementById('tab-ate')); }, 800);
+}
+
+// ── ATE Advance Upload Parser (Sheetal's files) ──────────────────────────
+async function processATEAdvance(file) {
+  var logEl = document.getElementById('ate-adv-parse-log');
+  function log(msg, type) {
+    if (!logEl) return;
+    var col = type==='error'?'var(--red)':type==='ok'?'var(--green)':'var(--muted)';
+    logEl.innerHTML += '<div style="font-size:11px;color:'+col+';padding:2px 0">'+esc(msg)+'</div>';
+  }
+  if (!file) return;
+  if (logEl) logEl.innerHTML = '';
+  log('Reading file: ' + file.name);
+
+  try {
+    // Read file using SheetJS (already loaded in page)
+    var buf = await file.arrayBuffer();
+    var wb  = XLSX.read(buf, { type: 'array', cellDates: true });
+    var sheet = wb.Sheets[wb.SheetNames[0]];
+    var raw   = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    log('Rows found: ' + raw.length);
+
+    if (!raw.length) { log('No data rows found.', 'error'); return; }
+
+    // Normalise column names — case-insensitive lookup
+    function col(row) {
+      var keys = Array.prototype.slice.call(arguments, 1);
+      for (var ki = 0; ki < keys.length; ki++) {
+        var k = keys[ki];
+        var rowKeys = Object.keys(row);
+        for (var ri = 0; ri < rowKeys.length; ri++) {
+          if (rowKeys[ri].toLowerCase().trim() === k.toLowerCase().trim()) return row[rowKeys[ri]];
+        }
+      }
+      return '';
+    }
+
+    var batchId = 'upload_' + new Date().toISOString().substring(0,10)
+      + '_' + ((_sbUser&&_sbUser.email)||'unknown').split('@')[0];
+    var uploader = (_sbRole&&_sbRole.display_name)||(_sbUser&&_sbUser.email)||'Payroll';
+
+    var recs = [];
+    raw.forEach(function(row) {
+      var empCode  = String(col(row,'emp code','emp_code','employee code','empcode')||'').trim();
+      var empName  = String(col(row,'name','employee name','emp name','emp_name')||'').trim();
+      var region   = String(col(row,'region')||'').trim();
+      var txType   = String(col(row,'transaction type','transaction_type','type','txn type')||'advance').trim().toLowerCase();
+      var txDate   = col(row,'transaction date','date','txn date','transaction_date');
+      var monthRef = String(col(row,'month','month reference','month_reference','month ref')||'').trim();
+      var amount   = parseFloat(String(col(row,'amount','advance amount','recovery amount')||'0').replace(/[^0-9.]/g,''))||0;
+      var refNo    = String(col(row,'reference','reference no','ref no','reference_no')||'').trim();
+      var notes    = String(col(row,'notes','remarks','comment')||'').trim();
+      var dbtRef   = String(col(row,'dbt ref','dbt_intimation_ref','dbt reference')||'').trim();
+
+      if (!empCode && !empName) return;
+      if (!amount) return;
+
+      // Normalise date
+      var dateStr = '';
+      if (txDate instanceof Date) {
+        dateStr = txDate.toISOString().substring(0,10);
+      } else if (txDate) {
+        var parsed = new Date(txDate);
+        dateStr = isNaN(parsed) ? '' : parsed.toISOString().substring(0,10);
+      }
+
+      // Normalise txType
+      if (txType.indexOf('recov') !== -1) txType = 'recovery';
+      else txType = 'advance';
+
+      recs.push({
+        emp_code:          empCode||null,
+        emp_name:          empName||'',
+        region:            region||'',
+        transaction_type:  txType,
+        transaction_date:  dateStr||null,
+        month_reference:   monthRef||null,
+        amount:            amount,
+        reference_no:      refNo||null,
+        notes:             notes||null,
+        dbt_intimation_ref:dbtRef||null,
+        upload_batch:      batchId,
+        uploaded_by:       uploader,
+        uploaded_at:       new Date().toISOString(),
+        upload_sheet:      wb.SheetNames[0]
+      });
+    });
+
+    log('Valid rows to insert: ' + recs.length);
+    if (!recs.length) { log('No valid rows found — check column names.', 'error'); return; }
+
+    // Insert in batches of 200
+    var inserted = 0;
+    for (var i = 0; i < recs.length; i += 200) {
+      var batch = recs.slice(i, i+200);
+      var res = await _sb.from('ate_advance_log').insert(batch);
+      if (res.error) {
+        log('Insert error (batch '+(Math.floor(i/200)+1)+'): '+res.error.message, 'error');
+        return;
+      }
+      inserted += batch.length;
+      log('Inserted ' + inserted + ' / ' + recs.length + '…');
+    }
+
+    log('✓ Upload complete — ' + inserted + ' rows inserted.', 'ok');
+    log('Batch ID: ' + batchId, 'ok');
+
+    // Reload cache and re-render
+    _ateAdvLoaded = false;
+    await loadATEAdvanceLog();
+    renderATETab(document.getElementById('tab-ate'));
+
+  } catch(e) {
+    log('Error: ' + e.message, 'error');
+    console.error('[processATEAdvance]', e);
+  }
 }
 
 // ── ATE + Contract Workforce Upload Parser ────────────────────────────────
