@@ -4633,6 +4633,22 @@ function renderUploadTab() {
             'cmsitn_requisition_wise_tat_report_DDMMYYYY.xlsx',
             'Download window: 01-Jan-2026 to today (full FY). Updates open requisitions and time-to-fill (TAT) per requirement.',
             '#34d399'));
+        // ATE DBT Advance — hrops + payroll + admin
+        if(isHROps||isPay)
+          cards.push(
+            '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px">'
+            +'<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--amber);margin-bottom:6px">ATE DBT Advance</div>'
+            +'<div style="font-size:11px;color:var(--text);margin-bottom:3px"><span style="color:var(--muted2)">File: </span>ate_advance_DDMMYYYY.xlsx</div>'
+            +'<div style="font-size:11px;color:var(--muted2);margin-bottom:3px"><span style="color:var(--muted2)">Format: </span>2 sheets — "Advance Paid" · "Recovery"</div>'
+            +'<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Updates DBT advance disbursement &amp; recovery tracking in ATE &amp; Contract tab. Each upload appends new rows.</div>'
+            +'<label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;'
+            +'background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);border-radius:6px;'
+            +'font-size:11px;font-weight:600;color:var(--amber)">'
+            +'📤 Upload Advance File'
+            +'<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="processATEAdvance(this.files[0])">'
+            +'</label>'
+            +'</div>'
+          );
         // CTC Master — admin only
         if(isAdmin)
           cards.push(mk('CTC Master',
