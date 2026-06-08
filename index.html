@@ -5616,6 +5616,8 @@ async function renderSubmitTab(mc){
       label: liveLabel, from_label:'', to_label:'', total_respondents:0
     };
     WEEK_NAMES[liveWkKey] = liveWkKey + ' (Current)';
+    // Remove stale (Latest) from the previous week now that a newer week is live
+    WEEK_ORDER.forEach(function(k){ if(k!==liveWkKey && WEEK_NAMES[k]) WEEK_NAMES[k]=WEEK_NAMES[k].replace(/\s*\(Latest\)/,''); });
     WEEK_LABELS[liveWkKey] = liveLabel;
     if (WEEKS_DATA[liveWkKey]) WEEKS_DATA[liveWkKey].label = liveLabel;
     // ── PERMANENT FIX: Auto-insert the week row to DB so everyone sees it ──
@@ -5657,10 +5659,14 @@ async function renderSubmitTab(mc){
   // Inject week date banner
   (function(){
     var _wkLabel = (WEEKS_DATA[_formWeekKey]&&WEEKS_DATA[_formWeekKey].label)?WEEKS_DATA[_formWeekKey].label:(WEEK_LABELS&&WEEK_LABELS[_formWeekKey]?WEEK_LABELS[_formWeekKey]:getCurrentWeekLabel());
-    var _wkName = WEEK_NAMES[_formWeekKey]||_formWeekKey;
+    // Strip stale "(Latest)" suffix if submitting for a past week
+    var _wkRaw = WEEK_NAMES[_formWeekKey]||_formWeekKey;
+    var _wkName = (_formWeekKey !== liveWkKey) ? _wkRaw.replace(/\s*\(Latest\)/,'').replace(/\s*\(Current\)/,'') : _wkRaw;
+    var _isCurrentWk = _formWeekKey === liveWkKey;
+    var _deadlineText = _isCurrentWk ? 'Submit by end of week' : 'Late submission — data will still be recorded';
     var _banner = document.createElement('div');
     _banner.style.cssText='background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.25);border-radius:10px;padding:12px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between';
-    _banner.innerHTML='<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Submitting for</div>'+'<div style="font-size:22px;font-weight:700;color:var(--text)">'+esc(_wkName)+'</div></div>'+'<div style="text-align:right"><div style="font-size:14px;font-weight:600;color:var(--accent)">'+esc(_wkLabel)+'</div>'+'<div style="font-size:10px;color:var(--muted);margin-top:2px">Submit by end of week</div></div>';
+    _banner.innerHTML='<div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Submitting for</div>'+'<div style="font-size:22px;font-weight:700;color:var(--text)">'+esc(_wkName)+'</div></div>'+'<div style="text-align:right"><div style="font-size:14px;font-weight:600;color:var(--accent)">'+esc(_wkLabel)+'</div>'+'<div style="font-size:10px;color:'+(_isCurrentWk?'var(--muted)':'var(--amber)')+';margin-top:2px">'+_deadlineText+'</div></div>';
     var _wrap = mc.querySelector('.wform-wrap');
     if(_wrap) _wrap.insertBefore(_banner, _wrap.querySelector('.wform-section')||_wrap.firstChild.nextSibling);
   })();
