@@ -4387,16 +4387,37 @@ function renderActionCentre(el) {
   const isAdmin=typeof _sbRole!=='undefined'&&(_sbRole.role==='admin'||_sbRole.role==='executive');
   const myName=(typeof _sbRole!=='undefined'&&_sbRole&&(_sbRole.display_name||''))||'';
   const filterMine=el.getAttribute('data-filter-mine')==='1'&&!isAdmin;
+  const acFA    =el.getAttribute('data-ac-fa')||'All';
+  const acSev   =el.getAttribute('data-ac-sev')||'All';
+  const acStatus=el.getAttribute('data-ac-status')||'Open';
+  const acChip  =el.getAttribute('data-ac-chip')||'';
+  function _setAC(attr,val){el.setAttribute(attr,val);renderActionCentre(el);}
+  // Base filter — status
+  const _statusBase = acStatus==='All'
+    ? ['Open','In Progress','Done','Closed']
+    : acStatus==='Open' ? ['Open','In Progress'] : [acStatus];
   const open=_actionTasks.filter(t=>{
-    if(t.status!=='Open'&&t.status!=='In Progress')return false;
+    if(!_statusBase.includes(t.status)) return false;
     if(filterMine){const an=(t.assigned_to_name||'').toLowerCase();const cn=(t.created_by_name||'').toLowerCase();const me=myName.toLowerCase().split('.')[0];return an.indexOf(me)>=0||cn.indexOf(me)>=0;}
+    if(acFA!=='All'&&(t.function_area||'General')!==acFA) return false;
+    if(acSev!=='All'&&t.severity!==acSev) return false;
     return true;
   });
-  const planned=open.filter(t=>t.task_type==='planned_action');
-  const nextWeek=open.filter(t=>t.task_type==='next_week_plan');
-  const hrbpCases=open.filter(t=>['er_case','absenteeism','retention'].includes(t.task_type));
-  const risks=open.filter(t=>['risk','payroll_error','statutory'].includes(t.task_type));
-  const escalations=open.filter(t=>t.task_type==='escalation');
+  // Chip quick-filter overrides
+  const _chipFiltered = acChip==='overdue'
+    ? open.filter(t=>t.due_date&&new Date(t.due_date)<new Date()&&t.status!=='Done'&&t.status!=='Closed')
+    : acChip==='risks'
+      ? open.filter(t=>['risk','payroll_error','statutory'].includes(t.task_type))
+      : acChip==='escalations'
+        ? open.filter(t=>t.task_type==='escalation')
+        : acChip==='rolledover'
+          ? open.filter(t=>t.rollover_count>0)
+          : open;
+  const planned=_chipFiltered.filter(t=>t.task_type==='planned_action');
+  const nextWeek=_chipFiltered.filter(t=>t.task_type==='next_week_plan');
+  const hrbpCases=_chipFiltered.filter(t=>['er_case','absenteeism','retention'].includes(t.task_type));
+  const risks=_chipFiltered.filter(t=>['risk','payroll_error','statutory'].includes(t.task_type));
+  const escalations=_chipFiltered.filter(t=>t.task_type==='escalation');
   const allOpen=_actionTasks.filter(t=>t.status==='Open'||t.status==='In Progress');
   const overdue=allOpen.filter(t=>t.due_date&&new Date(t.due_date)<new Date());
   const rolledOver=_actionTasks.filter(t=>t.rollover_count>0&&t.status!=='Done'&&t.status!=='Closed');
@@ -4423,6 +4444,45 @@ function renderActionCentre(el) {
       </div>
     </div>`;
   }
+  function renderTableView(tasks){
+    if(!tasks.length) return '<div style="font-size:12px;color:var(--muted);padding:24px;text-align:center;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No tasks match the current filters</div>';
+    var rows=tasks.slice().sort(function(a,b){
+      var sd={Critical:0,High:1,Medium:2,Low:3};
+      var ss=sd[a.severity]??4,se=sd[b.severity]??4;
+      if(ss!==se)return ss-se;
+      if(a.due_date&&b.due_date)return a.due_date.localeCompare(b.due_date);
+      if(a.due_date)return -1;if(b.due_date)return 1;
+      return 0;
+    }).map(function(t){
+      const st=TASK_STATUS_STYLE[t.status]||{col:'var(--muted)',bg:'rgba(100,116,139,.1)'};
+      const isOD=t.due_date&&new Date(t.due_date)<new Date()&&t.status!=='Done'&&t.status!=='Closed';
+      const faColor=FA_COLOR[t.function_area]||'#94a3b8';
+      const sevStyle=SEVERITY_STYLE[t.severity]||'';
+      const rollBadge=t.rollover_count>0?'<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:rgba(148,163,184,.15);color:#94a3b8">↩'+t.rollover_count+'x</span> ':'';
+      return '<tr style="border-bottom:1px solid var(--border);background:var(--surface)">'
+        +'<td style="padding:8px 10px;border-left:3px solid '+faColor+'">'
+          +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(t.title)+'</div>'
+          +(t.description?'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+esc((t.description||'').substring(0,80))+(t.description.length>80?'…':'')+'</div>':'')
+        +'</td>'
+        +'<td style="padding:8px 10px;font-size:11px;white-space:nowrap"><span style="color:'+faColor+'">'+esc(t.function_area||'General')+'</span></td>'
+        +'<td style="padding:8px 10px;font-size:11px"><span style="'+sevStyle+'">'+esc(t.severity||'—')+'</span></td>'
+        +'<td style="padding:8px 10px"><span style="font-size:10px;padding:2px 8px;border-radius:20px;background:'+st.bg+';color:'+st.col+';font-weight:600;white-space:nowrap">'+t.status+'</span></td>'
+        +'<td style="padding:8px 10px;font-size:11px;color:'+(isOD?'var(--red)':'var(--muted2)')+';white-space:nowrap">'+(t.due_date||(isOD?'<b>OVERDUE</b>':'—'))+'</td>'
+        +'<td style="padding:8px 10px;font-size:11px;color:#a78bfa">'+esc(t.assigned_to_name||'—')+'</td>'
+        +'<td style="padding:8px 10px">'
+          +rollBadge
+          +'<button onclick="openTaskUpdateModal(\''+t.id+'\')" style="padding:3px 10px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:10px;cursor:pointer">Update</button>'
+        +'</td>'
+        +'</tr>';
+    }).join('');
+    return '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">'
+      +'<table style="width:100%;border-collapse:collapse;min-width:700px">'
+      +'<thead><tr style="background:var(--surface3);border-bottom:2px solid var(--border)">'
+      +['Task','Area','Severity','Status','Due','Assigned To',''].map(function(h){
+        return '<th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.7px">'+h+'</th>';
+      }).join('')
+      +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+  }
   function groupByFA(tasks){
     const g={};tasks.forEach(t=>{const fa=t.function_area||'General';if(!g[fa])g[fa]=[];g[fa].push(t);});
     Object.keys(g).forEach(fa=>g[fa].sort((a,b)=>(SEV_ORD[a.severity]??3)-(SEV_ORD[b.severity]??3)));
@@ -4436,9 +4496,38 @@ function renderActionCentre(el) {
       return `<div style="margin-bottom:10px"><div style="font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${col};padding:3px 8px;background:${col}18;border-radius:4px;display:inline-block;margin-bottom:6px">${esc(fa)} · ${g[fa].length}</div>${g[fa].map(taskCard).join('')}</div>`;
     }).join('');
   }
+  // ── KPI chip builder (clickable) ─────────────────────────────
+  function acChipBtn(label, val, col, chipKey){
+    var active = acChip===chipKey;
+    return '<div onclick="_setAC(\'data-ac-chip\',\''+(active?'':chipKey)+'\')" '
+      +'style="background:var(--surface2);border:1px solid '+(active?col:'var(--border)')+';'
+      +'border-top:3px solid '+col+';border-radius:8px;padding:10px;text-align:center;'
+      +'cursor:pointer;transition:all .15s;'+(active?'box-shadow:0 0 0 2px '+col+'40;':'')+'">'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:'+col+';line-height:1">'+val+'</div>'
+      +'<div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted);margin-top:2px">'+label+(active?' ✕':'')+'</div>'
+      +'</div>';
+  }
+  // ── Filter bar ───────────────────────────────────────────────
+  const FA_OPTIONS=['All','HR Ops','TA','Payroll','HRBP','L&D','Admin','General'];
+  const SEV_OPTIONS=['All','Critical','High','Medium','Low'];
+  const STATUS_OPTIONS=['All','Open','In Progress','Done'];
+  function acDropdown(attr, options, current, label){
+    return '<div style="display:flex;flex-direction:column;gap:3px">'
+      +'<div style="font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.7px">'+label+'</div>'
+      +'<select onchange="_setAC(\''+attr+'\',this.value)" '
+      +'style="padding:5px 8px;background:var(--surface2);border:1px solid '+(current!=='All'?'var(--accent)':'var(--border)')+';'
+      +'border-radius:6px;color:'+(current!=='All'?'var(--accent)':'var(--text)')+';font-size:11px;cursor:pointer">'
+      +options.map(function(o){return '<option value="'+o+'"'+(o===current?' selected':'')+'>'+o+'</option>';}).join('')
+      +'</select></div>';
+  }
+  // ── View toggle (admin/exec = table, others = kanban) ────────
+  const _useTable = isAdmin;
+  const _activeFilters = (acFA!=='All'||acSev!=='All'||acStatus!=='Open'||acChip)
+    ? '<span style="font-size:10px;color:var(--amber);margin-left:6px">● Filtered</span>' : '';
+
   el.innerHTML=`<div style="padding:24px 32px;max-width:1500px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Team Intelligence</div><div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">Action Centre</div></div>
+      <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Team Intelligence</div><div style="font-family:Bebas_Neue,sans-serif;font-size:26px;letter-spacing:1px;color:var(--text)">Action Centre${_activeFilters}</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         ${!isAdmin?`<div style="display:flex;background:var(--surface3);border:1px solid var(--border);border-radius:8px;overflow:hidden"><button onclick="document.getElementById('tab-actioncentre').setAttribute('data-filter-mine','1');renderActionCentre()" style="padding:6px 14px;border:none;background:${filterMine?'var(--accent)':'transparent'};color:${filterMine?'#fff':'var(--muted)'};font-size:11px;cursor:pointer;font-weight:600">My Tasks</button><button onclick="document.getElementById('tab-actioncentre').setAttribute('data-filter-mine','0');renderActionCentre()" style="padding:6px 14px;border:none;background:${!filterMine?'var(--accent)':'transparent'};color:${!filterMine?'#fff':'var(--muted)'};font-size:11px;cursor:pointer;font-weight:600">All Tasks</button></div>`:''}
         <button onclick="openNewTaskModal('planned_action')" style="padding:7px 14px;border:1px solid var(--accent);border-radius:8px;background:none;color:var(--accent);font-size:11px;cursor:pointer;font-weight:600">+ Planned Action</button>
@@ -4446,16 +4535,33 @@ function renderActionCentre(el) {
         ${isAdmin?`<button onclick="openNewTaskModal('escalation')" style="padding:7px 14px;border:1px solid #a78bfa;border-radius:8px;background:none;color:#a78bfa;font-size:11px;cursor:pointer;font-weight:600">+ Escalation</button>`:''}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px">
-      ${[['Open',allOpen.length,'var(--accent)'],['Overdue',overdue.length,'var(--red)'],['Risks',risks.length,'var(--amber)'],['Escalations',escalations.length,'#a78bfa'],['Rolled Over',rolledOver.length,'#94a3b8']].map(([l,v,c])=>`<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid ${c};border-radius:8px;padding:10px;text-align:center"><div style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:${c};line-height:1">${v}</div><div style="font-family:DM_Mono,monospace;font-size:9px;text-transform:uppercase;color:var(--muted);margin-top:2px">${l}</div></div>`).join('')}
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
+      ${acChipBtn('Open',allOpen.length,'var(--accent)','')}
+      ${acChipBtn('Overdue',overdue.length,'var(--red)','overdue')}
+      ${acChipBtn('Risks',risks.length,'var(--amber)','risks')}
+      ${acChipBtn('Escalations',escalations.length,'#a78bfa','escalations')}
+      ${acChipBtn('Rolled Over',rolledOver.length,'#94a3b8','rolledover')}
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:start">
-      <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px">📋 Planned <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span></div>${renderGrouped(planned,'No open planned actions')}</div>
-      <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f59e0b;margin-bottom:10px;display:flex;align-items:center;gap:6px">📅 Next Week <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b">${nextWeek.length}</span></div>${renderGrouped(nextWeek,'No next week plans')}</div>
-      <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:6px">🤝 HRBP Cases <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${hrbpCases.length}</span></div>${renderGrouped(hrbpCases,'No HRBP cases')}</div>
-      <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:6px">⚠ Risks <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(251,191,36,.12);color:var(--amber)">${risks.length}</span></div>${renderGrouped(risks,'No open risks')}</div>
-      <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f87171;margin-bottom:10px;display:flex;align-items:center;gap:6px">🔺 Escalations <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(248,113,113,.12);color:#f87171">${escalations.length}</span>${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin)</span>':''}</div>${renderGrouped(escalations,'No open escalations')}</div>
+    <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:20px;flex-wrap:wrap;background:var(--surface3);border:1px solid var(--border);border-radius:10px;padding:10px 14px">
+      ${acDropdown('data-ac-fa',FA_OPTIONS,acFA,'Function Area')}
+      ${acDropdown('data-ac-sev',SEV_OPTIONS,acSev,'Severity')}
+      ${acDropdown('data-ac-status',STATUS_OPTIONS,acStatus,'Status')}
+      <button onclick="_setAC('data-ac-fa','All');_setAC('data-ac-sev','All');_setAC('data-ac-status','Open');el.setAttribute('data-ac-chip','');renderActionCentre(el)" style="padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted);font-size:11px;cursor:pointer;margin-top:auto">Reset</button>
+      <div style="margin-left:auto;margin-top:auto;font-size:11px;color:var(--muted2)">
+        ${_chipFiltered.length} task${_chipFiltered.length!==1?'s':''} shown
+        ${_useTable?'· Table view':'· Kanban view'}
+      </div>
     </div>
+    ${_useTable
+      ? renderTableView(_chipFiltered)
+      : `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:start">
+          <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:6px">📋 Planned <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(96,165,250,.12);color:#60a5fa">${planned.length}</span></div>${renderGrouped(planned,'No open planned actions')}</div>
+          <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f59e0b;margin-bottom:10px;display:flex;align-items:center;gap:6px">📅 Next Week <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(245,158,11,.12);color:#f59e0b">${nextWeek.length}</span></div>${renderGrouped(nextWeek,'No next week plans')}</div>
+          <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#a78bfa;margin-bottom:10px;display:flex;align-items:center;gap:6px">🤝 HRBP Cases <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(167,139,250,.12);color:#a78bfa">${hrbpCases.length}</span></div>${renderGrouped(hrbpCases,'No HRBP cases')}</div>
+          <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:10px;display:flex;align-items:center;gap:6px">⚡ Risks <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(251,191,36,.12);color:var(--amber)">${risks.length}</span></div>${renderGrouped(risks,'No open risks')}</div>
+          <div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#f87171;margin-bottom:10px;display:flex;align-items:center;gap:6px">🔺 Escalations <span style="font-size:11px;padding:1px 7px;border-radius:20px;background:rgba(248,113,113,.12);color:#f87171">${escalations.length}</span>${isAdmin?'<span style="font-size:9px;color:var(--muted2)">(Admin)</span>':''}</div>${renderGrouped(escalations,'No open escalations')}</div>
+        </div>`
+    }
     ${done.length?`<div style="margin-top:20px"><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--green);margin-bottom:10px">✓ Recently Completed</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${done.map(taskCard).join('')}</div></div>`:''}
   </div>`;
 }
