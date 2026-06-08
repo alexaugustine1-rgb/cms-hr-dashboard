@@ -9852,8 +9852,8 @@ async function sbBoot(user){
   document.getElementById('dashApp').style.display='block';
   if(_sbRole.role==='admin'){const ag=document.getElementById('snav-admin-group');if(ag)ag.style.display='';}
   showSidebarAfterLogin(_sbRole.role);
-  // HR Ops (Sheetal, Kesavan) also get Upload Data access
-  if(_sbRole.role==='hrbp'&&(_sbRole.function_type==='hrops'||_sbRole.function_type==='payroll'||_sbRole.function_type==='ta')||_sbRole.role==='admin'){const ug=document.getElementById('snav-upload-group');if(ug)ug.style.display='';}
+  // Upload Data visible to admin, hrops role, payroll function, ta function
+  if(_sbRole.role==='admin'||_sbRole.role==='hrops'||_sbRole.function_type==='payroll'||_sbRole.function_type==='hrops'||_sbRole.function_type==='ta'){const ug=document.getElementById('snav-upload-group');if(ug)ug.style.display='';}
   const hr=document.querySelector('.header-right');
   if(hr&&!document.getElementById('sbSignOutBtn')){
     const b=document.createElement('button');b.id='sbSignOutBtn';b.textContent='Sign out';b.className='btn-outline';b.style.cssText='margin-left:12px;font-size:12px;cursor:pointer';b.onclick=sbSignOut;hr.appendChild(b);
