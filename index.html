@@ -4391,7 +4391,6 @@ function renderActionCentre(el) {
   const acSev   =el.getAttribute('data-ac-sev')||'All';
   const acStatus=el.getAttribute('data-ac-status')||'Open';
   const acChip  =el.getAttribute('data-ac-chip')||'';
-  function _setAC(attr,val){el.setAttribute(attr,val);renderActionCentre(el);}
   // Base filter — status
   const _statusBase = acStatus==='All'
     ? ['Open','In Progress','Done','Closed']
@@ -4546,7 +4545,7 @@ function renderActionCentre(el) {
       ${acDropdown('data-ac-fa',FA_OPTIONS,acFA,'Function Area')}
       ${acDropdown('data-ac-sev',SEV_OPTIONS,acSev,'Severity')}
       ${acDropdown('data-ac-status',STATUS_OPTIONS,acStatus,'Status')}
-      <button onclick="_setAC('data-ac-fa','All');_setAC('data-ac-sev','All');_setAC('data-ac-status','Open');el.setAttribute('data-ac-chip','');renderActionCentre(el)" style="padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted);font-size:11px;cursor:pointer;margin-top:auto">Reset</button>
+      <button onclick="_acReset()" style="padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted);font-size:11px;cursor:pointer;margin-top:auto">Reset</button>
       <div style="margin-left:auto;margin-top:auto;font-size:11px;color:var(--muted2)">
         ${_chipFiltered.length} task${_chipFiltered.length!==1?'s':''} shown
         ${_useTable?'· Table view':'· Kanban view'}
@@ -4566,6 +4565,8 @@ function renderActionCentre(el) {
   </div>`;
 }
 
+function _setAC(attr,val){var e=document.getElementById('tab-actioncentre');if(!e)return;e.setAttribute(attr,val);if(typeof renderActionCentre==='function')renderActionCentre(e);}
+function _acReset(){var e=document.getElementById('tab-actioncentre');if(!e)return;e.setAttribute('data-ac-fa','All');e.setAttribute('data-ac-sev','All');e.setAttribute('data-ac-status','Open');e.setAttribute('data-ac-chip','');if(typeof renderActionCentre==='function')renderActionCentre(e);}
 function acExpand(id) {
   var s=document.getElementById(id+'_short'); var f=document.getElementById(id+'_full');
   if(s)s.style.display='none'; if(f)f.style.display='block';
