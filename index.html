@@ -5640,10 +5640,12 @@ async function renderSubmitTab(mc){
         });
     }
   }
-  const availWeeks = [...new Set([liveWkKey, ...WEEK_ORDER.slice(-5)])]
+  _formWeekKey = _formWeekKey || liveWkKey;
+  // Always include liveWkKey, _formWeekKey, and last 5 from WEEK_ORDER; sort desc, take 4
+  const availWeeks = [...new Set([liveWkKey, _formWeekKey, ...WEEK_ORDER.slice(-5)])]
+    .filter(Boolean)
     .sort((a,b)=>{ const na=parseInt(a.replace('W',''))||0, nb=parseInt(b.replace('W',''))||0; return nb-na; })
     .slice(0,4);
-  _formWeekKey = _formWeekKey || liveWkKey;
   const{data:existing}=await _sb.from('weekly_submissions').select('*').eq('week_key',_formWeekKey).eq('submitted_by',_sbUser.id).single();
   _existingSub=existing||null;
   const fn=FUNCTION_TYPES[fnType]||FUNCTION_TYPES.hrbp;
