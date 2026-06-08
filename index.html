@@ -10223,11 +10223,12 @@ function renderATETab(el) {
             +'</div>';
         }).join('');
 
-        var advTableRows = _advRows.map(function(r){
+        var advTableRows = _advRows.map(function(r, ri){
           var net = r.advance - r.recovery;
           var pct = r.advance > 0 ? Math.round(r.recovery/r.advance*100) : 0;
           var netCol = net <= 0 ? 'var(--green)' : net > 10000 ? 'var(--red)' : 'var(--amber)';
           var barW = Math.min(100, pct);
+          var detId = 'ate_det_'+ri;
 
           // Match to ate_tracker for deployment status
           var tracker = _ateCases.find(function(t){
@@ -10238,8 +10239,47 @@ function renderATETab(el) {
             ? '<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(96,165,250,.12);color:#60a5fa;font-weight:600;margin-left:4px">'+esc(tracker.deployment_status)+'</span>'
             : '';
 
-          return '<tr style="border-bottom:1px solid var(--border)">'
-            +'<td style="padding:7px 10px;font-size:12px;font-weight:600;color:var(--text)">'+esc(r.name)
+          // Individual transactions for this employee
+          var empKey = r.emp_code || r.name;
+          var empTxns = (_ateAdvanceLog||[]).filter(function(tx){
+            var k2 = tx.emp_code || tx.emp_name || '';
+            return k2 === empKey;
+          }).sort(function(a,b){
+            return (b.transaction_date||'').localeCompare(a.transaction_date||'');
+          });
+          var detailHtml = empTxns.length
+            ? '<table style="width:100%;border-collapse:collapse">'
+              +'<thead><tr style="background:var(--surface3)">'
+              +['Date','Type','Amount','Reference','Month Ref','Notes'].map(function(h){
+                return '<th style="padding:5px 10px;text-align:left;font-size:9px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">'+h+'</th>';
+              }).join('')+'</tr></thead><tbody>'
+              +empTxns.map(function(tx){
+                var isAdv = tx.transaction_type === 'advance';
+                var amt = parseFloat(tx.amount)||0;
+                return '<tr style="border-bottom:1px solid rgba(42,61,82,.2)">'
+                  +'<td style="padding:5px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+esc(tx.transaction_date||'—')+'</td>'
+                  +'<td style="padding:5px 10px"><span style="font-size:9px;padding:1px 6px;border-radius:4px;font-weight:700;'
+                    +'background:'+(isAdv?'rgba(96,165,250,.12)':'rgba(52,211,153,.12)')+';'
+                    +'color:'+(isAdv?'#60a5fa':'var(--green)')+'">'+( isAdv?'Advance':'Recovery')+'</span></td>'
+                  +'<td style="padding:5px 10px;font-size:12px;font-weight:600;color:'+(isAdv?'var(--accent)':'var(--green)')+'">'+fmtINR(amt)+'</td>'
+                  +'<td style="padding:5px 10px;font-size:10px;color:var(--muted2);font-family:DM Mono,monospace">'+esc(tx.reference_no||'—')+'</td>'
+                  +'<td style="padding:5px 10px;font-size:11px;color:var(--muted)">'+esc(tx.month_reference||'—')+'</td>'
+                  +'<td style="padding:5px 10px;font-size:11px;color:var(--muted2)">'+esc((tx.notes||'').substring(0,60))+'</td>'
+                  +'</tr>';
+              }).join('')
+              +'</tbody></table>'
+            : '<div style="padding:8px 10px;font-size:11px;color:var(--muted)">No individual transactions found.</div>';
+
+          var toggleFn = 'var d=document.getElementById(\''+detId+'\');'
+            +'var ch=document.getElementById(\''+detId+'_ch\');'
+            +'if(d){var open=d.style.display===\'none\';'
+            +'d.style.display=open?\'table-row\':\'none\';'
+            +'if(ch)ch.textContent=open?\'▾\':\'▸\';}';
+
+          return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="'+toggleFn+'">'
+            +'<td style="padding:7px 10px;font-size:12px;font-weight:600;color:var(--text)">'
+              +'<span id="'+detId+'_ch" style="font-size:10px;color:var(--muted);margin-right:5px">▸</span>'
+              +esc(r.name)
               +(r.emp_code?'<div style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace">'+esc(r.emp_code)+'</div>':'')
               +deployBadge+'</td>'
             +'<td style="padding:7px 10px;font-size:11px;color:var(--muted)">'+esc(r.region)+'</td>'
@@ -10256,6 +10296,11 @@ function renderATETab(el) {
             +'</td>'
             +'<td style="padding:7px 10px;font-size:10px;color:var(--muted2);font-family:DM Mono,monospace">'+esc(r.lastDate||'—')+'</td>'
             +'<td style="padding:7px 10px;font-size:10px;color:var(--muted2)">'+r.txCount+'</td>'
+            +'</tr>'
+            +'<tr id="'+detId+'" style="display:none">'
+              +'<td colspan="8" style="padding:0 0 8px 30px;background:var(--surface3)">'
+                +detailHtml
+              +'</td>'
             +'</tr>';
         }).join('');
 
