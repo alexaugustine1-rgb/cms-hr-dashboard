@@ -9947,6 +9947,60 @@ var ATE_STATUS_STYLE = {
   'Separated':            {col:'#94a3b8', bg:'rgba(148,163,184,.12)'}
 };
 
+// ── Post-upload forced refresh ────────────────────────────────
+function postUploadRefresh(type) {
+  // Reset loaded flags based on upload type
+  if (type === 'super_emp' || type === 'esep' || type === 'attendance') {
+    _absentLoaded = false;
+  }
+  if (type === 'esep' || type === 'super_emp') {
+    _ateLoaded    = false;
+    _ateAdvLoaded = false;
+  }
+  if (type === 'od') {
+    _wfhOdActions = {};
+    // Reload HRBP actions for current month/view
+    if (window._odMonth && typeof loadWFHODActions === 'function') {
+      var _vt = (typeof _odView !== 'undefined' && _odView === 'WFH') ? 'WFH' : 'OD';
+      loadWFHODActions(window._odMonth, _vt);
+    }
+  }
+
+  // Force re-render active tab
+  if (typeof render === 'function') render();
+
+  // Force re-render all affected tab divs regardless of active tab
+  var _tabMap = {
+    'workforce':   function(){ var e=document.getElementById('tab-workforce'); if(e&&typeof renderWorkforce==='function') e.innerHTML=renderWorkforce(); },
+    'fnf':         function(){ var e=document.getElementById('tab-fnf'); if(e&&typeof renderFnF==='function') e.innerHTML=renderFnF(); },
+    'resignation': function(){ var e=document.getElementById('tab-resignation'); if(e&&typeof renderResignation==='function') e.innerHTML=renderResignation(); },
+    'od':          function(){ var e=document.getElementById('tab-od'); if(e&&typeof renderOD==='function') e.innerHTML=renderOD(); },
+    'risks':       function(){ var e=document.getElementById('tab-risks'); if(e&&typeof renderRisks==='function') e.innerHTML=renderRisks(); },
+    'absent':      function(){
+      var e=document.getElementById('tab-absent');
+      if(e){ _absentLoaded=false; if(typeof loadLongAbsent==='function') loadLongAbsent(); }
+    },
+    'ate':         function(){
+      _ateLoaded=false; _ateAdvLoaded=false;
+      var e=document.getElementById('tab-ate');
+      if(e&&typeof loadATECases==='function') loadATECases();
+    },
+  };
+
+  // Which tabs to refresh per upload type
+  var _refreshMap = {
+    'super_emp':  ['workforce','fnf','resignation','risks','ate'],
+    'esep':       ['workforce','fnf','resignation','risks','ate'],
+    'od':         ['od'],
+    'attendance': ['absent','risks'],
+  };
+
+  var _targets = _refreshMap[type] || [];
+  _targets.forEach(function(t) {
+    if (_tabMap[t]) setTimeout(_tabMap[t], 100);
+  });
+}
+
 async function loadATEAdvanceLog() {
   if (_ateAdvLoaded) return;
   if (!_sbUser || !_sb) return;
@@ -11414,7 +11468,7 @@ async function processFnFData(wb) {
   log('Pending: '+FNF_DATA.filter(r=>!r.paid).length+' | Paid: '+FNF_DATA.filter(r=>r.paid).length,'ok');
 
   // Force re-render (load priority flags first so they show immediately after upload)
-  if (typeof render === 'function') render();
+  postUploadRefresh('super_emp');
   loadFnFPriority().then(() => {
     const el = document.getElementById('tab-fnf');
     if (el) el.innerHTML = renderFnF();
@@ -11613,7 +11667,7 @@ async function processResignationData(wb) {
     }
   } catch(e) { console.warn('[attrition patch]', e.message); }
 
-  if (typeof render === 'function') render();
+  postUploadRefresh('esep');
   const el = document.getElementById('tab-resignation');
   if (el) el.innerHTML = renderResignation();
 }
@@ -11789,7 +11843,7 @@ async function processOdWfh(wb) {
   if (window._OD_MONTHLY && window._OD_MONTHLY.months.length > 0) {
     window._odMonth = window._OD_MONTHLY.months[window._OD_MONTHLY.months.length-1];
   }
-  if (typeof render === 'function') render();
+  postUploadRefresh('od');
   const el = document.getElementById('tab-od');
   if (el) el.innerHTML = renderOD();
 }
@@ -11966,6 +12020,7 @@ async function processAttendanceAbsence(wb) {
     await loadAbsentCases();
     log('✓ Long Absenteeism tab refreshed', 'ok');
   }
+  postUploadRefresh('attendance');
 }
 
 
