@@ -7246,9 +7246,27 @@ function renderAccountHealth() {
     var n = acct.n;
 
     // 1. Active HC (from super employee master cache — all emp types)
+    // Try region-specific composite key first, fall back to flat name match
     var activeHC = 0;
     if (_acctHC) {
-      Object.keys(_acctHC).forEach(function(k){ if(nameMatch(k,n)) activeHC+=(_acctHC[k]||0); });
+      var _acctReg = (acct.r||'').toUpperCase();
+      var _nUp = n.toUpperCase().trim();
+      // Try composite key: exact account+region match
+      if (_acctReg) {
+        Object.keys(_acctHC).forEach(function(k){
+          if (k.indexOf('|||') < 0) return; // skip flat keys
+          var parts = k.split('|||');
+          if (parts[1] === _acctReg && nameMatch(parts[0], _nUp))
+            activeHC += (_acctHC[k]||0);
+        });
+      }
+      // Fallback: flat name match if no region hit
+      if (activeHC === 0) {
+        Object.keys(_acctHC).forEach(function(k){
+          if (k.indexOf('|||') >= 0) return; // skip composite keys
+          if (nameMatch(k, n)) activeHC += (_acctHC[k]||0);
+        });
+      }
     }
 
     // 2. Absent
@@ -10830,12 +10848,21 @@ async function processEmployeeMaster(wb) {
     log('Active rows (Existing + NewJoinee): ' + activeRows.length);
 
     // ── Cache per-account HC (ALL active emp types, for Account Health Card) ──
+    // Keys: 'ACCOUNTNAME|||REGION' for region-specific lookup
+    // Also keeps flat 'ACCOUNTNAME' key for backward compat
     var _ahcMap = {};
     activeRows.forEach(function(r){
       var cust = getCust(r);
       if (!cust || cust.length < 3) return;
-      var k = cust.toUpperCase().trim();
+      var k    = cust.toUpperCase().trim();
+      var reg  = String(r['Region']||'').trim();
+      // Flat key (total across all regions)
       _ahcMap[k] = (_ahcMap[k]||0) + 1;
+      // Region-specific composite key
+      if (reg) {
+        var ck = k + '|||' + reg.toUpperCase();
+        _ahcMap[ck] = (_ahcMap[ck]||0) + 1;
+      }
     });
     try {
       await _sb.from('data_cache').upsert(
