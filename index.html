@@ -10211,7 +10211,7 @@ async function loadATECases() {
   try {
     const { data, error } = await _sb
       .from('ate_tracker')
-      .select('*')
+      .select('*, fte_emp_code, fte_confirmed_at, fte_confirmed_by')
       .order('training_end_date', { ascending: true });
     if (error) throw error;
     _ateCases  = data || [];
@@ -10319,10 +10319,19 @@ function renderATETab(el) {
     var statusOpts = ATE_STATUS.map(function(s){
       return '<option value="'+s+'"'+(r.status===s?' selected':'')+'>'+s+'</option>';
     }).join('');
+    var _showFte = r.status === 'Conversion Initiated' || r.status === 'Converted to FTE';
 
     return '<tr style="border-bottom:1px solid var(--border);background:'+rowBg+'" id="aterow_'+uniqueId+'">'
       +'<td style="padding:8px 10px;font-size:12px;font-weight:600;color:var(--text);min-width:120px">'+esc(r.name||'—')+'</td>'
-      +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+esc(r.emp_code||'—')+'</td>'
+      +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+esc(r.emp_code||'—')
+        +(r.fte_emp_code && r.fte_confirmed_at
+          ? '<div style="margin-top:3px"><span style="font-size:9px;padding:1px 6px;border-radius:3px;background:rgba(52,211,153,.15);color:var(--green);font-weight:600">✓ FTE: '+esc(r.fte_emp_code)+'</span><div style="font-size:9px;color:var(--muted2);margin-top:1px">Confirmed '+fmtD(r.fte_confirmed_at)+'</div></div>'
+          : r.fte_emp_code && !r.fte_confirmed_at
+            ? '<div style="margin-top:3px"><span style="font-size:9px;padding:1px 6px;border-radius:3px;background:rgba(251,191,36,.15);color:var(--amber);font-weight:600">⏳ FTE: '+esc(r.fte_emp_code)+'</span><div style="font-size:9px;color:var(--muted2);margin-top:1px">Pending ZingHR verification</div></div>'
+            : r.status==='Conversion Initiated' && !r.fte_emp_code
+              ? '<div style="margin-top:3px"><span style="font-size:9px;padding:1px 6px;border-radius:3px;background:rgba(248,113,113,.15);color:var(--red);font-weight:600">⚠ New emp code not entered</span></div>'
+              : '')
+      +'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:var(--text);min-width:110px">'+esc(r.account||'—')+tierBadge(r.account_tier)+subsidyBadge(r)+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:var(--muted)">'+esc(r.region||'—')+'</td>'
       +'<td style="padding:8px 10px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">'+fmtD(r.doj)+'</td>'
@@ -10330,8 +10339,9 @@ function renderATETab(el) {
       +'<td style="padding:8px 10px;font-size:11px;font-weight:600;color:'+(alert==='overdue'?'var(--red)':alert==='due30'?'var(--amber)':'var(--muted)')+'">'+esc(daysLbl)+'</td>'
       +'<td style="padding:8px 10px">'+alertBadge(alert)+'</td>'
       +'<td style="padding:8px 10px;min-width:160px">'
-        +'<select id="atesel_'+uniqueId+'" style="width:100%;padding:4px 7px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
+        +'<select id="atesel_'+uniqueId+'" onchange="var _fi=document.getElementById(\'atefteCode_'+uniqueId+'\');if(_fi)_fi.style.display=(this.value===\'Conversion Initiated\'||this.value===\'Converted to FTE\')?\'block\':\'none\';" style="width:100%;padding:4px 7px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">'
         +statusOpts+'</select>'
+        +'<input id="atefteCode_'+uniqueId+'" type="text" placeholder="New FTE emp code (e.g. 11016170)" value="'+esc(r.fte_emp_code||'')+'" style="display:'+(_showFte?'block':'none')+';margin-top:4px;width:100%;font-size:11px;padding:3px 7px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);box-sizing:border-box" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')">'
       +'</td>'
       +'<td style="padding:8px 10px;min-width:180px">'
         +'<input id="atenote_'+uniqueId+'" type="text" value="'+esc(r.action_notes||'')+'" placeholder="Add notes…" '
@@ -10631,23 +10641,26 @@ function ateFilter(sel, type) {
 }
 
 async function saveATEUpdate(id, uniqueId) {
-  var selEl  = document.getElementById('atesel_'  + uniqueId);
-  var noteEl = document.getElementById('atenote_' + uniqueId);
+  var selEl     = document.getElementById('atesel_'      + uniqueId);
+  var noteEl    = document.getElementById('atenote_'     + uniqueId);
+  var fteCodeEl = document.getElementById('atefteCode_'  + uniqueId);
   if (!selEl || !noteEl) return;
-  var newStatus = selEl.value;
-  var newNotes  = noteEl.value.trim();
+  var newStatus  = selEl.value;
+  var newNotes   = noteEl.value.trim();
+  var newFteCode = fteCodeEl ? (fteCodeEl.value.trim() || null) : null;
   var displayName = (_sbRole && _sbRole.display_name) || (_sbUser && _sbUser.email) || 'Unknown';
 
   var btn = selEl.closest('tr') ? selEl.closest('tr').querySelector('button') : null;
   if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
 
   var { error } = await _sb.from('ate_tracker').update({
-    status:       newStatus,
-    action_notes: newNotes,
-    action_date:  new Date().toISOString().substring(0,10),
-    updated_by:   displayName,
+    status:        newStatus,
+    action_notes:  newNotes,
+    action_date:   new Date().toISOString().substring(0,10),
+    updated_by:    displayName,
     updated_by_id: _sbUser ? _sbUser.id : null,
-    updated_at:   new Date().toISOString()
+    updated_at:    new Date().toISOString(),
+    fte_emp_code:  newFteCode
   }).eq('id', id);
 
   if (error) {
@@ -10658,10 +10671,11 @@ async function saveATEUpdate(id, uniqueId) {
   // Update local cache
   var idx = _ateCases.findIndex(function(r){ return r.id === id; });
   if (idx >= 0) {
-    _ateCases[idx].status       = newStatus;
-    _ateCases[idx].action_notes = newNotes;
-    _ateCases[idx].action_date  = new Date().toISOString().substring(0,10);
-    _ateCases[idx].updated_by   = displayName;
+    _ateCases[idx].status        = newStatus;
+    _ateCases[idx].action_notes  = newNotes;
+    _ateCases[idx].action_date   = new Date().toISOString().substring(0,10);
+    _ateCases[idx].updated_by    = displayName;
+    _ateCases[idx].fte_emp_code  = newFteCode;
   }
   if (btn) { btn.textContent = 'Saved ✓'; btn.style.background = 'var(--green)'; }
   setTimeout(function(){ renderATETab(document.getElementById('tab-ate')); }, 800);
@@ -11055,6 +11069,68 @@ async function processEmployeeMaster(wb) {
         }
       } else { log('Contract completed with '+cwErrors+' error(s)','err'); }
     } else { log('No FTC/Consultant/Contract rows found in EmpType or Employment Type column','info'); }
+
+    // ── ATE Conversion Reconciliation ────────────────────────────────────────
+    // ATEs get new 11xxxxxxx emp codes on FTE conversion — cross-check here.
+    try {
+      var _pendingATERes = await _sb
+        .from('ate_tracker')
+        .select('id, emp_code, name, fte_emp_code, action_notes')
+        .in('status', ['Conversion Initiated', 'Converted to FTE'])
+        .not('fte_emp_code', 'is', null);
+      var _pendingATE = _pendingATERes.data;
+
+      if (_pendingATE && _pendingATE.length > 0) {
+        // Active FTE codes from today's upload (non-ATE employees only)
+        var _activeFteCodes = new Set(
+          activeRows
+            .filter(function(r){ return !isATE(r); })
+            .map(function(r){ return String(r['EmployeeCode']||r['Employee Code']||'').trim(); })
+            .filter(Boolean)
+        );
+        var _reconNow = new Date().toISOString();
+        var _autoConfirmed = 0;
+        for (var _ai = 0; _ai < _pendingATE.length; _ai++) {
+          var _pAte = _pendingATE[_ai];
+          if (_pAte.fte_emp_code && _activeFteCodes.has(_pAte.fte_emp_code)) {
+            await _sb.from('ate_tracker').update({
+              status:           'Converted to FTE',
+              fte_confirmed_at: _reconNow,
+              fte_confirmed_by: 'system-auto',
+              action_notes:     (_pAte.action_notes||'') + '\nAuto-confirmed via Super Emp Master upload ' + new Date().toLocaleDateString('en-IN')
+            }).eq('id', _pAte.id);
+            _autoConfirmed++;
+          }
+        }
+        if (_autoConfirmed > 0)
+          log('✓ ATE Reconciliation: ' + _autoConfirmed + ' conversion(s) auto-confirmed', 'ok');
+      }
+
+      // Flag active ATEs whose 22xxxxxxx code has disappeared with no fte_emp_code set
+      var _activeATERes = await _sb
+        .from('ate_tracker')
+        .select('id, emp_code, name, fte_emp_code, action_notes')
+        .eq('status', 'Active');
+      var _activeATEs = _activeATERes.data;
+      var _todayAteCodes = new Set(
+        ateRows.map(function(r){ return String(r['EmployeeCode']||r['Employee Code']||'').trim(); })
+      );
+      var _missingCount = 0;
+      for (var _mi = 0; _mi < (_activeATEs||[]).length; _mi++) {
+        var _mAte = _activeATEs[_mi];
+        if (!_todayAteCodes.has(_mAte.emp_code) && !_mAte.fte_emp_code) {
+          await _sb.from('ate_tracker').update({
+            action_notes: (_mAte.action_notes||'') + '\n⚠ Not found in Super Emp Master ' + new Date().toLocaleDateString('en-IN') + ' — verify status in ZingHR'
+          }).eq('id', _mAte.id);
+          _missingCount++;
+        }
+      }
+      if (_missingCount > 0)
+        log('⚠ ATE Reconciliation: ' + _missingCount + ' ATE(s) missing from today\'s file — verify', 'warn');
+    } catch(_rErr) {
+      log('ATE reconciliation pass failed: ' + _rErr.message, 'err');
+    }
+    // ── end ATE Reconciliation ────────────────────────────────────────────────
 
     // Refresh ATE tab if open
     _ateLoaded = false;
