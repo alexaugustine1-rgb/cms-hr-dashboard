@@ -7270,24 +7270,42 @@ function renderAccountHealth() {
     }
 
     // 2. Absent
-    var absent = (_absentCases||[]).filter(function(c){ return nameMatch(c.customer,n); });
+    var absent = (_absentCases||[]).filter(function(c){
+      if (!nameMatch(c.customer, n)) return false;
+      if (acct.r && c.region && c.region !== acct.r) return false;
+      return true;
+    });
     var absentCrit = absent.filter(function(c){ return c.consecutive_absent>=21; });
     var esepUnverif = absent.filter(function(c){ return c.esep_initiated && c.esep_verified===false; });
 
     // 3. FnF
-    var fnfPending = (FNF_DATA||[]).filter(function(r){ return nameMatch(r.customer,n)&&!r.paid; });
+    var fnfPending = (FNF_DATA||[]).filter(function(r){
+      if (!nameMatch(r.customer, n) || r.paid) return false;
+      if (acct.r && r.region && r.region !== acct.r) return false;
+      return true;
+    });
     var fnfCrit = fnfPending.filter(function(r){ return r.band==='1year&above'||r.band==='180-365days'; });
     var fnfAmt = fnfPending.reduce(function(s,r){ return s+(r.net_salary||0); },0);
     var fnfEsc = fnfPending.filter(function(r){ return fnfEscCodes.has(r.emp_code); });
 
     // 4. Last visit
+    // Site visit data has no region field — shows pan-account last visit date
     var lastVisitDate = null;
     Object.keys(lastVisitMap).forEach(function(k){ if(nameMatch(k,n)&&(!lastVisitDate||lastVisitMap[k]>lastVisitDate)) lastVisitDate=lastVisitMap[k]; });
     var daysSinceVisit = lastVisitDate ? Math.round((today-new Date(lastVisitDate))/86400000) : null;
 
-    // 5. Attrition (exits with lwd in last 90 days)
-    var exits = (CMS_RES_DATA||[]).filter(function(r){ return nameMatch(r.customer,n)&&r.days_to_lwd<0&&r.days_to_lwd>=-90; }).length;
-    var attrRate = activeHC>0 ? Math.round(exits/activeHC*1000)/10 : 0;
+    // 5. Attrition (exits with lwd in last 90 days — computed live from lwd date)
+    var exits = (CMS_RES_DATA||[]).filter(function(r){
+      if (!nameMatch(r.customer, n)) return false;
+      if (acct.r && r.region && r.region !== acct.r) return false;
+      // Recompute days_to_lwd live from the lwd date string — frozen upload value is unreliable
+      var lwdDate = r.lwd ? new Date(r.lwd) : null;
+      if (!lwdDate || isNaN(lwdDate)) return false;
+      var daysToLwd = Math.round((lwdDate - today) / 86400000);
+      return daysToLwd < 0 && daysToLwd >= -90;
+    }).length;
+    // Annualise: 90-day exit count → annual rate (thresholds are annual: 3%/8%/15%)
+    var attrRate = activeHC > 0 ? Math.round((exits / activeHC) * (365 / 90) * 1000) / 10 : 0;
 
     // 6. TA open reqs
     var taReqs = (TA_ACTIVE_REQS||[]).filter(function(r){ return nameMatch(r.account||r.customer||'',n); });
@@ -7413,7 +7431,7 @@ function renderAccountHealth() {
     // Attrition signal
     var atVal  = c.attrRate.toFixed(1)+'%';
     var atCol  = c.attrRate<=3?'var(--green)':c.attrRate<=8?'var(--amber)':'var(--red)';
-    var atSub  = c.exits===0?'✓ no exits':c.exits+' exit'+(c.exits>1?'s':'')+' (90d)';
+    var atSub  = c.exits===0?'✓ no exits':c.exits+' exit'+(c.exits>1?'s':'')+' (90d) · ann.';
 
     // TA signal
     var taVal  = c.taReqs.length;
