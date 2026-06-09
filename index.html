@@ -7860,9 +7860,29 @@ function renderResignation(){
     _resRegion = _sbRole.region;
   }
   var S=CMS_SUMMARY;
-  var data=CMS_RES_DATA.slice();
-  // Split: active (future LWD) vs recently left (past LWD)
   var _today = new Date();
+  // Recompute days_to_lwd and days_since fresh on every render
+  // so Days Left column is always accurate, not frozen at upload time
+  var data=CMS_RES_DATA.map(function(r){
+    var _out = Object.assign({},r);
+    if (r.lwd) {
+      try {
+        var _lwdParts = r.lwd.split(' ');
+        // lwd is formatted as "19 May 2026" by fmt() in parser
+        var _lwdD = new Date(_lwdParts[0]+' '+_lwdParts[1]+' '+_lwdParts[2]);
+        if (!isNaN(_lwdD)) _out.days_to_lwd = Math.floor((_lwdD - _today)/86400000);
+      } catch(e){}
+    }
+    if (r.resign_date) {
+      try {
+        var _rParts = r.resign_date.split(' ');
+        var _rD = new Date(_rParts[0]+' '+_rParts[1]+' '+_rParts[2]);
+        if (!isNaN(_rD)) _out.days_since = Math.floor((_today - _rD)/86400000);
+      } catch(e){}
+    }
+    return _out;
+  });
+  // Split: active (future LWD) vs recently left (past LWD)
   var dataActive = data.filter(function(r){return (r.days_to_lwd||0)>=0;});
   var dataPast   = data.filter(function(r){return (r.days_to_lwd||0)<0;});
   // R1 process failure: left without R1 approval
@@ -7904,13 +7924,28 @@ function renderResignation(){
     var rowBg=r.days_to_lwd<0?'rgba(248,113,113,.06)':r.days_to_lwd<30?'rgba(248,113,113,.02)':'';
     var isPlatGoldNoReq = (r.tier==='Platinum'||r.tier==='Gold') && !r.req_id;
     var rowBorder = isPlatGoldNoReq ? 'border-left:3px solid #a78bfa;' : '';
-    return'<div style="display:grid;grid-template-columns:150px 85px 130px 80px 70px 70px 80px 1fr 90px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';'+rowBorder+'font-size:12px;align-items:center">'
-      +'<div><div style="font-weight:500;color:var(--text)">'+esc(r.name)+'</div><div style="font-size:10px;color:var(--muted2)">'+esc(r.designation)+'</div></div>'
-      +'<div style="color:var(--muted);font-size:11px">'+esc(r.location||'&#x2014;')+'</div>'
-      +'<div><div style="font-size:11px;color:var(--text)">'+esc(r.customer||'&#x2014;')+'</div><div style="margin-top:2px">'+tierBadge(r.tier)+'</div></div>'
+    // FIX 3: same resign+LWD = immediate exit (absconding/joined & left)
+    var sameDate = r.lwd && r.resign_date && r.lwd === r.resign_date;
+    var noNoticeBadge = sameDate
+      ? '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:rgba(248,113,113,.15);color:#f87171;font-weight:600;margin-left:4px">No notice</span>'
+      : '';
+    // FIX 2: reason sub-line under account
+    var reasonLine = r.reason
+      ? '<div style="font-size:10px;color:var(--muted2);margin-top:2px;font-style:italic">'+esc(r.reason)+'</div>'
+      : '';
+    return'<div style="display:grid;grid-template-columns:170px 160px 80px 70px 70px 80px 1fr 90px;padding:9px 14px;border-bottom:1px solid rgba(42,61,82,.3);background:'+rowBg+';'+rowBorder+'font-size:12px;align-items:center">'
+      +'<div>'
+        +'<div style="font-weight:500;color:var(--text)">'+esc(r.name)+noNoticeBadge+'</div>'
+        +'<div style="font-size:10px;color:var(--muted)">'+esc(r.designation)+'</div>'
+      +'</div>'
+      +'<div>'
+        +'<div style="font-size:11px;color:var(--text)">'+esc(r.customer||'&#x2014;')+'</div>'
+        +'<div style="margin-top:2px">'+tierBadge(r.tier)+'</div>'
+        +reasonLine
+      +'</div>'
       +'<div style="font-size:11px;color:var(--muted)">'+esc(r.region)+'</div>'
       +'<div style="font-size:11px;color:var(--muted)">'+esc(r.resign_date)+'</div>'
-      +'<div style="font-size:11px;color:var(--muted)">'+esc(r.lwd||'&#x2014;')+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">'+(sameDate?'&#x2014;':esc(r.lwd||'&#x2014;'))+'</div>'
       +'<div>'+lwdLbl+'</div>'
       +'<div>'+reqCell+'</div>'
       +'<div>'+r1Badge+'</div>'
@@ -7939,7 +7974,7 @@ function renderResignation(){
       +'</div>' : '')
     +
     '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px">'
-    +(function(){var _lp=data.filter(function(r){return r.days_to_lwd<0;}).length;var _l3=data.filter(function(r){return r.days_to_lwd>=0&&r.days_to_lwd<=30;}).length;var _pg=data.filter(function(r){return['Platinum','Gold'].includes(r.tier)&&!r.req_id;}).length;var _r1=data.filter(function(r){return r.r1_status==='Pending'||!r.r1_status;}).length;var _nr=data.filter(function(r){return!r.req_id;}).length;return[['Past LWD',_lp,'var(--red)','Already left'],['&lt;30 Days to LWD',_l3,'var(--red)','Start search now'],['Platinum/Gold No Req',_pg,'#a78bfa','Premium risk'],['R1 Not Approved',_r1,'var(--amber)','Blocking chain'],['No Req Raised',_nr,'var(--muted)','of '+data.length+' shown']];}()).map(function(a){
+    +(function(){var _lp=data.filter(function(r){return r.days_to_lwd<0;}).length;var _l3=data.filter(function(r){return r.days_to_lwd>=0&&r.days_to_lwd<=30;}).length;var _pg=data.filter(function(r){return['Platinum','Gold'].includes(r.tier)&&!r.req_id;}).length;var _r1=data.filter(function(r){return r.r1_status==='Pending'||!r.r1_status;}).length;var _nr=data.filter(function(r){return!r.req_id;}).length;return[['Past LWD',_lp,'var(--red)','Already left'],['&lt;30 Days to LWD',_l3,'var(--red)','Start search now'],['Platinum/Gold No Req',_pg,_pg>0?'#a78bfa':'var(--green)',_pg>0?'Premium risk':'All covered ✓'],['R1 Not Approved',_r1,'var(--amber)','Blocking chain'],['No Req Raised',_nr,'var(--muted)','of '+data.length+' shown']];}()).map(function(a){
       return'<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+a[2]+';border-radius:10px;padding:14px;text-align:center">'
         +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:34px;color:'+a[2]+';line-height:1">'+a[1]+'</div>'
         +'<div style="font-family:\'DM Mono\',monospace;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-top:4px">'+a[0]+'</div>'
@@ -7955,8 +7990,8 @@ function renderResignation(){
     +'<span style="width:1px;height:18px;background:var(--border);margin:0 4px"></span>'
     +'<span style="font-size:11px;color:var(--muted)">R1:</span>'+r1f+'</div>'
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
-    +'<div style="display:grid;grid-template-columns:150px 85px 130px 80px 70px 70px 80px 1fr 90px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['Employee','Location','Account','Region','Resigned','LWD','Days Left','Hire Request Status','R1'].map(function(h){return'<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';}).join('')+'</div>'
+    +'<div style="display:grid;grid-template-columns:170px 160px 80px 70px 70px 80px 1fr 90px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+    +['Employee','Account / Exit Reason','Region','Resigned','LWD','Days Left','Hire Request Status','R1'].map(function(h){return'<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';}).join('')+'</div>'
     +(rows||'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>')+'</div>'
     +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+data.length+' of '+CMS_RES_DATA.length+' active resignations</div>'
     +'</div>';
