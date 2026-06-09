@@ -10091,13 +10091,25 @@ function postUploadRefresh(type) {
     }
   }
 
-  // Force re-render active tab
-  if (typeof render === 'function') render();
+  // For super_emp: reload _acctHC from data_cache before re-rendering
+  // so Account Health cards show fresh per-region HC immediately
+  if (type === 'super_emp' && typeof loadAcctHC === 'function') {
+    loadAcctHC().then(function(){
+      if (typeof render === 'function') render();
+    });
+  } else {
+    if (typeof render === 'function') render();
+  }
 
   // Force re-render all affected tab divs regardless of active tab
   var _tabMap = {
     'workforce':   function(){ var e=document.getElementById('tab-workforce'); if(e&&typeof renderWorkforce==='function') e.innerHTML=renderWorkforce(); },
-    'fnf':         function(){ var e=document.getElementById('tab-fnf'); if(e&&typeof renderFnF==='function') e.innerHTML=renderFnF(); },
+    'fnf':         function(){
+      loadFnFPriority().then(function(){
+        var e=document.getElementById('tab-fnf');
+        if(e&&typeof renderFnF==='function') e.innerHTML=renderFnF();
+      });
+    },
     'resignation': function(){ var e=document.getElementById('tab-resignation'); if(e&&typeof renderResignation==='function') e.innerHTML=renderResignation(); },
     'od':          function(){ var e=document.getElementById('tab-od'); if(e&&typeof renderOD==='function') e.innerHTML=renderOD(); },
     'risks':       function(){ var e=document.getElementById('tab-risks'); if(e&&typeof renderRisks==='function') e.innerHTML=renderRisks(); },
@@ -10118,12 +10130,29 @@ function postUploadRefresh(type) {
     'esep':       ['workforce','fnf','resignation','risks','ate'],
     'od':         ['od'],
     'attendance': ['absent','risks'],
+    'fnf':        ['fnf','risks'],
   };
 
   var _targets = _refreshMap[type] || [];
   _targets.forEach(function(t) {
     if (_tabMap[t]) setTimeout(_tabMap[t], 100);
   });
+
+  // For super_emp: re-fetch workforce_intel from Supabase
+  // and merge into WI so Workforce tab shows fresh data
+  if (type === 'super_emp' && typeof _sb !== 'undefined' && _sb) {
+    (async function(){
+      try {
+        var _wiRes = await _sb.from('workforce_intel')
+          .select('data').eq('id','current').single();
+        if (!_wiRes.error && _wiRes.data && _wiRes.data.data) {
+          Object.assign(WI, _wiRes.data.data);
+          window.WI_CACHE_DATE = new Date().toISOString();
+          if (typeof render === 'function') setTimeout(render, 200);
+        }
+      } catch(e){ console.warn('[postUploadRefresh WI sync]', e); }
+    })();
+  }
 }
 
 async function loadATEAdvanceLog() {
@@ -11601,12 +11630,8 @@ async function processFnFData(wb) {
   log('✓ FnF: '+FNF_DATA.length+' records loaded','ok');
   log('Pending: '+FNF_DATA.filter(r=>!r.paid).length+' | Paid: '+FNF_DATA.filter(r=>r.paid).length,'ok');
 
-  // Force re-render (load priority flags first so they show immediately after upload)
-  postUploadRefresh('super_emp');
-  loadFnFPriority().then(() => {
-    const el = document.getElementById('tab-fnf');
-    if (el) el.innerHTML = renderFnF();
-  });
+  // Force re-render via postUploadRefresh with correct 'fnf' type
+  postUploadRefresh('fnf');
 }
 
 // ═══════════════════════════════════════════════════════════════════════
