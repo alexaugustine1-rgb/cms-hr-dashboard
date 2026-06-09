@@ -10936,8 +10936,9 @@ async function processEmployeeMaster(wb) {
       log('✓ Per-account HC cached: '+Object.keys(_ahcMap).length+' accounts','ok');
     } catch(e){ log('account_hc cache error: '+e.message,'err'); }
 
-    var ateRows   = activeRows.filter(function(r){ return getEmpType(r)==='ATE'; });
-    var cwRows    = activeRows.filter(function(r){ var t=getEmpType(r); return t==='FTC'||t==='Consultant'||t==='CONTRACT'; });
+    function isATE(r){ return String(r['Grade']||r['grade']||'').trim().toUpperCase()==='ATE'; }
+    var ateRows   = activeRows.filter(isATE);
+    var cwRows    = activeRows.filter(function(r){ if(isATE(r)) return false; var t=getEmpType(r); return t==='FTC'||t==='Consultant'||t==='CONTRACT'; });
 
     log('ATE: '+ateRows.length+' · FTC: '+cwRows.filter(function(r){return getEmpType(r)==='FTC';}).length+' · Consultant: '+cwRows.filter(function(r){return getEmpType(r)==='Consultant';}).length+' · Contract: '+cwRows.filter(function(r){return getEmpType(r)==='CONTRACT';}).length);
 
@@ -10966,7 +10967,7 @@ async function processEmployeeMaster(wb) {
         await _sb.from('ate_tracker').update({status:'Active'}).is('status',null);
         log('✓ ATE Tracker: '+ateUpsert.length+' records saved','ok');
       } else { log('ATE completed with '+ateErrors+' error(s)','err'); }
-    } else { log('No ATE rows found in active employees (check EmpType column)','err'); }
+    } else { log('No ATE rows found in active employees (check Grade column)','err'); }
 
     // ── 2. FTC / Consultant / Contract → contract_workforce ───────────────
     if (cwRows.length) {
