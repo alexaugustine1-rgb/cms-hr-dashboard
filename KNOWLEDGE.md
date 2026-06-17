@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 2.7.0 | **Last updated:** 09 Jun 2026 — ATE conversion tracking, Account Health region/attrition fixes, resignation tab fixes, eSep audit
+**Version:** 2.8.0 | **Last updated:** 17 Jun 2026 — RMG Workspace, TA Pipeline refresh, Workforce Module design
 
 ---
 
@@ -10,7 +10,7 @@ Used daily by HR team, HRBPs, Talent Acquisition, RMG, and executive leadership.
 Covers: Overview (CXO command strip), TA pipeline, HRBP connects and scorecards,
 HR Ops / payroll, L&D, Risks, Workforce Intelligence, Resignation tracker, OD/WFH
 compliance, FnF tracker, Long Absenteeism, ATE tracker, Prospective Joiners,
-Action Centre, Admin/Settings.
+RMG Workspace, Action Centre, Admin/Settings.
 
 ---
 
@@ -42,6 +42,24 @@ Action Centre, Admin/Settings.
 - node --check after EVERY edit. Extract scripts to temp .js first (Node v24 won't check .html directly). No output = clean pass.
 - Node.js path: C:\Program Files\nodejs\node.exe (confirmed installed)
 
+### Single-File Architecture Assessment (17 Jun 2026)
+Assessed as sound for next 6 months. Risks are in specific large functions, not architecture itself.
+Vite/TypeScript migration deferred — not needed now, revisit only if file becomes unmaintainable.
+
+Function size thresholds (watch list):
+- renderHRBP: 523 lines — highest risk for accidental edits
+- renderATETab: 370 lines
+- renderTA_Commitments: 357 lines
+- renderWorkforce: 363 lines
+
+Rule: functions over 300 lines should be split into orchestrator + sub-functions when next touched.
+
+### Workflow: Cowork + Claude.ai
+- Planning / diagnosis / prompt writing → Claude.ai chat
+- Build sessions → Cowork + Claude Code
+- Review / KNOWLEDGE.md → Claude.ai chat
+- "Cowork builds, Claude.ai steers"
+
 ---
 
 ## Architecture Notes
@@ -64,6 +82,7 @@ var role   = _sbRole ? (_sbRole.role   || '') : '';
 var fnType = _sbRole ? (_sbRole.function_type || '') : '';
 ```
 Comparing only function_type blocks admin users (function_type='admin', not 'hrops').
+NEVER gate on function_type alone — it blocks admins. Always: `role==='admin' OR function_type==='X'`
 
 ### L&D Tab Architecture (redesigned 05 Jun 2026)
 `renderLD(w, pw)` returns a static shell only. `loadLDTab(monthKey)` drives all data loading.
@@ -73,9 +92,11 @@ Comparing only function_type blocks admin users (function_type='admin', not 'hro
 - Month selector id: `ldMonthSel`
 - Constants: `LD_TRAINERS` (7 names) + `LD_CATEGORIES` (6 types)
 
-### L&D Form Data Flow
-- f_ld_pipeline (structured grid) → training_pipeline on submit
-- HRBP form Section 1 → training_sessions; Section 2 → training_pipeline
+### Duplicate switchTab
+Two definitions exist:
+- Line ~3845: dead code (do not wire new tabs here)
+- Line ~4608: LIVE — all new tab wiring goes here
+Clean up in a future session.
 
 ### HRBP Site Visit Cache
 `_hrbpSVCache` holds ALL site visits — not week-restricted. Journey Plan panel and
@@ -89,173 +110,178 @@ IMMUTABLE requirement — Postgres rejects CURRENT_DATE / now() in stored genera
 
 ---
 
-## Known Crash Patterns — Check Every Edit
-Any of these crashes login with "ReferenceError: sbLogin is not defined":
-- Orphaned em-dash in string concatenation
-- await inside a non-async function
-- Block-scoped function declarations inside try blocks
-- const or let declared inside try blocks
-
-When node --check reports an error: print 3 lines above and 3 below before attempting any fix.
-
----
-
 ## Key Learnings
 
 ### ATE Conversion Emp Code Problem
-ATEs have 22xxxxxxx emp codes. On FTE conversion ZingHR issues a new 11xxxxxxx code —
-old code disappears from Super Emp Master. Pure emp_code matching always fails for
-conversion detection.
+ATEs have 22xxxxxxx emp codes. On FTE conversion ZingHR issues a new 11xxxxxxx code.
+**Solution**: HRBP enters new FTE emp code in `fte_emp_code` at Conversion Initiated stage.
+`processEmployeeMaster` reconciliation auto-confirms when `fte_emp_code` appears in active non-ATE rows.
 
-**Solution**: HRBP enters new FTE emp code in `fte_emp_code` field at Conversion Initiated
-stage. `processEmployeeMaster` reconciliation auto-confirms when `fte_emp_code` appears in
-active non-ATE rows. If old 22xxxxxxx is missing AND no `fte_emp_code` set → appends
-warning note to `action_notes`.
-
-### getEmpType() Field Priority
-Reads: EmpType → Emp Type → EmployeeType → Employee Type → Employment Type → Grade
-(first non-empty wins). ZingHR column CK = EmpType. Exact uppercase match required.
-Cell must say 'ATE' — no partial match.
-
-ATE is now identified by Grade (col CM) = 'ATE' via `isATE(r)` helper — NOT EmpType.
-This corrects the count from 27 (EmpType) to 65 (Grade), because 38 ATEs are tagged
-'Trainee' in EmpType but 'ATE' in Grade.
+### getEmpType() / ATE Detection
+ATE identified by Grade (col CM) = 'ATE' via `isATE(r)` — NOT EmpType (col CK).
+This corrects the count from 27 (EmpType) to 65 (Grade). FTC/Consultant/CONTRACT remain EmpType-based.
 
 ### Account Health — Attrition Formula
 Rate is annualised: `exits / activeHC × (365/90) × 100`.
-Thresholds 3% / 8% / 15% are **annual** rates. Label shows '(90d) · ann.'.
-Exit count uses live LWD computation from `r.lwd` date string — NOT the frozen
-`days_to_lwd` integer baked in at upload time.
+Thresholds 3% / 8% / 15% are annual rates. Label shows '(90d) · ann.'.
+Exit count uses live LWD computation from `r.lwd` date string — NOT the frozen `days_to_lwd` integer.
 
 ### Account Health — Region Filter Pattern
-- `_absentCases`: `.select('*')` — region field present ✅
-- `FNF_DATA`: has region field ✅
-- `CMS_RES_DATA`: has region field ✅
+- `_absentCases`: region field present ✅ | `FNF_DATA`: region field ✅ | `CMS_RES_DATA`: region field ✅
 - `_hrbpSVCache` (last visit): NO region field — pan-account only ⚠
 Filter pattern: `if (acct.r && r.region && r.region !== acct.r) return false;`
 
 ### Frozen days_to_lwd — Root Cause
-`days_to_lwd` is baked into CMS_RES_DATA (and processResignationData output) at upload
-time. Any code that uses it directly will drift as days pass. Always recompute from
-the `r.lwd` date string at render/compute time. Same fix applied to both renderResignation
-and renderAccountHealth.
+`days_to_lwd` is baked into CMS_RES_DATA at upload time. Always recompute from `r.lwd` date string at render/compute time.
+
+### HC Scope — KEY PRINCIPLES (confirmed 17 Jun 2026)
+- Consultant and FTC are employment type labels only.
+- For all HC reporting, workforce planning, account deployment, and backfill — treated identically to permanent FTE.
+- Contractual workforce (HC breakdown) = Consultant + FTC + Contract + ATE.
+- ATE shown separately only in ATE Tracker module.
+- FTC/Consultant ARE included in total HC (both account_hc cache and WI regional totals). Not excluded anywhere.
+- Total HC 2,621 includes all emp types.
+- HC Budget from RMG covers total HC (FTE + FTC + Consultant). ATE grouped with contractual workforce for HC breakdown.
+
+### Elah-as-Budget-Ceiling Principle (RMG rule)
+Every billable req must trace to an Elah demand line. Net-new positions not in Elah are exceptions.
+Only non-billable roles may sit outside Elah.
+A position is open only if: Status != Closed AND Balance > 0 AND Billable = Yes.
+
+### ZingHR Recruitment Data Issues (from 17 Jun 2026 analysis)
+- TAT Customer Name blank on 758 of 774 rows — account name trapped in requisition title field
+- 217 reqs filled-but-never-closed in ZingHR
+- Raw open count: 405 → Reconciled open count: 182 (applying Elah-as-budget-ceiling)
+- 66 critical resignations with no backfill raised
+- 73 seats above Elah demand line need verification (Indian Hotels, SBI General, Avenue Supermarts)
+
+### RMG Reconciliation Flag Logic
+- RED — elah_demand_id is null/empty OR in_elah = false
+- AMBER — position_type contains 'Backfill' AND backfill_emp_code is null/empty
+- GREEN — elah_demand_id set AND (not a backfill OR backfill_emp_code set)
 
 ---
 
-## Current File State — 09 Jun 2026
-- Line count: ~12,376 (latest confirmed after commit 8f9edc6)
-- Latest commit: 8f9edc6
-- Local path: D:\Dropbox\CMS_IT_Services\Claude_Projects\Claude_HR_Automation\HR_OPS_COMMAND\cms-hr-dashboard\index.html
+## Current File State — 17 Jun 2026
+- Line count: ~12,794 (after commits aa507d7 + 40fd550)
+- Latest commits:
+  - 40fd550: feat: TA Pipeline — billing type filter, filled-unclosed banner, backfill emp column
+  - aa507d7: feat: RMG Workspace — reconciliation grid, Add Position form, role-gated view/edit
+  - c5f46bb: docs: KNOWLEDGE.md updated — session 09 Jun 2026
+  - 8f9edc6: fix: Account Health — region filter on signals, live LWD computation, annualised attrition rate
+  - c355d6d: feat: ATE conversion tracking — fte_emp_code field, Super Emp Master reconciliation, UI badges
+  - 9f58ac4: docs: KNOWLEDGE.md v2.6.0 — 09 Jun 2026 session summary
 
-### Commits — 09 Jun 2026
-- 8f9edc6: Fix: Account Health — region filter on signals, live LWD computation, annualised attrition rate
-- c355d6d: Feat: ATE conversion tracking — fte_emp_code field, Super Emp Master reconciliation, UI badges
-- 9f58ac4: Docs: KNOWLEDGE.md v2.6.0 — 09 Jun 2026 session summary
-- bf3f056: Fix: ATE detection — Grade (CM) not EmpType (CK), corrects ATE count 27 → 65
-- 0119aff: Fix: resignation tab — recompute days at render, remove Location, add exit reason, same-date no-notice badge
-- 6061d8e: Fix: FnF upload refresh type, super_emp in-memory WI + _acctHC reload
-- c4da088: Fix: account health HC — region-aware composite key in _ahcMap
-- Supabase only: ate_tracker reconciliation — 4 exited ATEs set Active → Separated
+### Commits — 17 Jun 2026
+- 40fd550: TA Pipeline — billing type filter, filled-unclosed banner, backfill emp column
+- aa507d7: RMG Workspace — reconciliation grid, Add Position form, role-gated view/edit
 
-### Commits — 08 Jun 2026
-- e48a8f0: Feat: Action Centre — clickable KPI chips, filter bar, table view for admin/exec
-- 3c5a178: Fix: post-upload tab refresh — postUploadRefresh() force-renders affected tabs
-- RLS fix (Supabase only): workforce_intel + data_cache write policies for hrops role
+### Commits — 09 Jun 2026 (summary)
+- 8f9edc6: Account Health — region filter, live LWD, annualised attrition
+- c355d6d: ATE conversion tracking — fte_emp_code, reconciliation, UI badges
+- 0119aff: Resignation tab — recompute days, exit reason, no-notice badge
+- bf3f056: ATE detection — Grade (CM) not EmpType (CK)
 
-### Commits — May–07 Jun 2026 (summary)
-- 0d9450d: OD/WFH enhancements — wfh_od_actions, multi-instance badge, HRBP action dropdown
-- ed35e5d: ATE Advance upload — DBT Advance panel, processATEAdvance(), ate_advance_log
-- 4b9d846: HRBP schema — hrbp_visit_plans, hrbp_er_cases, retention/discipline cases
-- 4af7593/9f7255e/c67b8b8: HRBP training form, pipeline table, L&D tab redesign
-- 13222f4–7520369: Overview rework, second KPI row, absent resolution chip
+### Commits — May–08 Jun 2026 (summary)
+- e48a8f0: Action Centre — clickable KPI chips, filter bar, table view
+- 3c5a178: Post-upload tab refresh — postUploadRefresh()
+- 0d9450d: OD/WFH — wfh_od_actions, multi-instance badge, HRBP action dropdown
+- ed35e5d: ATE Advance upload — DBT Advance panel, processATEAdvance()
+- 4b9d846: HRBP schema — hrbp_visit_plans, hrbp_er_cases, retention/discipline
+- Earlier: Overview rework, L&D tab redesign, HRBP training form, pipeline table
 
 ---
 
 ## Completed Phases
 
 ### PHASE 1 — Data Integrity ✅
-nameMatch LOCAL (renderAccountHealth), attrition annualised, HC denominator,
-normaliseCustomer(), candidate parser req_id join.
+nameMatch LOCAL (renderAccountHealth), attrition annualised, HC denominator, normaliseCustomer().
 
 ### PHASE 2 — Schema ✅ | PHASE 3 — Overview Rework ✅
-See prior sessions. Key: monthly trend table, region cards, data freshness strip,
-MTD Joiners, Absent Resolution chip, Offer→Join chip.
+Monthly trend table, region cards, data freshness strip, MTD Joiners, Absent Resolution chip, Offer→Join chip.
 
-### HRBP Tab — Sessions 1–4 ✅ (08 Jun 2026)
-Schema: hrbp_visit_plans, hrbp_er_cases, hrbp_retention_cases, hrbp_discipline_cases,
-hrbp_site_visits extended. renderHRBP() → 4 sub-tabs. Journey Plan from hrbp_visit_plans.
+### HRBP Tab ✅ (08 Jun 2026)
+Schema: hrbp_visit_plans, hrbp_er_cases, hrbp_retention_cases, hrbp_discipline_cases. 4 sub-tabs.
 
-### OD/WFH Enhancements ✅ (0d9450d) | ATE Advance Upload ✅ (ed35e5d)
-OD: wfh_od_actions, multi-instance badge, HRBP action dropdown.
-ATE Advance: processATEAdvance(), DBT Advance panel, loadATEAdvanceLog().
+### OD/WFH Enhancements ✅ | ATE Advance Upload ✅ | Post-Upload Refresh ✅ | Action Centre Filter Bar ✅
 
-### Post-Upload Refresh ✅ (3c5a178) | Action Centre Filter Bar ✅ (e48a8f0)
-postUploadRefresh(type) covers: super_emp, esep, fnf, od, attendance.
-Action Centre: filter bar, clickable chips, table view for admin/exec.
+### Resignation Tab Fixes ✅ (09 Jun 2026)
+days_to_lwd recomputed at render; location column removed; exit reason shown; no-notice badge; Plat/Gold chip fix.
 
-### Resignation Tab — 5 Fixes ✅ (0119aff, 09 Jun 2026)
-- days_to_lwd + days_since recomputed at render (not frozen at upload)
-- Location column removed; grid 9→8 cols
-- Exit reason shown as italic sub-line under account name
-- Same resign+LWD date: LWD shows —, name shows red "No notice" badge
-- Plat/Gold No Req chip: green "All covered ✓" when 0
+### ATE Detection Fix ✅ | ATE Conversion Tracking ✅ (09 Jun 2026)
 
-### ATE Detection Fix ✅ (bf3f056, 09 Jun 2026)
-isATE(r) reads Grade column (col CM), not EmpType. Corrects ATE count 27 → 65.
-cwRows guard excludes ATE rows from FTC/Consultant/CONTRACT filter.
+### Account Health Signal & Attrition Fixes ✅ (09 Jun 2026)
 
-### ATE Conversion Tracking ✅ (c355d6d, 09 Jun 2026)
-- ate_tracker: 3 new columns (fte_emp_code, fte_confirmed_at, fte_confirmed_by)
-- renderATETab: fte_emp_code input shown when status = Conversion Initiated / Converted to FTE
-- saveATEUpdate: saves fte_emp_code to Supabase
-- processEmployeeMaster reconciliation: auto-confirms when fte_emp_code found in active FTE rows
-- Missing 22xxxxxxx with no fte_emp_code → warning appended to action_notes
-- loadATECases SELECT updated to include new columns
-- UI badges: green (confirmed) / amber (pending) / red (code not entered)
+### RMG Workspace Tab ✅ (aa507d7 — 17 Jun 2026)
+- Tab id: rmg, icon: 🔗, label: RMG Workspace
+- Access: admin/rmg = full edit; hrbp/ta/hrops = read-only; others = hidden
+- HRBP auto-filter: region auto-set to _sbRole.region on load
+- KPI strip: Total / No Elah ID / RED / AMBER / GREEN counts
+- Filter bar: Region (All/North/South/East/West) / Status (All/Approved/Closed) / Flag (All/RED/AMBER/GREEN)
+- Grid: 9 columns — Req ID, Elah ID (editable), Account, Region, Position Type (dropdown), Backfill Emp (editable), Status, Age (d), Flag
+- Add Position form: 8 fields, accounts from customer_accounts; required: Req ID, Account, Position Type
+- saveRMGField: optimistic update, revert on error, auto-sets in_elah when elah_demand_id updated
+- showToast added globally at line 8795
+- 10 new functions: renderRMGShell, loadRMGTab, _renderRMGGrid, _renderRMGAddForm, toggleRMGAddPanel, rmgSyncRegion, submitRMGNewPosition, _rmgKpi, _rmgReconFlag, saveRMGField
+- Live switchTab wired at line 4668 (NOT dead ~3845)
 
-### Account Health — Signal & Attrition Fixes ✅ (8f9edc6, 09 Jun 2026)
-- Absent, FnF, attrition signals now filtered by acct.r region
-- Attrition: live LWD computation from r.lwd date string (not frozen days_to_lwd)
-- Attrition rate annualised: × (365/90). Label updated to show 'ann.'
-- Last visit: no region field in _hrbpSVCache — pan-account; comment added
-
-### CLAUDE.md Overwrite Prevention ✅
-Sentinel: saveODAction|loadWFHODActions|_wfhOdActions|multiBadge (20 hits confirmed).
-50-line delta is a trip wire for rewrites, not a hard cap.
+### TA Pipeline Refresh ✅ (40fd550 — 17 Jun 2026)
+- _taBilling global added (All / T&M / MS)
+- Billing filter applied to data array; filter bar renders after Type filter
+- filledUnclosed banner: warns when balance=0 but req still Open; renders between agHTML and pgAlert
+- Req table expanded to 9 columns: added Backfill (separation_emp_code); amber if set, muted if not
+- Grid template: 52px 155px 150px 60px 42px 45px 32px 75px 80px
 
 ---
 
 ## Pending Phases
 
 ### PHASE 4 — Account Health Tab (partial — signal fixes done)
-Remaining:
-- Position Lifecycle panel (resign → backfill req → sourcing → offer → joined)
-- Composite health score (100pts): deployment gap 35, attrition 25, absent 20, HRBP visit 10, reqs 10
-- RAG: red <50 / amber 50–70 / green >70
-- Billing type badge: T&M red, MS blue, AMC amber
-- T&M priority flag in TA aging; Plat/Gold aging panel (reqs >45d)
+Remaining: Position Lifecycle panel, composite health score (100pts), RAG <50/<70/>70, billing type badge.
 
-### PHASE 5 — HRBP Scorecard Redesign (tab structure done)
-5-dimension computeHRBPScore() pending: D1 Workforce Stability 25, D2 Account Coverage 25,
-D3 ER & Connect Quality 20, D4 TA Partnership 15, D5 Deployment Health 10.
-Leaderboard: ALL roles visible. Calendar month cadence. Transparent scoring panels.
+### PHASE 5 — HRBP Scorecard Redesign
+5-dimension computeHRBPScore() pending: Workforce Stability 25, Account Coverage 25, ER & Connect Quality 20, TA Partnership 15, Deployment Health 10.
 
-### PHASE 6 — Elah Parser + RMG Tab (URGENT — sunset July 1 2026)
-processElahDeployment(wb): "Billed Resource" sheet → per-account HC, expiry, ramp-down.
-File detection: resource_deployment / elah / deployment_detail.
-RMG role: function_type='rmg' — Mohit to confirm names.
+### PHASE 6A — Resignation Backfill Trigger (next to build)
+eSep upload flags resignations needing backfill. RMG reviews queue: Raise Req / Deploy from Bench / No Replacement Needed.
+Designation enrichment: join contract_workforce by emp_code at eSep parse time.
+Claude Code prompt written, not yet committed.
 
 ### PHASE 6B — ATE Management Module
-- ATE Mix Dashboard: NATS = ROUND(region_fte_hc × 0.10) — dynamic from workforce_intel
-- DBT Recovery Centre ✅ LIVE (25 May 2026)
+- DBT Recovery Centre ✅ LIVE
 - Bench-to-Billable Pipeline (rmg + hrops): pending
 
-### PHASE 7 — Workforce Planning Tab | PHASE 8 — Tab Redesigns
+### PHASE 7 — HC Budget Module
+Elah Pan India file = RMG's current-state deployed HC (Count of Emp Code, Billability=Billed).
+Elah total: 2,529 vs ZingHR: 2,621 — gap of 92 employees. 11 employees multi-account tagged.
+Bench in Elah: 146 (Field Services + Backup Pool).
+Paused: waiting for reconciled Elah/ZingHR master (469 mapping exceptions to resolve).
+Schema: hc_budget table to be created when data is clean.
+
+### PHASE 8 — Tab Redesigns
 Phase 8B priority: Past LWD escalation panel (211 employees, T&M billing impact).
 Phase 8A: TA tab rebuild. Phase 8C-E: Prospective Joiners, OD, Absenteeism.
 
-### PHASE 9 — Attrition History + Prediction
-Requires Alex to upload 2-year eSep data first.
+### PHASE 9 — Attrition Prediction
+attrition_history table created, 0 rows. Blocked: needs Jan–May 2026 eSep history from Ramesh.
+
+### On the Horizon
+- Transfer Detection: week-on-week customer tag change in Super Emp Master — low-effort parser, not yet built
+- Customer Contract Expiry: 3 new cols on customer_accounts (contract_end_date, renewal_status, contract_notes) — no data yet
+
+---
+
+## Build Sequence — What's Next
+
+### NEXT (in order)
+1. **Designation fix** — contract_workforce parser + eSep enrichment join (prompt written, not yet committed)
+2. **Add RMG user_profiles rows** — after Mohit confirms Pruthvi SS + Chander Mohan emails
+3. **Phase 6A — Resignation backfill trigger** — design complete, Claude Code prompt not yet written
+4. **HC Budget module** — after Elah/ZingHR reconciliation complete (469 exceptions)
+5. **ATE stale record cleanup** — after Ramesh confirms ZingHR headcount
+6. **Resignation Past LWD section** — design decision pending (collapsed vs escalation panel)
+7. **Account Health Phase 4** — Position Lifecycle panel + composite score
+8. **Attrition Prediction** — after Ramesh loads Jan–May 2026 eSep historical data
 
 ---
 
@@ -263,22 +289,39 @@ Requires Alex to upload 2-year eSep data first.
 
 ### HR CC Owns
 - weekly_reports, weekly_submissions, user_profiles (27 rows)
-- data_cache: keys: fnf, resignation, od, summary, account_hc, ta_summary,
-  elah_deployment, elah_expiry_risk, elah_ramp_down, ate_dbt_summary, esep_codes
+- data_cache: keys: fnf, resignation, od, summary, account_hc, ta_summary, elah_deployment, elah_expiry_risk, elah_ramp_down, ate_dbt_summary, esep_codes
 - absent_cases: 323 rows. Uses `.select('*')` — all cols including region.
 - prospective_joiners, attrition_history (empty), bench_deployments (empty)
-- ate_tracker: ATE cases. New cols added 09 Jun 2026:
-  - fte_emp_code text — new FTE 11xxxxxxx code entered by HRBP at Conversion Initiated
-  - fte_confirmed_at timestamptz — auto-set by processEmployeeMaster reconciliation
-  - fte_confirmed_by text — 'system-auto' (upload) or HRBP name (manual)
+- ate_tracker: ATE cases. Cols: fte_emp_code, fte_confirmed_at, fte_confirmed_by (added 09 Jun 2026)
 - ate_advance_log: Sheetal's monthly advance + recovery log
-- hrbp_site_visits (18 cols), hrbp_visit_plans, hrbp_er_cases,
-  hrbp_retention_cases, hrbp_discipline_cases, hrbp_photos
+- hrbp_site_visits (18 cols), hrbp_visit_plans, hrbp_er_cases, hrbp_retention_cases, hrbp_discipline_cases, hrbp_photos
 - workforce_intel (id='current'), resignation_tracker, req_tracker, res_summary
 - action_items, customer_accounts (150 rows, billing_type/contracted_hc/elah_hc/elah_name)
-- account_positions_log (23 cols, 6 indexes, 0 rows)
+- account_positions_log (see schema below)
 - elah_deployment (empty), planned_leaves (empty)
 - training_sessions (31 rows seeded), training_pipeline
+
+### account_positions_log Schema (17 Jun 2026)
+278 rows seeded. Migration: rmg_positions_log_columns_and_rls (20260617).
+RLS: 4 clean policies (aplog_select/insert/update/delete).
+
+Key columns:
+- zinghr_req_id, account_name, region, position_type, designation
+- elah_demand_id text — Elah demand line ID, entered by RMG
+- demand_region text — region per Elah
+- emp_category text — FTE / ATE / Retainer
+- backfill_emp_code text — emp code of departing employee
+- backfill_emp_name text — name of departing employee
+- req_status text — Approved / Closed (from ZingHR)
+- req_age_days integer — days since req was raised
+- in_elah boolean — true when elah_demand_id is set/verified
+- days_vacant (GENERATED STORED), updated_by, updated_at, created_at
+
+Seed data breakdown:
+- position_type: Backfill — Resignation (188), New Position (67), Backfill — Internal Movement (22), Redeployment (1)
+- req_status: Approved (208), Closed (66), null (4)
+- regions: West (163), South (90), null (24), East (1)
+- in_elah: true (249), not in elah (29)
 
 ### Shared With OPS360 — FLAG BEFORE TOUCHING
 workforce_intel, absent_cases, resignation_tracker, prospective_joiners,
@@ -289,34 +332,12 @@ planned_leaves, employee_account_mapping, account_positions_log
 
 ---
 
-## ATE Management
-
-### NATS Formula
-ROUND(region_fte_hc × 0.10) per region — dynamic from workforce_intel.
-Current headroom: West 78 / South 62 / North 41 / East 30 / Total 211.
-
-### DBT Flow
-DBT goes directly govt → employee bank. CMS exposure = advance paid − recovered.
-Sheetal logs advance (Sheet 1) and recovery after DBT intimation (Sheet 2).
-
-### ATE Deployment Status (auto-classified 24 May 2026)
-West: 4 Billable / 27 Training · East: 2 Billable / 18 Training
-North: 0 Billable / 9 Training · South: 0 Billable / 4 Training
-
-### ate_tracker Reconciliation — 09 Jun 2026
-4 exited ATEs set Active → Separated (08-Jun master):
-22007523 Rohit Nangare (FnF InProcess, DOL 04-Jun), 22007561 Akshat Patil (FnF Locked, DOL 17-Mar),
-22007566 Rishabh Swarankar (FnF InProcess, DOL 09-Jun), 22007571 Jyoti Jaiswar (FnF InProcess, DOL 13-May).
-DO NOT TOUCH: 22007479 Ashish Raj (Conversion Initiated ✓), 22003768 Divya Goel (see Pending Actions).
-
----
-
 ## Upload Parsers
 
 ### ZingHR Super Employee Master (Ramesh — weekly)
 - File detection: cmsitn prefix
 - Populates: _acctHC (composite ACCOUNTNAME|||REGION keys + flat keys), workforce_intel, ate_tracker
-- **ATE identified by Grade (col CM) = 'ATE'** via isATE(r) — NOT EmpType (col CK)
+- ATE identified by Grade (col CM) = 'ATE' via isATE(r) — NOT EmpType (col CK)
 - FTC / Consultant / CONTRACT remain EmpType-based
 - ATE reconciliation pass: auto-confirms fte_emp_code against active FTE rows; flags missing ATEs
 - 09-Jun numbers: activeRows 2,709 · WI HC 2,749 · 380 HC cache keys · ATE 65 · FTC 106 · Consultant 324 · Contract 89
@@ -338,9 +359,18 @@ Parser: processElahDeployment(wb) — NOT YET BUILT (Phase 6 — URGENT).
 
 ---
 
-## Account Positions Log — Workflow
-RMG enters zinghr_req_id in HR CC → dashboard joins: resignation ↔ req ↔ candidates ↔ offer ↔ joiner.
-Key cols: zinghr_req_id, linked_resignation_id, linked_absent_case_id, days_vacant (GENERATED STORED), status.
+## ATE Management
+
+### NATS Formula
+ROUND(region_fte_hc × 0.10) per region — dynamic from workforce_intel.
+
+### DBT Flow
+DBT goes directly govt → employee bank. CMS exposure = advance paid − recovered.
+Sheetal logs advance (Sheet 1) and recovery after DBT intimation (Sheet 2).
+
+### ate_tracker Reconciliation — 09 Jun 2026
+4 exited ATEs set Active → Separated. DO NOT TOUCH: 22007479 Ashish Raj (Conversion Initiated ✓).
+22003768 Divya Goel: tracker=Separated (13-Apr); 09-Jun master=Existing+Grade ATE. Confirm rejoin vs stale ZingHR tag.
 
 ---
 
@@ -353,9 +383,8 @@ Religare, Titan, Cadence, Bajaj Finance, Syngene, Dixon, SMS India, Vitech, Clix
 
 ## Workforce Intelligence — Current Numbers
 - Active HC: 2,749 (Super Emp Master, 09 Jun 2026)
-- Account HC cache (activeRows): 2,709 · Gap of 40 = FnF Initiated/transitional state
-- DO NOT use active_hc_mar for display
-- Region HC: North 502 / South 660 / East 502 / West 1,088 (pending 09-Jun confirmation)
+- Account HC cache (activeRows): 2,709 · Gap of 40 = FnF Initiated/transitional
+- Region HC: North 502 / South 660 / East 502 / West 1,088
 - Attrition (annualised): Jan 34.6% · Feb 20.5% · Mar 19.9% · Apr 1.2% · May 19.1%
 
 ---
@@ -393,7 +422,7 @@ Religare, Titan, Cadence, Bajaj Finance, Syngene, Dixon, SMS India, Vitech, Clix
 | Salma Saifi | ta | ta | North |
 
 TA users corrected from role='hrbp' → role='ta' on 24 May 2026.
-Recruiter scorecard must filter by function_type='ta'.
+RMG users (Pruthvi SS + Chander Mohan): user_profiles rows pending — Mohit to confirm emails.
 
 ---
 
@@ -417,6 +446,35 @@ Resolution filter must use indexOf('resolved') not includes() — em-dash may ca
 
 ---
 
+## Pending People Actions
+
+| Person | Action | When |
+|---|---|---|
+| Mohit | Pruthvi SS and Chander Mohan email addresses for rmg user_profiles rows | This week |
+| Ramesh | Confirm actual ATE headcount in ZingHR (61 active in tracker, last upload showed 27) | ASAP |
+| Ramesh | Upload Jan–May 2026 eSep historical data for attrition_history population | Pending |
+| Alex/Team | Elah/ZingHR reconciled master (469 mapping exceptions to resolve) before HC Budget module | Ongoing |
+| Alex | Add Tier + Billing Type + Contract End Date + Contracted HC in ZingHR customer master | Before June 30 |
+| Alex | Add Billing Type + Employee Category (FTE/ATE/Retainer) in ZingHR recruitment module | Before June 30 |
+| Kesavan | Fill contracted_hc for Plat/Gold via Admin UI | This week |
+| Sheetal | Use ATE_Advance_Upload_Template.xlsx from June 2026 | June 2026 |
+| RMG team | Enter zinghr_req_id in HR CC for each backfill/new position | After Phase 6A builds |
+
+---
+
+## Known Debt — Carry Forward
+- ATE stale records: ate_tracker has 61 Active but Super Emp shows 27. Cleanup awaiting Ramesh headcount confirmation.
+- contract_workforce: ~50 ATE rows that should not be there. Cleanup pending.
+- Resignation tab Past LWD: 211 already-left employees in main table. Design pending: collapsed vs escalation panel (Phase 8B).
+- Account Health last visit: _hrbpSVCache has no region field — last visit date is pan-account.
+- Duplicate switchTab: line ~3564 dead code, line ~4213 live. Clean up in future session.
+- planned_leaves parser: filename prefix TBC from Ramesh.
+- CEAT double-space duplicate in ZingHR: "CEAT LIMITED" + "CEAT  LIMITED".
+- LIC naming: "LIC (EAST)" vs "LIC ( EAST )" — standardise in ZingHR.
+- WI hardcoded fallback line ~845: stale values. Self-corrects on uploads.
+
+---
+
 ## OPS360 Relationship
 Supabase shared project. OPS360 reads: customer_accounts, account_positions_log, ate_tracker,
 bench_deployments, elah_deployment, attrition_history, normalise_account_name().
@@ -424,70 +482,6 @@ Shared read/write: workforce_intel, absent_cases, resignation_tracker, planned_l
 
 ---
 
-## Pending People Actions
-
-| Person | Action | When |
-|---|---|---|
-| Abhishek Singh | Divya Goel (22003768): tracker=Separated (13-Apr); 09-Jun master=Existing+Grade ATE. Confirm rejoin (→ reset Active) vs stale ZingHR tag (→ Ramesh corrects). | ASAP |
-| Ramesh | Confirm actual ATE headcount in ZingHR (Grade=ATE, Existing/NewJoinee) — 27 in today's upload vs 65 active in ate_tracker. Needed before delete-stale logic added. | This week |
-| Ramesh | Upload complete May eSep to reconcile April exits | Pending |
-| Ramesh | Clarify HC scope: FTE only or all types in Super Emp extract | Pending |
-| Ramesh | Confirm Retainer employees (293 in Elah) in Super Emp extract | This week |
-| Ramesh | Confirm planned_leaves filename prefix | Pending |
-| Alex | Add Tier + Billing Type + Contract End Date + Contracted HC in ZingHR customer master | Before June 30 |
-| Alex | Add Billing Type + Employee Category (FTE/ATE/Retainer) in ZingHR recruitment module | Before June 30 |
-| Alex | Upload 2-year eSep data for attrition_history | Phase 9 |
-| Kesavan | Fill contracted_hc for Plat/Gold via Admin UI | This week |
-| Mohit | Confirm RMG team member names for user_profiles | Pending |
-| Sheetal | Use ATE_Advance_Upload_Template.xlsx from June 2026 | June 2026 |
-| RMG team | Enter zinghr_req_id in HR CC for each backfill/new position | After Phase 6 builds |
-
----
-
-## Known Debt — Carry Forward
-- ATE stale records: ate_tracker has 65 Active but today's Super Emp has only 27. Parser upserts only, never deletes. Cleanup awaiting Ramesh headcount confirmation. Same pattern as contract_workforce (which already has cleanup step).
-- contract_workforce: ~50 ATE rows that should not be there (~14 duplicate ate_tracker + ~36 orphans). Cleanup pending.
-- Resignation tab Past LWD: 211 already-left employees mixed into main table. Design pending: collapsed section vs separate escalation panel (Phase 8B).
-- Account Health last visit: _hrbpSVCache has no region field — last visit date is pan-account. Remains until site visit data captures region at entry.
-- R1 filter: 'Approved' button matches r1_status === 'Accepted'. Low risk but should be hardened to match both.
-- owner field in Action Centre task cards: confirm renders inline.
-- WI hardcoded fallback line ~845: stale values. Self-corrects on uploads.
-- CEAT double-space duplicate in ZingHR: "CEAT LIMITED" + "CEAT  LIMITED".
-- LIC naming: "LIC (EAST)" vs "LIC ( EAST )" — standardise in ZingHR.
-- Duplicate switchTab: line ~3564 dead code, line ~4213 live. Clean up in future session.
-- planned_leaves parser: filename prefix TBC from Ramesh.
-
----
-
 ## When to Update This File
 UPDATE AFTER: schema change, phase complete, design decision confirmed, new upload parser, role change, bug fixed.
 DO NOT update for: work in progress, items being debated, analysis outputs.
-
----
-
-## Build Sequence — What's Next
-
-### COMPLETE THIS SESSION ✅
-- Resignation tab 5 fixes (0119aff)
-- ATE detection Grade fix (bf3f056)
-- ATE conversion tracking + fte_emp_code (c355d6d)
-- Account Health region filter + live LWD + annualised attrition (8f9edc6)
-- ate_tracker manual reconciliation (4 rows, Supabase only)
-
-### NEXT SESSION
-- ATE stale record cleanup (awaiting Ramesh headcount confirm — see Pending Actions)
-- Account Health Phase 4: Position Lifecycle panel + composite score
-- Resignation tab 8B: Past LWD escalation panel (design decision needed)
-- Phase 6: Elah parser — URGENT before July 1 sunset
-
-### FOLLOWING SESSIONS
-- Phase 5: HRBP scorecard 5-dimension redesign
-- Phase 6B: Bench-to-Billable Pipeline
-- Phase 7: Workforce Planning tab
-- Phase 8: TA / Prospective Joiners / OD / Absenteeism redesigns
-- Phase 9: Attrition history + prediction
-
-### DEFERRED — no decision yet
-- Email/notification system (CMS Gmail MCP vs SMTP relay vs in-dashboard)
-- HRBP full scorecard transparency: confirmed all HRBPs see all scores
-- Manage Customer Accounts tab: pending ZingHR attribute decisions
