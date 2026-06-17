@@ -8470,7 +8470,7 @@ function renderTAPipeline(){
 }
 var _taRegion='All',_taTier='All',_taPosType='All',_taBilling='All';
 var _taView='pipeline';
-var _taRecMap=[], _taRecMapLoaded=false, _taRecMapFilter='unmapped';
+var _taRecMap=[], _taRecMapLoaded=false, _taRecMapFilter='unmapped', _taRecruiterNames=[];
 var _rmgData=[], _rmgRegion='All', _rmgStatus='All', _rmgFlag='All';
 var _rmgShowAdd=false, _rmgAccounts=[];
 
@@ -8490,6 +8490,15 @@ async function loadTARecruiterMap(){
     if(res.error) throw res.error;
     _taRecMap=res.data||[];
     _taRecMapLoaded=true;
+    // Load canonical TA recruiter names from user_profiles
+    var _upRes=await _sb.from('user_profiles')
+      .select('display_name')
+      .eq('function_type','ta')
+      .order('display_name');
+    _taRecruiterNames=(_upRes.data||[])
+      .map(function(u){return u.display_name;})
+      .filter(Boolean)
+      .sort();
     _renderTARecMap();
   }catch(e){
     var el=document.getElementById('ta-rec-map-root');
@@ -8501,17 +8510,13 @@ function _renderTARecMap(){
   var el=document.getElementById('ta-rec-map-root');
   if(!el) return;
 
-  var recruiterSet={};
-  _taRecMap.forEach(function(r){
-    if(r.ta_recruiter){
-      r.ta_recruiter.split(',').forEach(function(n){
-        var name=n.replace(/\([^)]+\)/g,'').trim();
-        if(name) recruiterSet[name]=true;
-      });
-    }
-    if(r.primary_recruiter) recruiterSet[r.primary_recruiter]=true;
-  });
-  var recruiterNames=Object.keys(recruiterSet).sort();
+  // Use TA recruiter names from user_profiles (function_type='ta') only
+  var recruiterNames=_taRecruiterNames.length>0
+    ? _taRecruiterNames.slice()
+    : ['Ajith Inguva','Caral Anitha Dsouza','Dhananjay Kumar Singh',
+       'Juee Nilesh Patil','Kumari Puja','Mousumi Priyadarsini Behera',
+       'Neha Kaur Sammi','Nikita Yadav','Nilam Sunil Patil',
+       'Pijush Dutta','Salma Saifi'];
 
   var data=_taRecMap.slice();
   if(_taRecMapFilter==='unmapped') data=data.filter(function(r){return !r.primary_recruiter;});
