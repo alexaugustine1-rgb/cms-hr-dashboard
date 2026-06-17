@@ -8240,6 +8240,28 @@ function renderOD(){
 
 function renderTAPipeline(){
   if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _taRegion = _sbRole.region; }
+  // View router — delegate to sub-views
+  if(_taView==='recruiter-map'){
+    return '<div style="padding:20px 28px;max-width:1400px">'
+      +'<div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px">'
+      +['pipeline','recruiter-map'].map(function(v){
+        var labels={'pipeline':'📋 Pipeline','recruiter-map':'👤 Recruiter Mapping'};
+        var active=_taView===v;
+        return '<button onclick="_taView=\''+v+'\';document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline();'
+          +(v==='recruiter-map'?'loadTARecruiterMap();':'')+'" '
+          +'style="padding:6px 16px;border-radius:6px;font-size:12px;font-weight:'+(active?700:500)+';'
+          +'border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'
+          +(active?'var(--accent)':'none')+';color:'+(active?'var(--bg)':'var(--muted)')+';cursor:pointer">'
+          +labels[v]+'</button>';
+      }).join('')+'</div>'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;'
+      +'color:var(--text);margin-bottom:4px">Recruiter Mapping</div>'
+      +'<div style="font-size:11px;color:var(--muted);margin-bottom:16px">'
+      +'Set one primary recruiter per open req. ZingHR often assigns multiple — '
+      +'only the primary owner drives scorecard metrics.</div>'
+      +'<div id="ta-rec-map-root"><div style="color:var(--muted);padding:20px">Loading…</div></div>'
+      +'</div>';
+  }
   if(!TA_ACTIVE_REQS||!TA_ACTIVE_REQS.length){
     return '<div style="padding:60px;text-align:center;color:var(--muted)">'
       +'<div style="font-size:28px;margin-bottom:10px">📋</div>'
@@ -8342,9 +8364,11 @@ function renderTAPipeline(){
     var tatCol=r.tat>90?'#dc2626':r.tat>60?'var(--red)':r.tat>45?'#f97316':r.tat>30?'var(--amber)':'var(--muted)';
     var bg=r.tat>45?'rgba(248,113,113,.02)':'';
     var tierColor=r.tier==='Platinum'?'#a78bfa':r.tier==='Gold'?'#f59e0b':'transparent';
-    var recName=r.ta_recruiter?r.ta_recruiter.replace(/\([^)]+\)/g,'').split(',')[0].trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').split(' ')[0]:'—';
+    var recName=r.primary_recruiter
+      ? r.primary_recruiter.split(' ')[0]
+      : (r.ta_recruiter?r.ta_recruiter.replace(/\([^)]+\)/g,'').split(',')[0].trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').split(' ')[0]:'—');
     if(!recName||recName==='') recName='Unassigned';
-    var recColor=recName==='Unassigned'?'var(--amber)':'var(--muted2)';
+    var recColor=r.primary_recruiter?'var(--green)':(!r.ta_recruiter||!r.ta_recruiter.trim()?'var(--amber)':'var(--muted2)');
     return'<div style="display:grid;grid-template-columns:52px 155px 150px 60px 42px 45px 32px 75px 80px;padding:6px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;background:'+bg+';border-left:2px solid '+tierColor+'">'
       +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--muted2)">'+esc(r.req_id)+'</div>'
       +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.designation||'—')+'</div>'
@@ -8398,6 +8422,20 @@ function renderTAPipeline(){
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">'
     +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Talent Acquisition Intelligence</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">TA Pipeline &amp; Recruiter Performance</div></div>'
+  +'<div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px">'
+  +['pipeline','recruiter-map'].map(function(v){
+    var labels={'pipeline':'📋 Pipeline','recruiter-map':'👤 Recruiter Mapping'};
+    var canSeeMap = typeof _sbRole!=='undefined'&&_sbRole&&
+      (_sbRole.role==='admin'||(_sbRole.function_type==='ta'&&_sbRole.display_name==='Neha Kaur Sammi'));
+    if(v==='recruiter-map'&&!canSeeMap) return '';
+    var active=_taView===v;
+    return '<button onclick="_taView=\''+v+'\';document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline();'
+      +(v==='recruiter-map'?'loadTARecruiterMap();':'')+'" '
+      +'style="padding:6px 16px;border-radius:6px;font-size:12px;font-weight:'+(active?700:500)+';'
+      +'border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'
+      +(active?'var(--accent)':'none')+';color:'+(active?'var(--bg)':'var(--muted)')+';cursor:pointer">'
+      +labels[v]+'</button>';
+  }).join('')+'</div>'
     +'<div style="font-size:10px;color:var(--muted2)">TAT file: '+TAT_DATE+' &nbsp;·&nbsp; Candidate file: '+CAND_DATE+'<br>'
     +'Recruiter attribution: <strong style="color:var(--text)">Sourced By</strong> field · HRBP names excluded · TAT = Req Date → ECode Date</div></div>'
     +kpis+unassignedAlert+agHTML+filledUnclosedBanner+pgAlert
@@ -8431,8 +8469,177 @@ function renderTAPipeline(){
     +'</div>';
 }
 var _taRegion='All',_taTier='All',_taPosType='All',_taBilling='All';
+var _taView='pipeline';
+var _taRecMap=[], _taRecMapLoaded=false, _taRecMapFilter='unmapped';
 var _rmgData=[], _rmgRegion='All', _rmgStatus='All', _rmgFlag='All';
 var _rmgShowAdd=false, _rmgAccounts=[];
+
+async function loadTARecruiterMap(){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canEdit=role.role==='admin'||(role.function_type==='ta'&&role.display_name==='Neha Kaur Sammi');
+  if(!canEdit){
+    var el=document.getElementById('ta-rec-map-root');
+    if(el) el.innerHTML='<div style="color:var(--muted);padding:20px">Access restricted to TA head and admins.</div>';
+    return;
+  }
+  try{
+    var res=await _sb.from('req_tracker')
+      .select('id,req_id,customer,region,tier,billing_type,designation,ta_recruiter,primary_recruiter,primary_recruiter_set_by,tat,critical,status')
+      .eq('status','Open')
+      .order('tat',{ascending:false});
+    if(res.error) throw res.error;
+    _taRecMap=res.data||[];
+    _taRecMapLoaded=true;
+    _renderTARecMap();
+  }catch(e){
+    var el=document.getElementById('ta-rec-map-root');
+    if(el) el.innerHTML='<div style="color:var(--red);padding:20px">Load failed: '+esc(e.message)+'</div>';
+  }
+}
+
+function _renderTARecMap(){
+  var el=document.getElementById('ta-rec-map-root');
+  if(!el) return;
+
+  var recruiterSet={};
+  _taRecMap.forEach(function(r){
+    if(r.ta_recruiter){
+      r.ta_recruiter.split(',').forEach(function(n){
+        var name=n.replace(/\([^)]+\)/g,'').trim();
+        if(name) recruiterSet[name]=true;
+      });
+    }
+    if(r.primary_recruiter) recruiterSet[r.primary_recruiter]=true;
+  });
+  var recruiterNames=Object.keys(recruiterSet).sort();
+
+  var data=_taRecMap.slice();
+  if(_taRecMapFilter==='unmapped') data=data.filter(function(r){return !r.primary_recruiter;});
+  if(_taRecMapFilter==='mapped')   data=data.filter(function(r){return !!r.primary_recruiter;});
+  if(_taRecMapFilter==='critical') data=data.filter(function(r){return r.critical&&!r.primary_recruiter;});
+
+  var total=_taRecMap.length;
+  var mapped=_taRecMap.filter(function(r){return !!r.primary_recruiter;}).length;
+  var unmapped=total-mapped;
+  var critUnmapped=_taRecMap.filter(function(r){return r.critical&&!r.primary_recruiter;}).length;
+
+  function fbtn(v,active,fn,col){
+    col=col||'var(--accent)';
+    return '<button onclick="'+fn+'" style="padding:3px 10px;border-radius:20px;font-size:11px;'
+      +'border:1px solid '+(active?col:'var(--border)')+';background:'+(active?col:'none')+';'
+      +'color:'+(active?'var(--bg)':col)+';cursor:pointer">'+v+'</button>';
+  }
+
+  var summary='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+    +'<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--red);'
+    +'border-radius:8px;padding:8px 14px;text-align:center;min-width:120px">'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;color:var(--red)">'+unmapped+'</div>'
+    +'<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Not Mapped</div></div>'
+    +'<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--amber);'
+    +'border-radius:8px;padding:8px 14px;text-align:center;min-width:120px">'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;color:var(--amber)">'+critUnmapped+'</div>'
+    +'<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Critical Unmapped</div></div>'
+    +'<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--green);'
+    +'border-radius:8px;padding:8px 14px;text-align:center;min-width:120px">'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;color:var(--green)">'+mapped+'</div>'
+    +'<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Mapped</div></div>'
+    +'<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--accent);'
+    +'border-radius:8px;padding:8px 14px;text-align:center;min-width:120px">'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;color:var(--accent)">'+total+'</div>'
+    +'<div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px">Total Open</div></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:6px;margin-bottom:12px;align-items:center">'
+    +'<span style="font-size:11px;color:var(--muted)">Show:</span>'
+    +fbtn('Unmapped',_taRecMapFilter==='unmapped',"_taRecMapFilter='unmapped';_renderTARecMap()",'var(--red)')
+    +fbtn('Critical Unmapped',_taRecMapFilter==='critical',"_taRecMapFilter='critical';_renderTARecMap()",'var(--amber)')
+    +fbtn('Mapped',_taRecMapFilter==='mapped',"_taRecMapFilter='mapped';_renderTARecMap()",'var(--green)')
+    +fbtn('All',_taRecMapFilter==='all',"_taRecMapFilter='all';_renderTARecMap()",'var(--accent)')
+    +'</div>';
+
+  var hdr='<div style="display:grid;grid-template-columns:65px 170px 60px 130px 1fr 180px 45px;'
+    +'padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border);border-radius:8px 8px 0 0">'
+    +['Req','Account','Region','Role','ZingHR Attribution','Primary Owner','Age'].map(function(h){
+      return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;'
+        +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
+    }).join('')+'</div>';
+
+  var rows=data.map(function(r){
+    var isCritical=r.critical||r.tier==='Platinum'||r.tier==='Gold'||r.billing_type==='T&M';
+    var isPrimaryMapped=!!r.primary_recruiter;
+    var rowBg=isCritical&&!isPrimaryMapped?'rgba(248,113,113,.02)':'';
+    var tierCol=r.tier==='Platinum'?'#a78bfa':r.tier==='Gold'?'#f59e0b':'transparent';
+    var ageCol=(r.tat||0)>90?'#dc2626':(r.tat||0)>45?'var(--red)':'var(--muted)';
+
+    var dropdownOpts='<option value="">-- Assign --</option>'
+      +recruiterNames.map(function(n){
+        return '<option value="'+esc(n)+'"'+(r.primary_recruiter===n?' selected':'')+'>'+esc(n)+'</option>';
+      }).join('');
+
+    var ownerCell='<div style="display:flex;align-items:center;gap:6px">'
+      +'<select onchange="savePrimaryRecruiter(\''+esc(r.id)+'\',this.value)" '
+      +'style="flex:1;font-size:10px;padding:3px 5px;border-radius:4px;'
+      +'border:1px solid '+(isPrimaryMapped?'var(--green)':'var(--border)')+';'
+      +'background:var(--surface);color:var(--text)">'
+      +dropdownOpts+'</select>'
+      +(isPrimaryMapped?'<span style="color:var(--green);font-size:14px">✓</span>':'<span style="color:var(--muted2);font-size:12px">○</span>')
+      +'</div>';
+
+    return '<div style="display:grid;grid-template-columns:65px 170px 60px 130px 1fr 180px 45px;'
+      +'padding:6px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;'
+      +'align-items:center;background:'+rowBg+';border-left:2px solid '+tierCol+'">'
+      +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--muted2)">'+esc(r.req_id||'—')+'</div>'
+      +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)" title="'+esc(r.customer||'')+'">'
+      +esc((r.customer||'—').substring(0,22))+'</div>'
+      +'<div style="font-size:10px;color:var(--muted)">'+esc(r.region||'—')+'</div>'
+      +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;color:var(--muted)" title="'+esc(r.designation||'')+'">'
+      +esc((r.designation||'—').substring(0,18))+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.ta_recruiter||'')+'">'
+      +esc((r.ta_recruiter||'Not assigned').substring(0,35))+'</div>'
+      +'<div>'+ownerCell+'</div>'
+      +'<div style="font-weight:700;color:'+ageCol+'">'+((r.tat||0))+'d</div>'
+      +'</div>';
+  }).join('');
+
+  el.innerHTML=summary
+    +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+    +hdr
+    +(rows||'<div style="padding:32px;text-align:center;color:var(--muted)">All reqs mapped ✓</div>')
+    +'</div>'
+    +'<div style="margin-top:6px;font-size:10px;color:var(--muted2)">Showing '+data.length+' of '+total
+    +' open reqs · Scorecard uses primary owner when set, ZingHR attribution as fallback</div>';
+}
+
+async function savePrimaryRecruiter(rowUuid, recruiterName){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canEdit=role.role==='admin'||(role.function_type==='ta'&&role.display_name==='Neha Kaur Sammi');
+  if(!canEdit) return;
+
+  var user=(role.display_name)||'ta_head';
+  var now=new Date().toISOString();
+  var payload={
+    primary_recruiter: recruiterName||null,
+    primary_recruiter_set_by: user,
+    primary_recruiter_set_at: now,
+    updated_at: now,
+    updated_by: user
+  };
+
+  var idx=_taRecMap.findIndex(function(r){return r.id===rowUuid;});
+  if(idx!==-1){
+    _taRecMap[idx].primary_recruiter=recruiterName||null;
+    _taRecMap[idx].primary_recruiter_set_by=user;
+  }
+
+  try{
+    var res=await _sb.from('req_tracker').update(payload).eq('id',rowUuid);
+    if(res.error) throw res.error;
+    _renderTARecMap();
+  }catch(e){
+    if(idx!==-1) _taRecMap[idx].primary_recruiter=null;
+    _renderTARecMap();
+    if(typeof showToast==='function') showToast('Save failed: '+e.message,'error');
+  }
+}
 
 function renderRMGShell(){
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
