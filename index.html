@@ -9819,7 +9819,11 @@ async function processReqTAT(wb) {
       if(_res.error) throw _res.error;
     }
     log('✓ req_tracker upserted: '+_rtBatch.length+' rows (primary_recruiter preserved)','ok');
-  } catch(e){ log('req_tracker upsert failed: '+e.message,'err'); }
+    // Enrich tier + billing_type + close filled reqs + rebuild data_cache.ta_reqs
+    var _enrichRes=await _sb.rpc('enrich_req_tracker_from_accounts');
+    if(_enrichRes.error) throw _enrichRes.error;
+    log('✓ req_tracker enriched (tier, billing_type, filled-closed reqs)','ok');
+  } catch(e){ log('req_tracker upsert/enrich failed: '+e.message,'err'); }
   // ── end req_tracker upsert ────────────────────────────────────
 
   log('✓ Req TAT refreshed — '+active.length+' open reqs, '+closed.length+' MTD closures','ok');
