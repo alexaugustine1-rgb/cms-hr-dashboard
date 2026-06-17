@@ -8594,7 +8594,12 @@ function _renderTARecMap(){
       +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;color:var(--muted)" title="'+esc(r.designation||'')+'">'
       +esc((r.designation||'—').substring(0,18))+'</div>'
       +'<div style="font-size:10px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.ta_recruiter||'')+'">'
-      +esc((r.ta_recruiter||'Not assigned').substring(0,35))+'</div>'
+      +esc(((r.ta_recruiter||'Not assigned')
+        .replace(/\([^)]+\)/g,'')
+        .replace(/,\s*,/g,',')
+        .trim()
+        .replace(/,\s*$/,'')
+        ||'Not assigned').substring(0,40))+'</div>'
       +'<div>'+ownerCell+'</div>'
       +'<div style="font-weight:700;color:'+ageCol+'">'+((r.tat||0))+'d</div>'
       +'</div>';
