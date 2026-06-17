@@ -585,6 +585,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <button class="sidebar-item" id="snav-ta" onclick="snavClick('ta',this)">
         <span class="item-icon">📋</span><span class="item-label">TA Commitments</span>
       </button>
+      <button class="sidebar-item" id="snav-rmg" onclick="snavClick('rmg',this)" style="display:none">
+        <span class="item-icon">🔗</span><span class="item-label">RMG Workspace</span>
+      </button>
       <button class="sidebar-item" id="snav-prospective-joiners" onclick="snavClick('joiners',this)" style="display:none">
         <span class="item-icon">🧑‍💼</span><span class="item-label">Prospective Joiners</span>
       </button>
@@ -734,6 +737,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-actioncentre" class="tab-content"></div>
   <div id="tab-od" class="tab-content"></div>
   <div id="tab-tapipeline" class="tab-content"></div>
+  <div id="tab-rmg" class="tab-content"></div>
   
   
   
@@ -3805,6 +3809,7 @@ function render() {
     'resignation': function(){ return renderResignation(); },
     'od': function(){ return renderOD(); },
     'tapipeline': function(){ return renderTAPipeline(); },
+    'rmg': function(){ return ''; },
     'fnf': function(){ return renderFnF(); },
     'absenteeism': function(){ var el=document.getElementById('tab-absenteeism'); renderAbsenteeism(el); return ''; },
     'actioncentre': function(){ var el=document.getElementById('tab-actioncentre'); renderActionCentre(el); return ''; },
@@ -4660,6 +4665,7 @@ function switchTab(id, btn) {
     }
   }
   else if(id==='tapipeline'){const mc=document.getElementById('tab-tapipeline');if(mc)mc.innerHTML=renderTAPipeline();}
+  else if(id==='rmg'){var mc=document.getElementById('tab-rmg');if(mc){ mc.innerHTML=renderRMGShell(); loadRMGTab(); }}
   else if(id==='fnf'){const mc=document.getElementById('tab-fnf');if(mc)mc.innerHTML=renderFnF();}
   else if(id==='acct-health'){_ahFilters={region:'All',tier:'All',health:'All'};const mc=document.getElementById('tab-acct-health');if(mc)mc.innerHTML=renderAccountHealth();}
   else if(id==='admin'){const mc=document.getElementById('tab-admin');if(mc)mc.innerHTML=renderAdmin(WEEKS_DATA[currentWeek],currentWeek);}
@@ -8409,6 +8415,394 @@ function renderTAPipeline(){
     +'</div>';
 }
 var _taRegion='All',_taTier='All',_taPosType='All';
+var _rmgData=[], _rmgRegion='All', _rmgStatus='All', _rmgFlag='All';
+var _rmgShowAdd=false, _rmgAccounts=[];
+
+function renderRMGShell(){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canView=role.role==='admin'||role.function_type==='rmg'
+    ||role.function_type==='hrbp'||role.function_type==='ta'
+    ||role.function_type==='hrops';
+  if(!canView) return '<div style="padding:60px;text-align:center;'
+    +'color:var(--muted)">Access restricted.</div>';
+  return '<div style="padding:20px 28px;max-width:1400px" id="rmg-root">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
+    +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">'
+    +'Resource Management Group</div>'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;'
+    +'letter-spacing:1px;color:var(--text);margin-bottom:16px">'
+    +'RMG Workspace — Req ↔ Elah Reconciliation</div>'
+    +'<div id="rmg-summary"></div>'
+    +'<div id="rmg-add-panel"></div>'
+    +'<div id="rmg-grid" style="margin-top:16px;color:var(--muted);'
+    +'font-size:12px">Loading…</div>'
+    +'</div>';
+}
+
+async function loadRMGTab(){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canView=role.role==='admin'||role.function_type==='rmg'
+    ||role.function_type==='hrbp'||role.function_type==='ta'
+    ||role.function_type==='hrops';
+  if(!canView) return;
+  if(role.function_type==='hrbp'&&role.region&&role.region!=='Pan India'){
+    _rmgRegion=role.region;
+  }
+  try{
+    var res=await _sb.from('account_positions_log')
+      .select('*').order('req_age_days',{ascending:false});
+    if(res.error) throw res.error;
+    _rmgData=res.data||[];
+    var acRes=await _sb.from('customer_accounts')
+      .select('name,region').eq('active',true).order('name');
+    _rmgAccounts=(acRes.data||[]);
+    _renderRMGGrid();
+  }catch(e){
+    var el=document.getElementById('rmg-grid');
+    if(el) el.innerHTML='<div style="color:var(--red);padding:20px">'
+      +'Failed to load: '+esc(e.message)+'</div>';
+  }
+}
+
+function _renderRMGGrid(){
+  var summaryEl=document.getElementById('rmg-summary');
+  var addEl=document.getElementById('rmg-add-panel');
+  var gridEl=document.getElementById('rmg-grid');
+  if(!summaryEl||!gridEl) return;
+
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canEdit=role.role==='admin'||role.function_type==='rmg';
+  var isReadOnly=!canEdit&&(role.function_type==='hrbp'
+    ||role.function_type==='ta'||role.function_type==='hrops');
+
+  var data=_rmgData.slice();
+  if(_rmgRegion!=='All') data=data.filter(function(r){return r.region===_rmgRegion;});
+  if(_rmgStatus!=='All') data=data.filter(function(r){return r.req_status===_rmgStatus;});
+  if(_rmgFlag!=='All')   data=data.filter(function(r){return _rmgReconFlag(r).type===_rmgFlag;});
+
+  var total=_rmgData.length;
+  var noElah=_rmgData.filter(function(r){return !r.elah_demand_id;}).length;
+  var redCnt=_rmgData.filter(function(r){return _rmgReconFlag(r).type==='RED';}).length;
+  var ambCnt=_rmgData.filter(function(r){return _rmgReconFlag(r).type==='AMBER';}).length;
+  var grnCnt=_rmgData.filter(function(r){return _rmgReconFlag(r).type==='GREEN';}).length;
+
+  function fbtn(v,active,fn,col){
+    col=col||'var(--accent)';
+    return '<button onclick="'+fn+'" style="padding:3px 10px;border-radius:20px;'
+      +'font-size:11px;border:1px solid '+(active?col:'var(--border)')+';background:'
+      +(active?col:'none')+';color:'+(active?'var(--bg)':col)+';cursor:pointer">'+v+'</button>';
+  }
+
+  var readOnlyBanner=isReadOnly
+    ?'<div style="background:rgba(96,165,250,.07);border:1px solid rgba(96,165,250,.2);'
+      +'border-radius:6px;padding:7px 14px;margin-bottom:10px;font-size:11px;color:#60a5fa">'
+      +'👁 Read-only view — contact RMG to update positions</div>'
+    :'';
+
+  summaryEl.innerHTML=readOnlyBanner
+    +'<div style="display:flex;justify-content:space-between;align-items:center;'
+    +'margin-bottom:10px">'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +_rmgKpi('Total Positions',total,'var(--accent)')
+    +_rmgKpi('No Elah Demand ID',noElah,'var(--red)')
+    +_rmgKpi('RED — Unreconciled',redCnt,'var(--red)')
+    +_rmgKpi('AMBER — Verify',ambCnt,'var(--amber)')
+    +_rmgKpi('GREEN — Reconciled',grnCnt,'var(--green)')
+    +'</div>'
+    +(canEdit
+      ?'<button onclick="toggleRMGAddPanel()" style="padding:7px 18px;border-radius:6px;'
+        +'font-size:12px;font-weight:600;border:none;background:var(--accent);'
+        +'color:var(--bg);cursor:pointer">+ Add Position</button>'
+      :'')
+    +'</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
+    +'<span style="font-size:11px;color:var(--muted)">Region:</span>'
+    +['All','North','South','East','West'].map(function(v){
+      return fbtn(v,_rmgRegion===v,"_rmgRegion='"+v+"';_renderRMGGrid()",'var(--accent)');
+    }).join('')
+    +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
+    +'<span style="font-size:11px;color:var(--muted)">Status:</span>'
+    +['All','Approved','Closed'].map(function(v){
+      return fbtn(v,_rmgStatus===v,"_rmgStatus='"+v+"';_renderRMGGrid()",'var(--accent)');
+    }).join('')
+    +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
+    +'<span style="font-size:11px;color:var(--muted)">Flag:</span>'
+    +[['All','var(--accent)'],['RED','var(--red)'],
+      ['AMBER','var(--amber)'],['GREEN','var(--green)']].map(function(vp){
+      return fbtn(vp[0],_rmgFlag===vp[0],"_rmgFlag='"+vp[0]+"';_renderRMGGrid()",vp[1]);
+    }).join('')
+    +'</div>';
+
+  if(addEl){
+    addEl.innerHTML=_rmgShowAdd&&canEdit?_renderRMGAddForm():'';
+  }
+
+  var hdr='<div style="display:grid;'
+    +'grid-template-columns:90px 90px 170px 65px 140px 75px 80px 55px 95px;'
+    +'padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border);'
+    +'border-radius:8px 8px 0 0">'
+    +['Req ID','Elah ID','Account','Region','Position Type',
+      'Backfill Emp','Status','Age (d)','Flag'].map(function(h){
+      return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;'
+        +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
+    }).join('')+'</div>';
+
+  var rows=data.map(function(r){
+    var flag=_rmgReconFlag(r);
+    var ageCol=(r.req_age_days||0)>90?'#dc2626'
+      :(r.req_age_days||0)>60?'var(--red)'
+      :(r.req_age_days||0)>45?'#f97316':'var(--muted)';
+    var flagBadge='<span style="font-size:9px;padding:2px 7px;border-radius:3px;'
+      +'font-weight:600;background:'+flag.bg+';color:'+flag.col+'">'+flag.label+'</span>';
+    var rowBg=flag.type==='RED'?'rgba(248,113,113,.02)'
+      :flag.type==='AMBER'?'rgba(251,191,36,.02)':'';
+
+    var elahCell=canEdit
+      ?'<input value="'+esc(r.elah_demand_id||'')+'" placeholder="Elah ID" '
+        +'onchange="saveRMGField('+r.id+',\'elah_demand_id\',this.value)" '
+        +'style="width:100%;font-size:10px;padding:2px 5px;border-radius:3px;'
+        +'border:1px solid var(--border);background:var(--surface);color:var(--text)">'
+      :esc(r.elah_demand_id||'—');
+
+    var ptCell=canEdit
+      ?'<select onchange="saveRMGField('+r.id+',\'position_type\',this.value)" '
+        +'style="width:100%;font-size:10px;padding:2px 3px;border-radius:3px;'
+        +'border:1px solid var(--border);background:var(--surface);color:var(--text)">'
+        +['Backfill — Resignation','Backfill — Internal Movement',
+          'New Position','Relief','Redeployment'].map(function(v){
+          return '<option value="'+v+'"'+(r.position_type===v?' selected':'')+'>'+v+'</option>';
+        }).join('')+'</select>'
+      :esc(r.position_type||'—');
+
+    var bfCell=canEdit
+      ?'<input value="'+esc(r.backfill_emp_code||'')+'" placeholder="Emp code" '
+        +'onchange="saveRMGField('+r.id+',\'backfill_emp_code\',this.value)" '
+        +'style="width:100%;font-size:10px;padding:2px 5px;border-radius:3px;'
+        +'border:1px solid var(--border);background:var(--surface);color:var(--text)">'
+      :esc(r.backfill_emp_code||'—');
+
+    return '<div style="display:grid;'
+      +'grid-template-columns:90px 90px 170px 65px 140px 75px 80px 55px 95px;'
+      +'padding:6px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;'
+      +'align-items:center;background:'+rowBg+'">'
+      +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--muted2)">'
+      +esc(r.zinghr_req_id||'—')+'</div>'
+      +'<div>'+elahCell+'</div>'
+      +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;'
+      +'text-overflow:ellipsis;font-size:11px" title="'+esc(r.account_name||'')+'">'
+      +esc((r.account_name||'—').substring(0,24))+'</div>'
+      +'<div style="font-size:10px;color:var(--muted)">'+esc(r.region||'—')+'</div>'
+      +'<div>'+ptCell+'</div>'
+      +'<div>'+bfCell+'</div>'
+      +'<div style="font-size:10px;color:var(--muted)">'
+      +esc(r.req_status||'—')+'</div>'
+      +'<div style="font-weight:700;color:'+ageCol+'">'+(r.req_age_days||0)+'</div>'
+      +'<div>'+flagBadge+'</div>'
+      +'</div>';
+  }).join('');
+
+  gridEl.innerHTML='<div style="background:var(--surface2);border:1px solid var(--border);'
+    +'border-radius:8px;overflow:hidden">'+hdr
+    +(rows||'<div style="padding:32px;text-align:center;color:var(--muted)">'
+      +'No positions match filters</div>')
+    +'</div>'
+    +'<div style="margin-top:6px;font-size:10px;color:var(--muted2)">Showing '
+    +data.length+' of '+_rmgData.length+' positions'
+    +(canEdit?' · Elah ID, Position Type and Backfill Emp are editable'
+      :' · Read-only view')+'</div>';
+}
+
+function _renderRMGAddForm(){
+  var acctOpts='<option value="">Select account…</option>'
+    +_rmgAccounts.map(function(a){
+      return '<option value="'+esc(a.name)+'|'+esc(a.region||'')+'">'
+        +esc(a.name)+(a.region?' ('+a.region+')':'')+'</option>';
+    }).join('');
+
+  return '<div style="background:var(--surface2);border:1px solid var(--border);'
+    +'border-top:3px solid var(--accent);border-radius:8px;padding:16px 20px;'
+    +'margin-bottom:16px">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
+    +'letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:12px">'
+    +'Add New Approved Position</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px">'
+    +'<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">'
+    +'ZingHR Req ID <span style="color:var(--red)">*</span></div>'
+    +'<input id="rmg-new-req" placeholder="e.g. 5021" '
+    +'style="width:100%;font-size:11px;padding:5px 8px;border-radius:4px;'
+    +'border:1px solid var(--border);background:var(--surface);color:var(--text)"></div>'
+    +'<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">'
+    +'Account <span style="color:var(--red)">*</span></div>'
+    +'<select id="rmg-new-acct" onchange="rmgSyncRegion(this.value)" '
+    +'style="width:100%;font-size:11px;padding:5px 8px;border-radius:4px;'
+    +'border:1px solid var(--border);background:var(--surface);color:var(--text)">'
+    +acctOpts+'</select></div>'
+    +'<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Region</div>'
+    +'<select id="rmg-new-region" '
+    +'style="width:100%;font-size:11px;padding:5px 8px;border-radius:4px;'
+    +'border:1px solid var(--border);background:var(--surface);color:var(--text)">'
+    +['','North','South','East','West'].map(function(v){
+      return '<option value="'+v+'">'+(v||'Select…')+'</option>';
+    }).join('')+'</select></div>'
+    +'<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">'
+    +'Position Type <span style="color:var(--red)">*</span></div>'
+    +'<select id="rmg-new-type" '
+    +'style="width:100%;font-size:11px;padding:5px 8px;border-radius:4px;'
+    +'border:1px solid var(--border);background:var(--surface);color:var(--text)">'
+    +'<option value="">Select…</option>'
+    +['Backfill — Resignation','Backfill — Internal Movement',
+      'New Position','Relief','Redeployment'].map(function(v){
+      return '<option value="'+v+'">'+v+'</option>';
+    }).join('')+'</select></div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">'
+    +'<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Designation</div>'
+    +'<input id="rmg-new-desig" placeholder="e.g. Desktop Std L1" '
+    +'style="width:100%;font-size:11px;padding:5px 8px;border-radius:4px;'
+    +'border:1px solid var(--border);background:var(--surface);color:var(--text)"></div>'
+    +'<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Elah Demand ID</div>'
+    +'<input id="rmg-new-elah" placeholder="e.g. 23500" '
+    +'style="width:100%;font-size:11px;padding:5px 8px;border-radius:4px;'
+    +'border:1px solid var(--border);background:var(--surface);color:var(--text)"></div>'
+    +'<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">'
+    +'Backfill Emp Code</div>'
+    +'<input id="rmg-new-bf" placeholder="e.g. 11016170" '
+    +'style="width:100%;font-size:11px;padding:5px 8px;border-radius:4px;'
+    +'border:1px solid var(--border);background:var(--surface);color:var(--text)"></div>'
+    +'<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px">Notes</div>'
+    +'<input id="rmg-new-notes" placeholder="Optional context" '
+    +'style="width:100%;font-size:11px;padding:5px 8px;border-radius:4px;'
+    +'border:1px solid var(--border);background:var(--surface);color:var(--text)"></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;align-items:center">'
+    +'<button onclick="submitRMGNewPosition()" style="padding:7px 20px;border-radius:6px;'
+    +'font-size:12px;font-weight:600;border:none;background:var(--accent);'
+    +'color:var(--bg);cursor:pointer">Save Position</button>'
+    +'<button onclick="toggleRMGAddPanel()" style="padding:7px 16px;border-radius:6px;'
+    +'font-size:12px;border:1px solid var(--border);background:none;'
+    +'color:var(--muted);cursor:pointer">Cancel</button>'
+    +'<div id="rmg-add-err" style="font-size:11px;color:var(--red)"></div>'
+    +'</div>'
+    +'</div>';
+}
+
+function toggleRMGAddPanel(){
+  _rmgShowAdd=!_rmgShowAdd;
+  _renderRMGGrid();
+}
+
+function rmgSyncRegion(val){
+  var parts=(val||'').split('|');
+  var reg=parts[1]||'';
+  var el=document.getElementById('rmg-new-region');
+  if(el&&reg) el.value=reg;
+}
+
+async function submitRMGNewPosition(){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  if(role.role!=='admin'&&role.function_type!=='rmg') return;
+
+  var reqId=(document.getElementById('rmg-new-req')||{}).value||'';
+  var acctRaw=(document.getElementById('rmg-new-acct')||{}).value||'';
+  var acctName=acctRaw.split('|')[0]||'';
+  var region=(document.getElementById('rmg-new-region')||{}).value||'';
+  var posType=(document.getElementById('rmg-new-type')||{}).value||'';
+  var desig=(document.getElementById('rmg-new-desig')||{}).value||'';
+  var elahId=(document.getElementById('rmg-new-elah')||{}).value||'';
+  var bfEmp=(document.getElementById('rmg-new-bf')||{}).value||'';
+  var notes=(document.getElementById('rmg-new-notes')||{}).value||'';
+  var errEl=document.getElementById('rmg-add-err');
+
+  if(!reqId||!acctName||!posType){
+    if(errEl) errEl.textContent='Req ID, Account and Position Type are required.';
+    return;
+  }
+  if(errEl) errEl.textContent='';
+
+  var user=(role.display_name)||'rmg';
+  var now=new Date().toISOString();
+  var payload={
+    zinghr_req_id:   reqId.trim(),
+    account_name:    acctName.trim(),
+    region:          region||null,
+    position_type:   posType,
+    designation:     desig.trim()||null,
+    elah_demand_id:  elahId.trim()||null,
+    in_elah:         !!elahId.trim(),
+    backfill_emp_code: bfEmp.trim()||null,
+    notes:           notes.trim()||null,
+    req_status:      'Approved',
+    req_age_days:    0,
+    updated_by:      user,
+    updated_at:      now,
+    created_at:      now
+  };
+
+  try{
+    var res=await _sb.from('account_positions_log').insert(payload).select();
+    if(res.error) throw res.error;
+    _rmgData.unshift(res.data[0]);
+    _rmgShowAdd=false;
+    _renderRMGGrid();
+    if(typeof showToast==='function') showToast('Position added','success');
+  }catch(e){
+    if(errEl) errEl.textContent='Save failed: '+e.message;
+  }
+}
+
+function _rmgKpi(label,val,col){
+  return '<div style="background:var(--surface2);border:1px solid var(--border);'
+    +'border-top:3px solid '+col+';border-radius:8px;padding:10px 16px;'
+    +'min-width:140px;text-align:center">'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:'
+    +col+';line-height:1">'+val+'</div>'
+    +'<div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;'
+    +'text-transform:uppercase;color:var(--muted);margin-top:3px">'+label+'</div>'
+    +'</div>';
+}
+
+function _rmgReconFlag(r){
+  if(!r.elah_demand_id||r.elah_demand_id.trim()===''||r.in_elah===false)
+    return{type:'RED',label:'No Elah line',col:'var(--red)',bg:'rgba(248,113,113,.15)'};
+  if(r.position_type&&r.position_type.indexOf('Backfill')!==-1
+    &&(!r.backfill_emp_code||!r.backfill_emp_code.trim()))
+    return{type:'AMBER',label:'Backfill emp?',col:'var(--amber)',bg:'rgba(251,191,36,.15)'};
+  return{type:'GREEN',label:'Reconciled',col:'var(--green)',bg:'rgba(52,211,153,.15)'};
+}
+
+async function saveRMGField(rowId,field,value){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  if(role.role!=='admin'&&role.function_type!=='rmg'){
+    if(typeof showToast==='function') showToast('Read-only — contact RMG','error');
+    return;
+  }
+  var user=(role.display_name)||'rmg';
+  var payload={updated_by:user,updated_at:new Date().toISOString()};
+  payload[field]=value||null;
+  if(field==='elah_demand_id') payload.in_elah=!!(value&&value.trim());
+  var idx=_rmgData.findIndex(function(r){return r.id===rowId;});
+  var prev=idx!==-1?_rmgData[idx][field]:undefined;
+  if(idx!==-1){_rmgData[idx][field]=value||null;_renderRMGGrid();}
+  try{
+    var res=await _sb.from('account_positions_log').update(payload).eq('id',rowId);
+    if(res.error) throw res.error;
+  }catch(e){
+    if(idx!==-1){_rmgData[idx][field]=prev;_renderRMGGrid();}
+    if(typeof showToast==='function') showToast('Save failed: '+e.message,'error');
+  }
+}
+
+function showToast(msg,type){
+  var t=document.createElement('div');
+  t.style.cssText='position:fixed;bottom:24px;right:24px;z-index:9999;'
+    +'padding:10px 18px;border-radius:8px;font-size:12px;font-weight:600;'
+    +'background:'+(type==='error'?'rgba(248,113,113,.95)':'rgba(52,211,153,.95)')+';'
+    +'color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.3)';
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(function(){t.style.opacity='0';
+    setTimeout(function(){t.remove();},300);},2800);
+}
 
 function renderPlatGoldVisitAlert(visitData){
   var tierCol={'Platinum':'#a78bfa','Gold':'#f59e0b','Silver':'#94a3b8'};
@@ -9856,6 +10250,14 @@ function showSidebarAfterLogin(role) {
     var _jFn = (typeof _sbRole!=='undefined'&&_sbRole)?(_sbRole.function_type||''):'';
     var _showJ = (role==='hrbp'&&_jFn==='hrbp');
     _jEl.style.display = _showJ ? '' : 'none';
+  }
+  // RMG Workspace: visible to admin, rmg, hrbp, ta, hrops
+  var _rmgNavEl = document.getElementById('snav-rmg');
+  if(_rmgNavEl){
+    var _rmgFn=(typeof _sbRole!=='undefined'&&_sbRole)?(_sbRole.function_type||''):'';
+    var _showRmg=(role==='admin'||_rmgFn==='rmg'||_rmgFn==='hrbp'
+      ||_rmgFn==='ta'||_rmgFn==='hrops');
+    _rmgNavEl.style.display=_showRmg?'':'none';
   }
   // Auto-scope region filters — only for HRBP function type, not HR Ops or Payroll
   var _fnType = (typeof _sbRole !== 'undefined' && _sbRole) ? _sbRole.function_type : '';
