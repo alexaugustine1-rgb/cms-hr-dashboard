@@ -9581,6 +9581,33 @@ async function processCandidate(wb) {
   } else {
     log('No prospective joiners found — check Final DOJ / Tentative DOJ column in file','info');
   }
+
+  // Backfill req_id for existing Offer Accepted / Joined without one
+  try {
+    var _reqIdMap={};
+    prospective.forEach(function(r){
+      if(r.req_id && r.candidate_name){
+        _reqIdMap[r.candidate_name.trim().toUpperCase()]=r.req_id;
+      }
+    });
+    if(Object.keys(_reqIdMap).length>0){
+      var _nullReqsRes=await _sb.from('prospective_joiners')
+        .select('id,candidate_name')
+        .in('status',['Offer Accepted','Joined'])
+        .or('req_id.is.null,req_id.eq.');
+      for(var _ci=0;_ci<((_nullReqsRes.data)||[]).length;_ci++){
+        var _nr=(_nullReqsRes.data)[_ci];
+        var _key=(_nr.candidate_name||'').trim().toUpperCase();
+        if(_reqIdMap[_key]){
+          await _sb.from('prospective_joiners')
+            .update({req_id:_reqIdMap[_key]})
+            .eq('id',_nr.id);
+        }
+      }
+      log('✓ Backfilled req_id for existing candidates','ok');
+    }
+  } catch(e){ log('req_id backfill failed: '+e.message,'warn'); }
+
   log('✓ Candidate data refreshed — '+rows.length+' records, '+marJoined+' MTD joiners','ok');
   log('Refreshing TA Pipeline…','info');
   
@@ -9624,10 +9651,16 @@ async function processReqTAT(wb) {
   }
   
   function getCustomer(row) {
+    // 1. Direct Customer Name field (usually blank in ZingHR TAT)
     const cn = String(row[hIdx('Customer Name')]||'').trim();
-    if (cn) return cn;
+    if (cn && cn.length > 2) return cn;
+    // 2. Customer Name Role and Location field
     const cnrl = String(row[hIdx('Customer Name Role and Location')]||'').trim();
-    return cnrl ? cnrl.split(' - ')[0].trim() : '';
+    if (cnrl && cnrl.length > 2) return cnrl.split(' - ')[0].trim();
+    // 3. Extract from Requisition Title — "ACCOUNT - Role - Level - Location"
+    const title = String(row[hIdx('Requisition Title')]||'').trim();
+    if (title && title.includes(' - ')) return title.split(' - ')[0].trim();
+    return '';
   }
   
   const active = [], closed = [];
@@ -9741,6 +9774,43 @@ async function processReqTAT(wb) {
       {id:'ta_reqs_summary', data:{mar_closed:TA_SUMMARY.mar_closed, mar_fulfilled:TA_SUMMARY.mar_fulfilled, avg_closed_tat:TA_SUMMARY.avg_closed_tat||0}, row_count:1, uploaded_at:_now}
     ],{onConflict:'id'});
   } catch(e){console.warn('[ReqTAT cache]',e.message);}
+
+  // ── req_tracker upsert (source of truth) ─────────────────────
+  // Preserves primary_recruiter set by Neha — never overwrites it
+  try {
+    var _rtNow = new Date().toISOString();
+    var _rtBatch = active.concat(closed).map(function(r){
+      return {
+        req_id:          r.req_id,
+        designation:     r.designation||null,
+        customer:        r.customer||null,
+        tier:            r.tier||'Regular',
+        region:          r.region||null,
+        pos_type:        r.pos_type||'New',
+        billing_type:    null,
+        ta_recruiter:    r.ta_recruiter||null,
+        tat:             r.tat||0,
+        balance:         r.balance||'1',
+        created:         r.created||null,
+        req_raised_date: r.tat>0 ? new Date(Date.now()-r.tat*86400000).toISOString().split('T')[0] : null,
+        status:          active.includes(r)?'Open':'Closed',
+        closed_tat:      r.closed_tat||0,
+        upload_batch:    'tat_'+_rtNow.substring(0,10),
+        uploaded_at:     _rtNow,
+        critical:        ['Platinum','Gold'].includes(r.tier)||false,
+        updated_at:      _rtNow
+        // primary_recruiter intentionally omitted — never overwrite Neha's mapping
+      };
+    });
+    // Batch upsert in chunks of 50 to avoid payload limits
+    for(var _i=0; _i<_rtBatch.length; _i+=50){
+      var _chunk=_rtBatch.slice(_i,_i+50);
+      var _res=await _sb.from('req_tracker').upsert(_chunk,{onConflict:'req_id',ignoreDuplicates:false});
+      if(_res.error) throw _res.error;
+    }
+    log('✓ req_tracker upserted: '+_rtBatch.length+' rows (primary_recruiter preserved)','ok');
+  } catch(e){ log('req_tracker upsert failed: '+e.message,'err'); }
+  // ── end req_tracker upsert ────────────────────────────────────
 
   log('✓ Req TAT refreshed — '+active.length+' open reqs, '+closed.length+' MTD closures','ok');
   if (typeof render === 'function') render();
@@ -10635,6 +10705,55 @@ async function sbBoot(user){
       });
     }
   } catch(e) { console.warn('[sbBoot] data_cache load failed:',e.message); }
+
+  // ── Load req_tracker directly (takes precedence over data_cache) ──
+  // Computes live aging from req_raised_date — auto-updates daily
+  // without requiring a new TAT upload
+  try {
+    var _rtLoad = await _sb
+      .from('req_tracker')
+      .select('req_id,designation,customer,tier,region,billing_type,'
+        +'pos_type,ta_recruiter,primary_recruiter,tat,balance,created,'
+        +'req_raised_date,status,critical,notes')
+      .eq('status','Open')
+      .order('tat',{ascending:false});
+    if(_rtLoad.error) throw _rtLoad.error;
+    var _rtRows=_rtLoad.data;
+    if(_rtRows && _rtRows.length>0){
+      // Recompute tat live from req_raised_date where available
+      var _today=new Date();
+      _rtRows.forEach(function(r){
+        if(r.req_raised_date){
+          var _d=new Date(r.req_raised_date);
+          if(!isNaN(_d)) r.tat=Math.round((_today-_d)/86400000);
+        }
+      });
+      // Replace TA_ACTIVE_REQS with live data
+      TA_ACTIVE_REQS.length=0;
+      _rtRows.forEach(function(r){ TA_ACTIVE_REQS.push(r); });
+      // Recompute TA_SUMMARY from live data
+      TA_SUMMARY.total_active=_rtRows.length;
+      TA_SUMMARY.critical_45=_rtRows.filter(function(r){return r.tat>45;}).length;
+      TA_SUMMARY.plat_gold_open=_rtRows.filter(function(r){return r.tier==='Platinum'||r.tier==='Gold';}).length;
+      TA_SUMMARY.unassigned=_rtRows.filter(function(r){return !r.ta_recruiter||r.ta_recruiter.trim()==='';}).length;
+      TA_SUMMARY.unmapped=_rtRows.filter(function(r){return !r.primary_recruiter;}).length;
+      TA_SUMMARY.tat_as_of='Live ('+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+')';
+      // Recompute aging buckets
+      TA_AGING['0-15']=_rtRows.filter(function(r){return r.tat<=15;}).length;
+      TA_AGING['16-30']=_rtRows.filter(function(r){return r.tat>15&&r.tat<=30;}).length;
+      TA_AGING['31-45']=_rtRows.filter(function(r){return r.tat>30&&r.tat<=45;}).length;
+      TA_AGING['46-60']=_rtRows.filter(function(r){return r.tat>45&&r.tat<=60;}).length;
+      TA_AGING['61-90']=_rtRows.filter(function(r){return r.tat>60&&r.tat<=90;}).length;
+      TA_AGING['90+']=_rtRows.filter(function(r){return r.tat>90;}).length;
+      CMS_SUMMARY.total_reqs=_rtRows.length;
+      CMS_SUMMARY.reqs_critical=_rtRows.filter(function(r){return r.tat>45;}).length;
+      CMS_SUMMARY.req_aging={'0-15':TA_AGING['0-15'],'16-30':TA_AGING['16-30'],
+        '31-45':TA_AGING['31-45'],'46-60':TA_AGING['46-60'],
+        '61-90':TA_AGING['61-90'],'90+':TA_AGING['90+']};
+      console.log('[sbBoot] req_tracker: '+_rtRows.length+' live open reqs (aging computed live)');
+    }
+  } catch(e){ console.warn('[sbBoot] req_tracker load failed, using data_cache fallback:',e.message); }
+  // ── end req_tracker direct load ───────────────────────────────
 
   // Apply tab_scope restrictions
   if(_sbRole && (_sbRole.tab_scope === 'admin_facilities_only' || _sbRole.tab_scope === 'admin_facilities_overview_actions')) {
