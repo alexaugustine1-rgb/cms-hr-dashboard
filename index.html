@@ -8756,7 +8756,7 @@ function _renderRMGGrid(){
     }).join('')
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
     +'<span style="font-size:11px;color:var(--muted)">Status:</span>'
-    +['All','Approved','Closed'].map(function(v){
+    +['All','Open','Closed'].map(function(v){
       return fbtn(v,_rmgStatus===v,"_rmgStatus='"+v+"';_renderRMGGrid()",'var(--accent)');
     }).join('')
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
@@ -8965,7 +8965,7 @@ async function submitRMGNewPosition(){
     in_elah:         !!elahId.trim(),
     backfill_emp_code: bfEmp.trim()||null,
     notes:           notes.trim()||null,
-    req_status:      'Approved',
+    req_status:      'Open',
     req_age_days:    0,
     updated_by:      user,
     updated_at:      now,
@@ -9828,6 +9828,9 @@ async function processReqTAT(wb) {
     var _enrichRes=await _sb.rpc('enrich_req_tracker_from_accounts');
     if(_enrichRes.error) throw _enrichRes.error;
     log('✓ req_tracker enriched (tier, billing_type, filled-closed reqs)','ok');
+    var _syncRes=await _sb.rpc('sync_positions_from_req_tracker');
+    if(_syncRes.error) throw _syncRes.error;
+    log('✓ account_positions_log synced (req_status, req_age_days)','ok');
   } catch(e){ log('req_tracker upsert/enrich failed: '+e.message,'err'); }
   // ── end req_tracker upsert ────────────────────────────────────
 
