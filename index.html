@@ -4087,6 +4087,7 @@ function renderAbsenteeism(el) {
     const tierColor = c.account_tier==='Platinum'?'#a78bfa':c.account_tier==='Gold'?'#f59e0b':'transparent';
     const dayColor = c.consecutive_absent>=30?'#dc2626':c.consecutive_absent>=21?'var(--red)':c.consecutive_absent>=14?'#f97316':'var(--amber)';
     const isAdmin = typeof _sbRole !== 'undefined' && (_sbRole.role === 'admin' || _sbRole.role === 'executive');
+    const _isRMGv = typeof _sbRole !== 'undefined' && _sbRole && _sbRole.function_type === 'rmg';
     return `<div style="display:grid;grid-template-columns:130px 1fr 150px 70px 60px 200px 90px 90px;padding:8px 14px;border-bottom:1px solid rgba(42,61,82,.25);font-size:11px;align-items:center;border-left:2px solid ${tierColor}">
       <div>
         <div style="font-weight:500;color:var(--text)">${esc(c.emp_name.split(' ').slice(0,2).join(' '))}</div>
@@ -4105,7 +4106,7 @@ function renderAbsenteeism(el) {
         
       </div>
       <div style="display:flex;align-items:center">${c.esep_initiated && c.esep_verified===false?`<span title="eSep marked Initiated but NOT found in ZingHR eSep extract" style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(245,158,11,.15);color:#f59e0b;font-weight:600;cursor:default">⚠ Not verified</span>`:c.esep_initiated && c.esep_verified===true?`<span title="eSep confirmed in latest ZingHR extract" style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(74,222,128,.1);color:#4ade80;font-weight:600;cursor:default">✓ Verified</span>`:`<span style="font-size:10px;color:var(--muted2)">—</span>`}</div>
-      <div><button onclick="openAbsentModal('${c.id}')" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:11px;cursor:pointer">Update</button></div>
+      <div>${_isRMGv ? '<span style="font-size:11px;color:var(--muted2)">View only</span>' : `<button onclick="openAbsentModal('${c.id}')" style="padding:4px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--accent);font-size:11px;cursor:pointer">Update</button>`}</div>
     </div>`;
   }).join('');
 
@@ -9673,7 +9674,7 @@ async function processReqTAT(wb) {
     return '';
   }
   
-  const active = [], closed = [];
+  const active = [], closed = [], allRows = [];
   const _nowRef = new Date();
   const _MNAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const _curMonthStr = _MNAMES[_nowRef.getMonth()];
@@ -9700,7 +9701,12 @@ async function processReqTAT(wb) {
       ta_recruiter: String(row[hIdx('Recruiter Assigned(s)')]||''),
       tat: age, balance: String(row[hIdx('Balance')]||'1'),
       created: String(row[hIdx('Requisition Creation Date')]||'').substring(0,15),
+      zinghr_status: status,
     };
+    var _balNum = parseInt(rec.balance, 10);
+    rec.status = (status==='Closed'||status==='Cancelled'||status==='Rejected'
+                  ||(!isNaN(_balNum)&&_balNum<=0)) ? 'Closed' : 'Open';
+    allRows.push(rec);
     if (status==='Approved') active.push(rec);
     else if (status==='Closed') {
       const cd = String(row[hIdx('Date Of Closing')]||'');
@@ -9789,7 +9795,7 @@ async function processReqTAT(wb) {
   // Preserves primary_recruiter set by Neha — never overwrites it
   try {
     var _rtNow = new Date().toISOString();
-    var _rtBatch = active.concat(closed).map(function(r){
+    var _rtBatch = allRows.map(function(r){
       return {
         req_id:          r.req_id,
         designation:     r.designation||null,
@@ -9803,7 +9809,8 @@ async function processReqTAT(wb) {
         balance:         r.balance||'1',
         created:         r.created||null,
         req_raised_date: r.tat>0 ? new Date(Date.now()-r.tat*86400000).toISOString().split('T')[0] : null,
-        status:          active.includes(r)?'Open':'Closed',
+        status:          r.status,
+        zinghr_status:   r.zinghr_status,
         closed_tat:      r.closed_tat||0,
         upload_batch:    'tat_'+_rtNow.substring(0,10),
         uploaded_at:     _rtNow,
@@ -9818,7 +9825,7 @@ async function processReqTAT(wb) {
       var _res=await _sb.from('req_tracker').upsert(_chunk,{onConflict:'req_id',ignoreDuplicates:false});
       if(_res.error) throw _res.error;
     }
-    log('✓ req_tracker upserted: '+_rtBatch.length+' rows (primary_recruiter preserved)','ok');
+    log('✓ req_tracker upserted: '+_rtBatch.length+' rows full TAT mirror (primary_recruiter preserved)','ok');
     // Enrich tier + billing_type + close filled reqs + rebuild data_cache.ta_reqs
     var _enrichRes=await _sb.rpc('enrich_req_tracker_from_accounts');
     if(_enrichRes.error) throw _enrichRes.error;
@@ -10565,6 +10572,22 @@ function showSidebarAfterLogin(role) {
     var _showRmg=(role==='admin'||_rmgFn==='rmg'||_rmgFn==='hrbp'
       ||_rmgFn==='ta'||_rmgFn==='hrops');
     _rmgNavEl.style.display=_showRmg?'':'none';
+  }
+  // RMG function_type — scope sidebar to RMG-relevant tabs only.
+  // Full edit on RMG Workspace (gated separately); read-only view on the rest.
+  var _rfn=(typeof _sbRole!=='undefined'&&_sbRole)?(_sbRole.function_type||''):'';
+  if(role!=='admin' && _rfn==='rmg'){
+    var _rmgAllow=['snav-overview','snav-rmg','snav-tapipeline','snav-prospective-joiners',
+      'snav-resignation','snav-acct-health','snav-absenteeism'];
+    document.querySelectorAll('.sidebar-item').forEach(function(el){
+      el.style.display=(_rmgAllow.indexOf(el.id)>=0)?'':'none';
+    });
+    var _rmgSubmit=document.getElementById('snav-submit'); if(_rmgSubmit) _rmgSubmit.style.display='none';
+    var _rmgMobSubmit=document.getElementById('mob-submit-btn'); if(_rmgMobSubmit) _rmgMobSubmit.style.display='none';
+    document.querySelectorAll('.sidebar-group').forEach(function(g){
+      var vis=Array.from(g.querySelectorAll('.sidebar-item')).some(function(i){return i.style.display!=='none';});
+      if(!vis) g.style.display='none';
+    });
   }
   // Auto-scope region filters — only for HRBP function type, not HR Ops or Payroll
   var _fnType = (typeof _sbRole !== 'undefined' && _sbRole) ? _sbRole.function_type : '';
