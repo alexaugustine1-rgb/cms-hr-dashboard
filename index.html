@@ -9703,9 +9703,7 @@ async function processReqTAT(wb) {
       created: String(row[hIdx('Requisition Creation Date')]||'').substring(0,15),
       zinghr_status: status,
     };
-    var _balNum = parseInt(rec.balance, 10);
-    rec.status = (status==='Closed'||status==='Cancelled'||status==='Rejected'
-                  ||(!isNaN(_balNum)&&_balNum<=0)) ? 'Closed' : 'Open';
+    rec.status = (status==='Approved') ? 'Open' : 'Closed';
     allRows.push(rec);
     if (status==='Approved') active.push(rec);
     else if (status==='Closed') {
