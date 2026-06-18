@@ -8712,13 +8712,14 @@ function _renderRMGGrid(){
   var data=_rmgData.slice();
   if(_rmgRegion!=='All') data=data.filter(function(r){return r.region===_rmgRegion;});
   if(_rmgStatus!=='All') data=data.filter(function(r){return r.req_status===_rmgStatus;});
+  var cardBase=data.slice();
   if(_rmgFlag!=='All')   data=data.filter(function(r){return _rmgReconFlag(r).type===_rmgFlag;});
 
-  var total=_rmgData.length;
-  var noElah=_rmgData.filter(function(r){return !r.elah_demand_id;}).length;
-  var redCnt=_rmgData.filter(function(r){return _rmgReconFlag(r).type==='RED';}).length;
-  var ambCnt=_rmgData.filter(function(r){return _rmgReconFlag(r).type==='AMBER';}).length;
-  var grnCnt=_rmgData.filter(function(r){return _rmgReconFlag(r).type==='GREEN';}).length;
+  var total=cardBase.length;
+  var noElah=cardBase.filter(function(r){return !r.elah_demand_id;}).length;
+  var redCnt=cardBase.filter(function(r){return _rmgReconFlag(r).type==='RED';}).length;
+  var ambCnt=cardBase.filter(function(r){return _rmgReconFlag(r).type==='AMBER';}).length;
+  var grnCnt=cardBase.filter(function(r){return _rmgReconFlag(r).type==='GREEN';}).length;
 
   function fbtn(v,active,fn,col){
     col=col||'var(--accent)';
