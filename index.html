@@ -589,7 +589,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <span class="item-icon">🔗</span><span class="item-label">RMG Workspace</span>
       </button>
       <button class="sidebar-item" id="snav-prospective-joiners" onclick="snavClick('joiners',this)" style="display:none">
-        <span class="item-icon">🧑‍💼</span><span class="item-label">Prospective Joiners</span>
+        <span class="item-icon">🧑‍💼</span><span class="item-label">Onboarding Tracker</span>
       </button>
       <button class="sidebar-item" id="snav-expected-joiners" onclick="snavClick('joiners',this)" style="display:none">
         <span class="item-icon">🧑‍💼</span><span class="item-label">Expected Joiners</span>
@@ -5037,305 +5037,205 @@ async function loadProspectiveJoiners() {
 }
 
 function renderJoinersTab(el) {
-  if(!el) el = document.getElementById('tab-joiners');
-  if(!el) return;
+  if (!el) el = document.getElementById('tab-joiners');
+  if (!el) return;
+
   if(!_pjLoaded) {
-    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:10px">⏳</div>Loading expected joiners…</div>';
+    el.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:10px">⏳</div>Loading onboarding data…</div>';
     loadProspectiveJoiners();
     return;
   }
 
-  var isAdmin   = _sbRole && (_sbRole.role==='admin'||_sbRole.role==='executive');
-  var isTa      = _sbRole && _sbRole.function_type==='ta';
-  var isHrbp    = _sbRole && _sbRole.function_type==='hrbp';
-  var canUpdate = isAdmin || isTa || isHrbp;
-
-  // Filter data
-  var _today2 = new Date(); _today2.setHours(0,0,0,0);
-  var data = _pjData.slice();
-  if(_pjRegion !== 'All') data = data.filter(function(r){return r.region===_pjRegion;});
-  if(_pjTier   !== 'All') data = data.filter(function(r){return r.account_tier===_pjTier;});
-  if(_pjStatusFilter === 'Active')
-    data = data.filter(function(r){return !['Joined','No Show','Dropped Out'].includes(r.status);});
-  else if(_pjStatusFilter !== 'All')
-    data = data.filter(function(r){return r.status===_pjStatusFilter;});
-  // DOJ window: for Active filter, only show candidates with DOJ within
-  // last _pjDojWindow days or in the future. Overdue beyond window
-  // surface only in the banner, not the main table.
-  if (_pjStatusFilter==='Active') {
-    data = data.filter(function(r){
-      if (!r.doj) return true;
-      var dojD = new Date(r.doj+'T00:00:00'); dojD.setHours(0,0,0,0);
-      var daysDiff = Math.round((_today2 - dojD)/86400000);
-      return daysDiff <= _pjDojWindow;
-    });
-  }
-
-  // TA sees only own candidates — match on full display_name vs recruiter_name
-  if(isTa && !isAdmin && _sbRole.display_name) {
-    var _myFull = (_sbRole.display_name||'').toLowerCase().trim();
-    var _myFirst = _myFull.split(' ')[0];
-    if(_myFirst) { // guard: blank display_name would match everything
-      data = data.filter(function(r){
-        var rn = (r.recruiter_name||'').toLowerCase().trim();
-        // Match if full display name contains recruiter name or vice-versa (handles
-        // ZingHR abbreviations), or first names match exactly
-        return rn && (_myFull.includes(rn) || rn.includes(_myFull) || rn.split(' ')[0]===_myFirst);
-      });
+  // Auto-scope region for HRBP role
+  var _autoRegion = 'All';
+  if (typeof _sbRole !== 'undefined' && _sbRole) {
+    if (_sbRole.role === 'hrbp' && _sbRole.region && _sbRole.region !== 'Pan India') {
+      _autoRegion = _sbRole.region;
+      if (_pjRegion === 'All') _pjRegion = _autoRegion;
     }
   }
+  var isHRBP = typeof _sbRole !== 'undefined' && _sbRole && _sbRole.role === 'hrbp';
+  var isAdminOrExec = typeof _sbRole !== 'undefined' && _sbRole &&
+    ['admin','executive','hrops'].includes(_sbRole.role);
 
-  // Summary
-  var byReg  = {North:0,South:0,East:0,West:0};
-  var byTier = {Platinum:0,Gold:0};
-  data.forEach(function(r){
-    if(byReg[r.region]!==undefined) byReg[r.region]++;
-    if(r.account_tier==='Platinum') byTier.Platinum++;
-    else if(r.account_tier==='Gold') byTier.Gold++;
+  var today = new Date(); today.setHours(0,0,0,0);
+  var d7  = new Date(today); d7.setDate(d7.getDate()+7);
+  var d14 = new Date(today); d14.setDate(d14.getDate()+14);
+  var d30 = new Date(today); d30.setDate(d30.getDate()+30);
+
+  function parseDoj(s){ if(!s) return null; var d=new Date(s+'T00:00:00'); d.setHours(0,0,0,0); return isNaN(d)?null:d; }
+  function daysTo(d){ return Math.round((d-today)/86400000); }
+  function tierCol(t){ return t==='Platinum'?'#a78bfa':t==='Gold'?'#f59e0b':t==='Silver'?'#94a3b8':'var(--muted2)'; }
+
+  // Filter base by region (auto-scoped for HRBP)
+  var base = _pjData.filter(function(r){
+    return _pjRegion==='All' || r.region===_pjRegion;
   });
 
-  var tierCol   = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Regular:'var(--muted2)'};
-  var statusCol = {'Offer Accepted':'var(--accent)','Induction Scheduled':'#34d399',
-                   'Joined':'#4ade80','No Show':'var(--red)','Dropped Out':'#ef4444','Deferred':'var(--amber)'};
-  var STATUS_OPTS = ['Offer Accepted','Induction Scheduled','Joined','No Show','Dropped Out','Deferred'];
-  var REGIONS     = ['All','North','South','East','West'];
-  var TIERS       = ['All','Platinum','Gold','Silver','Regular'];
-  var SF_OPTS     = ['Active','All','Offer Accepted','Induction Scheduled','Joined','No Show','Dropped Out'];
-
-  function fbtn(v, active, onclick){
-    return '<button onclick="'+onclick+'" style="padding:4px 12px;border-radius:20px;font-size:11px;'
-      +'font-weight:'+(active?'600':'400')+';border:1px solid '+(active?'var(--accent)':'var(--border)')+';'
-      +'background:'+(active?'rgba(96,165,250,.12)':'none')+';color:'+(active?'var(--accent)':'var(--muted)')+';cursor:pointer;margin-right:4px">'+v+'</button>';
-  }
-
-  var regBtns = REGIONS.map(function(v){return fbtn(v,_pjRegion===v,'_pjRegion=\''+v+'\';renderJoinersTab()');}).join('');
-  var tierBtns= TIERS.map(function(v){return fbtn(v,_pjTier===v,'_pjTier=\''+v+'\';renderJoinersTab()');}).join('');
-  var sfBtns  = SF_OPTS.map(function(v){return fbtn(v,_pjStatusFilter===v,'_pjStatusFilter=\''+v+'\';renderJoinersTab()');}).join('');
-  var dojWinBtn = '<button onclick="_pjDojWindow=_pjDojWindow===60?999:60;renderJoinersTab()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(_pjDojWindow===60?700:500)+';border:1px solid '+(_pjDojWindow===60?'var(--accent)':'var(--border)')+';background:'+(_pjDojWindow===60?'rgba(96,165,250,.15)':'none')+';color:'+(_pjDojWindow===60?'var(--accent)':'var(--muted)')+';cursor:pointer">'+(_pjDojWindow===60?'±60d window':'Show all')+'</button>';
-
-  function fmtDoj(dojStr){
-    if(!dojStr) return '—';
-    var d = new Date(dojStr+'T00:00:00');
-    return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'});
-  }
-  function daysAway(dojStr){
-    if(!dojStr) return null;
-    var diff = Math.round((new Date(dojStr+'T00:00:00').getTime()-Date.now())/86400000);
-    return diff;
-  }
-
-  // Overdue action banner — candidates past DOJ still on Offer Accepted
-  var overdueAction = data.filter(function(r){
-    return daysAway(r.doj) !== null && daysAway(r.doj) < 0
-      && ['Offer Accepted','Induction Scheduled'].includes(r.status);
+  // ── Joining pipeline: Offer Accepted + Induction Scheduled with future DOJ ─
+  var pipeline = base.filter(function(r){
+    return ['Offer Accepted','Induction Scheduled'].includes(r.status) && parseDoj(r.doj) && parseDoj(r.doj) >= today;
   });
-  var overdueBanner = overdueAction.length
-    ? '<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px">'
-        +'<div style="font-size:18px;line-height:1">⚠️</div>'
-        +'<div>'
-          +'<div style="font-weight:600;color:var(--red);font-size:13px;margin-bottom:3px">'+overdueAction.length+' candidate'+(overdueAction.length>1?'s':'')+' past DOJ — action needed</div>'
-          +'<div style="font-size:11px;color:var(--muted2)">'+overdueAction.map(function(r){return esc(r.candidate_name);}).join(', ')+' — mark as Joined, No Show, or Deferred</div>'
-        +'</div>'
+
+  var thisWeek  = pipeline.filter(function(r){ var d=parseDoj(r.doj); return d>=today && d<=d7; })
+    .sort(function(a,b){ return parseDoj(a.doj)-parseDoj(b.doj); });
+  var nextWeek  = pipeline.filter(function(r){ var d=parseDoj(r.doj); return d>d7 && d<=d14; })
+    .sort(function(a,b){ return parseDoj(a.doj)-parseDoj(b.doj); });
+  var in2to4wk  = pipeline.filter(function(r){ var d=parseDoj(r.doj); return d>d14 && d<=d30; })
+    .sort(function(a,b){ return parseDoj(a.doj)-parseDoj(b.doj); });
+
+  // ── Action needed: past DOJ, unresolved ──────────────────────────────────
+  var overdue = base.filter(function(r){
+    return ['Offer Accepted','Induction Scheduled'].includes(r.status) && parseDoj(r.doj) && parseDoj(r.doj) < today;
+  }).sort(function(a,b){ return parseDoj(a.doj)-parseDoj(b.doj); });
+
+  // ── Joined this month ─────────────────────────────────────────────────────
+  var joinedMTD = base.filter(function(r){
+    if(r.status!=='Joined') return false;
+    var d=parseDoj(r.doj);
+    return d && d.getMonth()===today.getMonth() && d.getFullYear()===today.getFullYear();
+  }).length;
+
+  // ── Candidate card ────────────────────────────────────────────────────────
+  function candCard(r, urgent){
+    var doj = parseDoj(r.doj);
+    var days = daysTo(doj);
+    var tc = tierCol(r.account_tier);
+    var daysLabel = days===0?'Today':days===1?'Tomorrow':days+'d away';
+    var daysColor = days<=2?'var(--red)':days<=7?'var(--amber)':'var(--green)';
+    var needsAction = r.status==='Offer Accepted' && days<=7;
+    return '<div style="background:var(--surface2);border:1px solid '+(urgent?'rgba(248,113,113,.4)':'var(--border)')+';border-left:3px solid '+tc
+      +';border-radius:8px;padding:12px 14px;min-width:220px;max-width:260px;position:relative">'
+      +(needsAction?'<div style="position:absolute;top:8px;right:8px;font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(248,113,113,.15);color:var(--red)">Schedule induction</div>':'')
+      +'<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:80px">'+esc(r.candidate_name||'—')+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.designation||'—')+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((r.customer||'Unassigned').substring(0,28))+'</div>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">'
+        +'<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.15);color:'+tc+'">'+esc(r.account_tier||'Regular')+'</span>'
+        +'<span style="font-size:11px;font-weight:700;color:'+daysColor+'">'+daysLabel+'</span>'
       +'</div>'
-    : '';
+      +'<div style="font-size:10px;color:var(--muted2);margin-top:4px">'+esc(r.region||'')+(r.recruiter_name?' · '+esc(r.recruiter_name.split(' ')[0]):'')+'</div>'
+      +'</div>';
+  }
 
-  var rows = data.map(function(r){
-    var tc  = tierCol[r.account_tier]  || 'var(--muted2)';
-    var sc  = statusCol[r.status]      || 'var(--muted)';
-    var days= daysAway(r.doj);
-    var isOverdue = days !== null && days < 0;
-    var urgency = days===null ? 'var(--muted)' : isOverdue?'var(--red)':days===0?'var(--red)':days<=3?'var(--red)':days<=7?'var(--amber)':'var(--green)';
-    var dojLabel= fmtDoj(r.doj);
-    var dayLabel= days===null?'':(days<0?Math.abs(days)+'d overdue':days===0?'Today':days+'d away');
-    var custVal = (r.customer && r.customer!=='None' && r.customer!=='none' && r.customer!=='N/A' && r.customer!=='-') ? r.customer : null;
-
-    // Status dropdown (TA can update; HRBP limited to Induction Scheduled)
-    var canEdit = isAdmin || isTa || (isHrbp && ['Offer Accepted','Induction Scheduled'].includes(r.status));
-    // HRBP can only set Offer Accepted / Induction Scheduled; TA/admin can set all
-    var _allowedOpts = (isHrbp&&!isAdmin&&!isTa)
-      ? STATUS_OPTS.filter(function(s){return ['Offer Accepted','Induction Scheduled'].includes(s)||r.status===s;})
-      : STATUS_OPTS;
-    var statusCell = canEdit
-      ? '<select onchange="updateJoinerStatus(\''+r.id+'\',this.value)" style="font-size:11px;padding:4px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer">'
-          +_allowedOpts.map(function(s){
-            return '<option value="'+s+'" '+(r.status===s?'selected':'')+'>'+s+'</option>';
-          }).join('')
-          +'</select>'
-      : '<span style="font-size:11px;color:'+sc+'">'+r.status+'</span>';
-
-    // DOJ is editable by TA and admin
-    var dojCell = (isAdmin||isTa)
-      ? '<div style="font-size:13px;font-weight:700;color:'+urgency+'">'+dojLabel+'</div>'
-        +'<div style="font-size:10px;color:'+urgency+'">'+dayLabel+'</div>'
-        +'<input type="date" value="'+(r.doj||'')+'" onchange="updateJoinerDoj(\''+r.id+'\',this.value)" '
-        +'style="margin-top:4px;font-size:10px;padding:2px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:5px;color:var(--text);width:100%">'
-      : '<div style="font-size:13px;font-weight:700;color:'+urgency+'">'+dojLabel+'</div>'
-        +'<div style="font-size:10px;color:'+urgency+'">'+dayLabel+'</div>';
-
-    return '<tr style="border-bottom:1px solid rgba(42,61,82,.25)'+(isOverdue?';background:rgba(239,68,68,.04)':'')+'">'
-      +'<td style="padding:10px 12px;min-width:130px">'
-        +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+esc(r.candidate_name||'—')+'</div>'
-      +'</td>'
-      +'<td style="padding:10px 12px;min-width:150px">'
-        +'<div style="font-size:11px;color:var(--text)">'+esc(r.designation||'—')+'</div>'
-      +'</td>'
-      +'<td style="padding:10px 12px;min-width:160px">'
-        +'<div style="font-size:11px;color:'+(custVal?'var(--text)':'var(--muted2)')+'">'+esc(custVal||'Unassigned')+'</div>'
-        +'<span style="font-size:9px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.25);color:'+tc+'">'+esc(r.account_tier||'Regular')+'</span>'
-      +'</td>'
-      +'<td style="padding:10px 12px">'
-        +'<span style="font-size:12px;color:var(--text)">'+esc(r.region||'—')+'</span>'
-      +'</td>'
-      +'<td style="padding:10px 12px;min-width:110px">'+dojCell+'</td>'
-      +'<td style="padding:10px 12px;font-size:11px;color:var(--muted)">'+esc(r.recruiter_name||'—')+'</td>'
-      +'<td style="padding:10px 12px">'+statusCell+'</td>'
-      +'</tr>';
-  }).join('') || '<tr><td colspan="7" style="padding:40px;text-align:center;color:var(--muted2)">No expected joiners matching current filters</td></tr>';
-
-  el.innerHTML = '<div style="padding:28px 36px;max-width:1100px">'
-    // Header
-    +'<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Talent Pipeline</div>'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">'
-      +'<div style="font-size:22px;font-weight:700;color:var(--text)">Prospective Joiners — Onboarding Tracker</div>'
-      +'<button onclick="_pjLoaded=false;loadProspectiveJoiners()" style="padding:7px 14px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;cursor:pointer">⟳ Refresh</button>'
-    +'</div>'
-
-    // Summary strip
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'
-      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;text-align:center;min-width:60px">'
-        +'<div style="font-size:22px;font-weight:700;color:var(--accent)">'+data.length+'</div>'
-        +'<div style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.6px">Expected</div>'
+  // ── Overdue row ───────────────────────────────────────────────────────────
+  function overdueRow(r){
+    var doj = parseDoj(r.doj);
+    var days = Math.abs(daysTo(doj));
+    return '<div style="display:grid;grid-template-columns:160px 140px 130px 70px 80px 160px;padding:8px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+      +'<div style="font-weight:600;color:var(--text)">'+esc(r.candidate_name||'—')+'</div>'
+      +'<div style="color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((r.designation||'—').substring(0,18))+'</div>'
+      +'<div style="color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((r.customer||'Unassigned').substring(0,16))+'</div>'
+      +'<div style="color:var(--muted)">'+esc(r.region||'')+'</div>'
+      +'<div style="color:var(--red);font-weight:600">'+days+'d overdue</div>'
+      +'<div style="display:flex;gap:4px">'
+        +'<button onclick="updatePJStatus(\''+r.id+'\',\'Joined\')" style="padding:2px 8px;border-radius:4px;border:1px solid var(--green);background:none;color:var(--green);font-size:10px;cursor:pointer">Joined</button>'
+        +'<button onclick="updatePJStatus(\''+r.id+'\',\'No Show\')" style="padding:2px 8px;border-radius:4px;border:1px solid var(--amber);background:none;color:var(--amber);font-size:10px;cursor:pointer">No Show</button>'
+        +'<button onclick="updatePJStatus(\''+r.id+'\',\'Dropped Out\')" style="padding:2px 8px;border-radius:4px;border:1px solid var(--red);background:none;color:var(--red);font-size:10px;cursor:pointer">Drop</button>'
       +'</div>'
-      +['North','South','East','West'].map(function(r){
-        var cnt=byReg[r]||0;
-        var col={'North':'#60a5fa','South':'#34d399','East':'#f59e0b','West':'#a78bfa'}[r];
-        return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+col+';border-radius:8px;padding:10px 16px;text-align:center;min-width:50px">'
-          +'<div style="font-size:18px;font-weight:700;color:'+col+'">'+cnt+'</div>'
-          +'<div style="font-size:10px;color:var(--muted2)">'+r+'</div></div>';
-      }).join('')
-      +'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid #a78bfa;border-radius:8px;padding:10px 16px;text-align:center;min-width:50px">'
-        +'<div style="font-size:18px;font-weight:700;color:#a78bfa">'+byTier.Platinum+'</div>'
-        +'<div style="font-size:10px;color:var(--muted2)">Platinum</div></div>'
-      +'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid #f59e0b;border-radius:8px;padding:10px 16px;text-align:center;min-width:50px">'
-        +'<div style="font-size:18px;font-weight:700;color:#f59e0b">'+byTier.Gold+'</div>'
-        +'<div style="font-size:10px;color:var(--muted2)">Gold</div></div>'
+      +'</div>';
+  }
+
+  // ── Section header ────────────────────────────────────────────────────────
+  function secHdr(label, count, color){
+    return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:'+color+';margin-bottom:8px">'+label+' ('+count+')</div>';
+  }
+
+  // ── Region filter ─────────────────────────────────────────────────────────
+  var regions = ['All','North','South','East','West'];
+  var rf = regions.map(function(v){
+    var active = _pjRegion===v;
+    return '<button onclick="_pjRegion=\''+v+'\';renderJoinersTab()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(active?700:500)+';border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'rgba(96,165,250,.15)':'none')+';color:'+(active?'var(--accent)':'var(--muted)')+';cursor:pointer">'+v+'</button>';
+  }).join('');
+
+  // ── Build output ──────────────────────────────────────────────────────────
+  var out = '<div style="padding:20px 28px;max-width:1280px">';
+
+  // Header
+  out += '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">'
+    +'<div>'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">HR Business Partner</div>'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">Onboarding Tracker</div>'
     +'</div>'
+    +'<div style="display:flex;align-items:center;gap:12px">'
+    +'<div style="font-size:10px;color:var(--muted2)">Joined MTD: <strong style="color:var(--green);font-size:14px">'+joinedMTD+'</strong></div>'
+    +(overdue.length?'<div style="font-size:10px;padding:4px 10px;border-radius:6px;background:rgba(248,113,113,.1);color:var(--red);font-weight:600">'+overdue.length+' past DOJ — action needed</div>':'')
+    +'</div>'
+    +'</div>';
 
-    // Filters
-    +'<div style="margin-bottom:8px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Region</span>'+regBtns+'</div>'
-    +'<div style="margin-bottom:8px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Tier</span>'+tierBtns+'</div>'
-    +'<div style="margin-bottom:18px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Status</span>'+sfBtns
-    +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px;display:inline-block"></span>'
-    +dojWinBtn+'</div>'
-    +overdueBanner
+  // Region filter
+  out += '<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;align-items:center">'
+    +'<span style="font-size:11px;color:var(--muted)">Region:</span>'+rf+'</div>';
 
-    // ── Joining this week / next week strip ──────────────────────────────
-    +(function(){
-      var _today = new Date(); _today.setHours(0,0,0,0);
-      var _7d = new Date(_today); _7d.setDate(_7d.getDate()+7);
-      var _14d = new Date(_today); _14d.setDate(_14d.getDate()+14);
-      var _activeStatuses = ['Offer Accepted','Induction Scheduled'];
-      var _thisWeek = data.filter(function(r){
-        if(!r.doj || !_activeStatuses.includes(r.status)) return false;
-        var d = new Date(r.doj+'T00:00:00'); d.setHours(0,0,0,0);
-        return d >= _today && d <= _7d;
-      }).sort(function(a,b){
-        var tierOrd = {Platinum:0,Gold:1,Silver:2,Regular:3};
-        return (tierOrd[a.account_tier]||3)-(tierOrd[b.account_tier]||3);
-      });
-      var _nextWeek = data.filter(function(r){
-        if(!r.doj || !_activeStatuses.includes(r.status)) return false;
-        var d = new Date(r.doj+'T00:00:00'); d.setHours(0,0,0,0);
-        return d > _7d && d <= _14d;
-      }).sort(function(a,b){
-        var tierOrd = {Platinum:0,Gold:1,Silver:2,Regular:3};
-        return (tierOrd[a.account_tier]||3)-(tierOrd[b.account_tier]||3);
-      });
-      if(!_thisWeek.length && !_nextWeek.length) return '';
-      var _tc = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Regular:'var(--muted2)'};
-      function _dojCard(r){
-        var days = Math.round((new Date(r.doj+'T00:00:00')-_today)/86400000);
-        var col = _tc[r.account_tier]||'var(--muted2)';
-        return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+col
-          +';border-radius:8px;padding:10px 14px;min-width:180px;max-width:220px">'
-          +'<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.candidate_name||'—')+'</div>'
-          +'<div style="font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((r.customer||'').substring(0,24))+'</div>'
-          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">'
-            +'<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.2);color:'+col+'">'+esc(r.account_tier||'Regular')+'</span>'
-            +'<span style="font-size:11px;font-weight:700;color:'+(days===0?'var(--red)':days<=2?'var(--amber)':'var(--green)')+'">'+
-              (days===0?'Today':days===1?'Tomorrow':days+'d away')+'</span>'
-          +'</div>'
-        +'</div>';
-      }
-      var out = '<div style="margin-bottom:18px">';
-      if(_thisWeek.length){
-        out += '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--red);margin-bottom:8px">🔴 Joining This Week ('+_thisWeek.length+')</div>'
-          +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+_thisWeek.map(_dojCard).join('')+'</div>';
-      }
-      if(_nextWeek.length){
-        out += '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:8px">🟡 Joining Next Week ('+_nextWeek.length+')</div>'
-          +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+_nextWeek.map(_dojCard).join('')+'</div>';
-      }
-      out += '</div>';
-      return out;
-    })()
+  // ── This week ─────────────────────────────────────────────────────────────
+  if(thisWeek.length){
+    out += secHdr('🔴 Joining This Week', thisWeek.length, 'var(--red)');
+    out += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">'+thisWeek.map(function(r){return candCard(r,true);}).join('')+'</div>';
+  }
 
-    // ── Dropout rate by recruiter (admin only) ───────────────────────────
-    +(isAdmin ? (function(){
-      var _drMap = {};
-      _pjData.forEach(function(r){
-        var rec = (r.recruiter_name||'Unknown').split(' ')[0];
-        if(!_drMap[rec]) _drMap[rec] = {offered:0,dropped:0};
-        _drMap[rec].offered++;
-        if(r.status==='Dropped Out' || r.status==='No Show') _drMap[rec].dropped++;
-      });
-      var _drRows = Object.entries(_drMap)
-        .filter(function(e){return e[1].offered>=3;})
-        .map(function(e){
-          var pct = Math.round(e[1].dropped/e[1].offered*100);
-          var col = pct>=30?'var(--red)':pct>=15?'var(--amber)':'var(--green)';
-          return {name:e[0], offered:e[1].offered, dropped:e[1].dropped, pct:pct, col:col};
-        })
-        .sort(function(a,b){return b.pct-a.pct;});
-      if(!_drRows.length) return '';
-      return '<div style="margin-bottom:18px">'
-        +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Dropout Rate by Recruiter — No Show + Dropped Out ÷ Total Offers (min 3)</div>'
+  // ── Next week ─────────────────────────────────────────────────────────────
+  if(nextWeek.length){
+    out += secHdr('🟡 Joining Next Week', nextWeek.length, 'var(--amber)');
+    out += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">'+nextWeek.map(function(r){return candCard(r,false);}).join('')+'</div>';
+  }
+
+  // ── In 2–4 weeks ──────────────────────────────────────────────────────────
+  if(in2to4wk.length){
+    out += secHdr('🟢 Joining in 2–4 Weeks', in2to4wk.length, 'var(--green)');
+    out += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">'+in2to4wk.map(function(r){return candCard(r,false);}).join('')+'</div>';
+  }
+
+  // ── Nothing upcoming ──────────────────────────────────────────────────────
+  if(!thisWeek.length && !nextWeek.length && !in2to4wk.length){
+    out += '<div style="padding:32px;text-align:center;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:20px">No upcoming joiners in the next 30 days'+(isHRBP?' for '+_pjRegion:'')+'</div>';
+  }
+
+  // ── Action needed: overdue ────────────────────────────────────────────────
+  if(overdue.length){
+    out += '<div style="margin-bottom:20px">'
+      +secHdr('⚠️ Past DOJ — Resolve Status', overdue.length, 'var(--red)')
+      +'<div style="background:var(--surface2);border:1px solid rgba(248,113,113,.3);border-radius:8px;overflow:hidden">'
+      +'<div style="display:grid;grid-template-columns:160px 140px 130px 70px 80px 160px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+      +['Candidate','Designation','Account','Rgn','Overdue','Action'].map(function(h){
+        return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
+      }).join('')+'</div>'
+      +overdue.map(overdueRow).join('')
+      +'</div></div>';
+  }
+
+  // ── Admin: dropout rate ───────────────────────────────────────────────────
+  if(isAdminOrExec){
+    var _drMap={};
+    _pjData.forEach(function(r){
+      var rec=(r.recruiter_name||'Unknown').split(' ')[0];
+      if(!_drMap[rec]) _drMap[rec]={offered:0,dropped:0};
+      _drMap[rec].offered++;
+      if(r.status==='Dropped Out'||r.status==='No Show') _drMap[rec].dropped++;
+    });
+    var _drRows=Object.entries(_drMap).filter(function(e){return e[1].offered>=3;})
+      .map(function(e){
+        var pct=Math.round(e[1].dropped/e[1].offered*100);
+        return {name:e[0],offered:e[1].offered,dropped:e[1].dropped,pct:pct,col:pct>=30?'var(--red)':pct>=15?'var(--amber)':'var(--green)'};
+      }).sort(function(a,b){return b.pct-a.pct;});
+    if(_drRows.length){
+      out += '<div style="margin-bottom:20px">'
+        +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Offer Dropout Rate by Recruiter (min 3 offers)</div>'
         +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
-        +'<div style="display:grid;grid-template-columns:120px 60px 60px 80px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-        +['Recruiter','Offers','Drops','Drop%'].map(function(h){
-          return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
-        }).join('')+'</div>'
+        +'<div style="display:grid;grid-template-columns:140px 60px 60px 80px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+        +['Recruiter','Offers','Drops','Drop%'].map(function(h){return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';}).join('')+'</div>'
         +_drRows.map(function(r){
-          return '<div style="display:grid;grid-template-columns:120px 60px 60px 80px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+          return '<div style="display:grid;grid-template-columns:140px 60px 60px 80px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
             +'<div style="color:var(--text);font-weight:500">'+esc(r.name)+'</div>'
             +'<div style="color:var(--muted)">'+r.offered+'</div>'
             +'<div style="color:var(--muted)">'+r.dropped+'</div>'
             +'<div style="font-weight:700;color:'+r.col+'">'+r.pct+'%</div>'
             +'</div>';
-        }).join('')
-        +'</div></div>';
-    })() : '')
+        }).join('')+'</div></div>';
+    }
+  }
 
-    // Table
-    +'<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">'
-    +'<table style="width:100%;border-collapse:collapse">'
-    +'<thead style="background:var(--surface3)">'
-    +'<tr>'
-    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Candidate</th>'
-    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Designation</th>'
-    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Account</th>'
-    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Region</th>'
-    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">DOJ</th>'
-    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Recruiter</th>'
-    +'<th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px">Status</th>'
-    +'</tr></thead>'
-    +'<tbody>'+rows+'</tbody>'
-    +'</table></div>'
-
-    // Role notes
-    +(isTa?'<div style="font-size:11px;color:var(--muted2);margin-top:12px">📌 You can update DOJ and status. Changes save immediately.</div>':'')
-    +(isHrbp&&!isTa?'<div style="font-size:11px;color:var(--muted2);margin-top:12px">📌 Mark candidates as Induction Scheduled once you have confirmed the date with the candidate. TA updates DOJ.</div>':'')
-    +'</div>';
+  out += '</div>';
+  el.innerHTML = out;
 }
 
 async function updateJoinerStatus(id, status) {
@@ -5354,6 +5254,7 @@ async function updateJoinerStatus(id, status) {
     alert('Could not update status: '+e.message);
   }
 }
+async function updatePJStatus(id, status) { return updateJoinerStatus(id, status); }
 
 async function updateJoinerDoj(id, doj) {
   try {
@@ -11097,7 +10998,7 @@ async function sbBoot(user){
   if(_sbRole && _sbRole.role === 'rmg') {
     var _rmgAllowed = {
       'Overview':1,'RMG Workspace':1,'TA Pipeline':1,
-      'Prospective Joiners':1,'Resignation & Backfill':1,
+      'Onboarding Tracker':1,'Resignation & Backfill':1,
       'Long Absenteeism':1,'Account Health':1
     };
     var _rmgSubmit = document.getElementById('snav-submit');
