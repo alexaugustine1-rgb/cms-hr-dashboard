@@ -582,7 +582,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <button class="sidebar-item" id="snav-tapipeline" onclick="snavClick('tapipeline',this)">
         <span class="item-icon">🎯</span><span class="item-label">TA Pipeline</span>
       </button>
-      <button class="sidebar-item" id="snav-ta" onclick="snavClick('ta',this)">
+      <button class="sidebar-item" id="snav-ta" onclick="snavClick('ta',this)" style="display:none">
         <span class="item-icon">📋</span><span class="item-label">TA Commitments</span>
       </button>
       <button class="sidebar-item" id="snav-rmg" onclick="snavClick('rmg',this)" style="display:none">
@@ -10806,7 +10806,7 @@ function showSidebarAfterLogin(role) {
     // Admin/Facilities: hide HR-specific
     if(fn === 'admin') {
       var hideAdmin = ['HRBP Connects','Long Absenteeism','OD / WFH','Resignation & Backfill',
-        'HR Ops & Payroll','FnF Tracker','L&D','TA Pipeline','TA Commitments'];
+        'HR Ops & Payroll','FnF Tracker','L&D','TA Pipeline'];
       document.querySelectorAll('.sidebar-item').forEach(function(el) {
         var lbl = el.querySelector('.item-label');
         if(lbl && hideAdmin.indexOf(lbl.textContent.trim()) >= 0) el.style.display = 'none';
