@@ -285,17 +285,34 @@ pipeline activity (not balance) is the real-vs-phantom discriminator for the nex
 
 ---
 
-## Current File State — 18 Jun 2026
-- Line count: ~13,152 (index.html). True size only visible via file tools in Cowork (see Dropbox sync note).
-- req_tracker: FULL MIRROR of TAT (~774 rows). zinghr_status (raw) column added. status derived = 'Open' only when zinghr_status='Approved', else 'Closed'. No single-status assumption — two-status model (see below).
-- account_positions_log: gains live req_status/req_age_days via RPC sync_positions_from_req_tracker, auto-called after every TAT upload. Writes ONLY req_status/req_age_days/audit — never status, notes, demand_class, backfill_*, or elah_demand_id.
-- TWO-STATUS MODEL: req_status = auto (ZingHR/TAT-enrich owned). status = manual RMG override, owned by the Close action (not yet built). Prevents upload-clobber/bounce-back.
-- RMG Workspace cards: filter-responsive — counts follow Region+Status; flag pills filter grid rows only, flag cards keep full breakdown.
-- RMG scope: ALL reqs incl non-delivery/corp; exceptions are a few confidential searches (confidential flag pending).
-- Latest committed HEAD: ae3fc58 — KNOWLEDGE 18 Jun update
-- Pending (NOT yet committed): RMG sidebar scoping in showSidebarAfterLogin + Long Absenteeism read-only gate for RMG. node --check PASS.
+## Current File State — 19 Jun 2026
+
+SESSION 19 Jun 2026 — TA Pipeline & RMG recruitment build complete
+
+COMMITS THIS SESSION (chronological):
+- 58945e4: RMG sidebar scoping (7 tabs) + Long Absenteeism read-only gate
+- 000ec2e: processCandidate → ta_candidates from candidate transaction report
+- 23bd3ec: TA Pipeline 11-col grid (Pipe/Stage/ActvD) + phantom filter
+- 8ebea20: Grid slice cap 150→250
+- 7d047db: Prospective Joiners — joining strip + dropout rate
+- 8c1839e: processEmployeeMaster → employee_master + auto-reconcile prospective_joiners
+- 5335867: Dropout rate fix (_pjData) + TA Commitments retired
+- 732f602: mar_joined KPI from NewJoinee DOJ in Super Employee Master
+
+RMG GO-LIVE (19 Jun):
+- 4 auth accounts: sonal.rale, pruthvi.ss, nehal.shaikh, chander1.mohan @cmsitservices.com
+- user_profiles seeded via hardcoded UUID INSERT (JOIN-based SQL failed)
+- All 4 confirmed in user_profiles with role=rmg
 
 ### Recent Commits (newest first)
+- 732f602 (19 Jun): fix: mar_joined KPI sourced from NewJoinee DOJ in Super Employee Master
+- 5335867 (19 Jun): fix dropout rate use full _pjData; retire TA Commitments sidebar
+- 8c1839e (19 Jun): processEmployeeMaster: persist to employee_master + auto-reconcile prospective_joiners
+- 7d047db (19 Jun): Prospective Joiners: joining this week/next week strip + dropout rate by recruiter
+- 8ebea20 (19 Jun): TA Pipeline: raise req grid slice cap 150→250 to show all open reqs
+- 23bd3ec (19 Jun): TA Pipeline 11-col grid (Pipe/Stage/ActvD) + phantom filter
+- 000ec2e (19 Jun): processCandidate → ta_candidates from candidate transaction report
+- 58945e4 (19 Jun): RMG sidebar scoping (7 tabs) + Long Absenteeism read-only gate
 - ae3fc58 (18 Jun): KNOWLEDGE: 18 Jun — RMG status model, TAT enrich, filter-responsive cards, phantom-open principle
 - e970c51 (18 Jun): RMG filter-responsive cards — counts follow Region+Status, flag filters rows only
 - fccee3d (18 Jun): RMG: TAT enrich live + Open/Closed pills + filter-responsive cards
