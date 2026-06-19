@@ -12018,6 +12018,66 @@ async function processEmployeeMaster(wb) {
 
     log('Active rows (Existing + NewJoinee): ' + activeRows.length);
 
+    // ── Persist active employees to employee_master ───────────────────────
+    try {
+      var _emRows = activeRows.map(function(r){
+        var _doj = parseDate(r['DOJ']||r['Date_Of_Joining']||r['Date of Joining']||'');
+        var _cust = getCust(r);
+        return {
+          emp_code:    String(r['Employee Code']||r['EmployeeCode']||'').trim(),
+          name:        String(r['Employee Name']||r['EmployeeName']||'').trim(),
+          doj:         _doj,
+          customer:    _cust,
+          region:      String(r['Region']||'').trim(),
+          emp_status:  String(r['Employee Status']||'').trim(),
+          designation: String(r['Designation']||'').trim(),
+          uploaded_at: new Date().toISOString(),
+          updated_at:  new Date().toISOString()
+        };
+      }).filter(function(r){ return r.emp_code && r.name; });
+
+      // Upsert in chunks of 200
+      var _emChunk = 200, _emInserted = 0;
+      for (var _emi=0; _emi<_emRows.length; _emi+=_emChunk) {
+        var _emSlice = _emRows.slice(_emi, _emi+_emChunk);
+        var {error:_emErr} = await _sb.from('employee_master').upsert(_emSlice, {onConflict:'emp_code'});
+        if (_emErr) { log('employee_master upsert error: '+_emErr.message,'err'); break; }
+        _emInserted += _emSlice.length;
+      }
+      log('✓ employee_master: '+_emInserted+' active employees persisted','ok');
+
+      // ── Auto-reconcile prospective_joiners → mark Joined if in employee_master ─
+      // Match by name_normalized (UPPER TRIM) against prospective_joiners.candidate_name
+      // Only update rows still in active statuses (not already resolved)
+      var _pjActive = ['Offer Accepted','Induction Scheduled'];
+      var {data:_pjPending, error:_pjErr} = await _sb.from('prospective_joiners')
+        .select('id,candidate_name,doj,status')
+        .in('status', _pjActive);
+      if (!_pjErr && _pjPending && _pjPending.length) {
+        // Build name lookup from employee_master rows (normalised)
+        var _emNameSet = {};
+        _emRows.forEach(function(e){ if(e.name) _emNameSet[e.name.toUpperCase().trim()] = e.emp_code; });
+        var _toJoin = _pjPending.filter(function(p){
+          return p.candidate_name && _emNameSet[p.candidate_name.toUpperCase().trim()];
+        });
+        if (_toJoin.length) {
+          var _joinIds = _toJoin.map(function(p){return p.id;});
+          var {error:_joinErr} = await _sb.from('prospective_joiners')
+            .update({
+              status: 'Joined',
+              status_updated_by: 'auto:super_emp_master',
+              status_updated_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .in('id', _joinIds);
+          if (_joinErr) log('Auto-reconcile error: '+_joinErr.message,'err');
+          else log('✓ Auto-reconciled: '+_toJoin.length+' candidates marked Joined from Super Employee Master','ok');
+        } else {
+          log('Auto-reconcile: no pending candidates found in active employee list','info');
+        }
+      }
+    } catch(_emE){ log('employee_master error: '+_emE.message,'err'); }
+
     // ── Cache per-account HC (ALL active emp types, for Account Health Card) ──
     // Keys: 'ACCOUNTNAME|||REGION' for region-specific lookup
     // Also keeps flat 'ACCOUNTNAME' key for backward compat
