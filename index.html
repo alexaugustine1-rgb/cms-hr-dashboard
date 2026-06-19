@@ -10806,7 +10806,29 @@ async function sbBoot(user){
       if(!vis) g.style.display='none';
     });
     setTimeout(function(){snavClick('admin');},150);
-  }  const{data:weeks,error}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
+  }
+  // RMG role — restrict sidebar to operational tabs only
+  if(_sbRole && _sbRole.role === 'rmg') {
+    var _rmgAllowed = {
+      'Overview':1,'RMG Workspace':1,'TA Pipeline':1,
+      'Prospective Joiners':1,'Resignation & Backfill':1,
+      'Long Absenteeism':1,'Account Health':1
+    };
+    var _rmgSubmit = document.getElementById('snav-submit');
+    if(_rmgSubmit) _rmgSubmit.style.display = 'none';
+    var _rmgMobSubmit = document.getElementById('mob-submit-btn');
+    if(_rmgMobSubmit) _rmgMobSubmit.style.display = 'none';
+    document.querySelectorAll('.sidebar-item').forEach(function(sItem){
+      var lbl = sItem.querySelector('.item-label');
+      if(lbl && !_rmgAllowed[lbl.textContent.trim()]) sItem.style.display = 'none';
+    });
+    document.querySelectorAll('.sidebar-group').forEach(function(g){
+      var vis = Array.from(g.querySelectorAll('.sidebar-item')).some(function(i){return i.style.display!=='none';});
+      if(!vis) g.style.display = 'none';
+    });
+    setTimeout(function(){snavClick('rmg');},150);
+  }
+  const{data:weeks,error}=await _sb.from('weekly_reports').select('*').order('week_num',{ascending:true});
   // Fetch WI data from DB at boot — overrides hardcoded const
   try{
     const{data:_wiLive}=await _sb.from('workforce_intel').select('data,updated_at').eq('id','current').single();
