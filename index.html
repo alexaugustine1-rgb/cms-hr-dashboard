@@ -8287,6 +8287,7 @@ function renderTAPipeline(){
   var tf=['All','Platinum','Gold','Regular'].map(function(v){return fbtn(v,_taTier===v,"_taTier='"+v+"';document.getElementById('tab-tapipeline').innerHTML=renderTAPipeline()");}).join('');
   var pf=['All','New','Replacement'].map(function(v){return fbtn(v,_taPosType===v,"_taPosType='"+v+"';document.getElementById('tab-tapipeline').innerHTML=renderTAPipeline()");}).join('');
   var bf=['All','T&M','MS'].map(function(v){return fbtn(v,_taBilling===v,"_taBilling='"+v+"';document.getElementById('tab-tapipeline').innerHTML=renderTAPipeline()");}).join('');
+  var phantomBtn='<button onclick="_taPhantom=!_taPhantom;document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(_taPhantom?700:500)+';border:1px solid '+(_taPhantom?'var(--red)':'var(--border)')+';background:'+(_taPhantom?'rgba(248,113,113,.15)':'none')+';color:'+(_taPhantom?'var(--red)':'var(--muted)')+';cursor:pointer">⚠ Phantom only</button>';
 
   function asof(dt,col){return '<div style="font-size:9px;color:'+(col||'var(--muted2)')+';margin-top:3px">as of '+dt+'</div>';}
 
@@ -8361,7 +8362,27 @@ function renderTAPipeline(){
   }
 
   // ── Open reqs table ────────────────────────────────────────────────────
-  var reqRows=data.slice(0,100).map(function(r){
+  var STAGE_ABBR = {
+    'Screening':'Screen','Assessments':'Assess',
+    'Pre Offer Verification':'PreOff','Pre Offer Checklist':'PreOff',
+    'Pre Offer Checklist Rejected':'Reject',
+    'Offer Letter Send to Internal Database':'OfferDB',
+    'Offer Letter Acceptance':'OfferAcc','Offer Letter Rejected':'OfferRej',
+    'Pre Joining Checklist':'PreJoin','Pre Joining Verification':'PreJoin',
+    'Appointment Letter':'Appt'
+  };
+  // Apply phantom filter — no candidates + no recruiter + age >30d
+  var displayData = _taPhantom
+    ? data.filter(function(r){
+        var hasCand = !!_taCandMap[String(r.req_id)];
+        var hasRec  = !!(r.ta_recruiter && r.ta_recruiter.trim());
+        return !hasCand && !hasRec && r.tat>30;
+      })
+    : data;
+  var phantomCount = data.filter(function(r){
+    return !_taCandMap[String(r.req_id)] && !(r.ta_recruiter&&r.ta_recruiter.trim()) && r.tat>30;
+  }).length;
+  var reqRows=displayData.slice(0,150).map(function(r){
     var tatCol=r.tat>90?'#dc2626':r.tat>60?'var(--red)':r.tat>45?'#f97316':r.tat>30?'var(--amber)':'var(--muted)';
     var bg=r.tat>45?'rgba(248,113,113,.02)':'';
     var tierColor=r.tier==='Platinum'?'#a78bfa':r.tier==='Gold'?'#f59e0b':'transparent';
@@ -8370,16 +8391,26 @@ function renderTAPipeline(){
       : (r.ta_recruiter?r.ta_recruiter.replace(/\([^)]+\)/g,'').split(',')[0].trim().replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').split(' ')[0]:'—');
     if(!recName||recName==='') recName='Unassigned';
     var recColor=r.primary_recruiter?'var(--green)':(!r.ta_recruiter||!r.ta_recruiter.trim()?'var(--amber)':'var(--muted2)');
-    return'<div style="display:grid;grid-template-columns:52px 155px 150px 60px 42px 45px 32px 75px 80px;padding:6px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;background:'+bg+';border-left:2px solid '+tierColor+'">'
+    var _cm = _taCandMap[String(r.req_id)]||null;
+    var _cnt = _cm?_cm.count:0;
+    var _stageAbbr = _cm?(_cm.stage?STAGE_ABBR[_cm.stage]||_cm.stage.substring(0,6):'—'):'—';
+    var _stageCol = !_cm?'var(--muted2)':_cm.rank>=7?'var(--green)':_cm.rank>=5?'var(--accent)':_cm.rank>=3?'#f59e0b':'var(--muted)';
+    var _lastAct = _cm&&_cm.lastActDays!==null?_cm.lastActDays+'d':'—';
+    var _lastActCol = _cm&&_cm.lastActDays!==null?(_cm.lastActDays>30?'var(--red)':_cm.lastActDays>14?'var(--amber)':'var(--green)'):'var(--muted2)';
+    var _isPhantom = !_cm && !(r.ta_recruiter&&r.ta_recruiter.trim()) && r.tat>30;
+    if(_isPhantom) bg='rgba(245,158,11,.04)';
+    return'<div style="display:grid;grid-template-columns:50px 145px 135px 55px 38px 46px 30px 35px 58px 52px 72px;padding:5px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;background:'+bg+';border-left:2px solid '+tierColor+'">'
       +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--muted2)">'+esc(r.req_id)+'</div>'
-      +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.designation||'—')+'</div>'
-      +'<div style="display:flex;align-items:center;gap:4px"><div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.customer?r.customer.substring(0,20):'—')+'</div></div>'
+      +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.designation||'')+'">'+esc((r.designation||'—').substring(0,20))+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.customer||'')+'">'+esc((r.customer||'—').substring(0,18))+'</div>'
       +'<div style="font-size:10px;color:var(--muted)">'+esc(r.region)+'</div>'
-      +'<div><span style="font-size:9px;padding:1px 5px;border-radius:4px;background:'+(r.pos_type==='Replacement'?'rgba(251,191,36,.15)':'rgba(96,165,250,.1)')+';color:'+(r.pos_type==='Replacement'?'var(--amber)':'#60a5fa')+'">'+r.pos_type.substring(0,3)+'</span></div>'
+      +'<div><span style="font-size:9px;padding:1px 4px;border-radius:4px;background:'+(r.pos_type==='Replacement'?'rgba(251,191,36,.15)':'rgba(96,165,250,.1)')+';color:'+(r.pos_type==='Replacement'?'var(--amber)':'#60a5fa')+'">'+r.pos_type.substring(0,3)+'</span></div>'
       +'<div style="font-weight:700;color:'+tatCol+'">'+r.tat+'d</div>'
       +'<div style="color:var(--muted2);text-align:center">'+esc(r.balance)+'</div>'
+      +'<div style="text-align:center;font-weight:700;color:'+(_cnt>0?'var(--accent)':'var(--muted2)')+'">'+(_cnt||'—')+'</div>'
+      +'<div style="font-size:9px;color:'+_stageCol+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(_cm?_cm.stage:'No active candidates')+'">'+esc(_stageAbbr)+'</div>'
+      +'<div style="font-size:9px;color:'+_lastActCol+'" title="Days since last offer event">'+esc(_lastAct)+'</div>'
       +'<div style="font-size:10px;color:'+recColor+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(recName)+'</div>'
-      +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:'+(r.separation_emp_code?'var(--amber)':'var(--muted2)')+'">'+esc(r.separation_emp_code||'—')+'</div>'
       +'</div>';
   }).join('');
 
@@ -8446,12 +8477,16 @@ function renderTAPipeline(){
     +'<span style="font-size:11px;color:var(--muted)">Tier:</span>'+tf
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
     +'<span style="font-size:11px;color:var(--muted)">Type:</span>'+pf
-  +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
-  +'<span style="font-size:11px;color:var(--muted)">Billing:</span>'+bf+'</div>'
+    +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
+    +'<span style="font-size:11px;color:var(--muted)">Billing:</span>'+bf
+    +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
+    +phantomBtn
+    +(phantomCount>0&&!_taPhantom?'<span style="font-size:10px;color:var(--amber);margin-left:4px">'+phantomCount+' suspected phantom reqs</span>':'')
+    +'</div>'
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'
-    +'<div style="display:grid;grid-template-columns:52px 155px 150px 60px 42px 45px 32px 75px 80px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['Req','Designation','Account','Region','Type','Age','Bal','Recruiter','Backfill'].map(function(h){
-      return'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
+    +'<div style="display:grid;grid-template-columns:50px 145px 135px 55px 38px 46px 30px 35px 58px 52px 72px;padding:5px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+    +['Req','Designation','Account','Rgn','Type','Age','Bal','Pipe','Stage','ActvD','Recruiter'].map(function(h){
+      return'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)" title="'+({'Pipe':'Active candidates in pipeline','Stage':'Furthest pipeline stage reached','ActvD':'Days since last offer activity'}[h]||'')+'">'+h+'</div>';
     }).join('')+'</div>'
     +(reqRows||'<div style="padding:32px;text-align:center;color:var(--muted)">No reqs match filters</div>')+'</div>'
     +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:7px">Recruiter Scorecard — Sourced By attribution · as of '+TAT_DATE+'</div>'
@@ -8469,7 +8504,47 @@ function renderTAPipeline(){
     +'<div style="margin-top:7px;font-size:10px;color:var(--muted2)">Showing '+data.length+'/'+allData.length+' open reqs · Left border: purple=Platinum, amber=Gold · Backlog Age ≠ Fill Speed (see column tooltips)</div>'
     +'</div>';
 }
-var _taRegion='All',_taTier='All',_taPosType='All',_taBilling='All';
+var _taRegion='All',_taTier='All',_taPosType='All',_taBilling='All',_taPhantom=false;
+var _taCandMap = {}; // {req_id: {count,stage,rank,lastActDays}} loaded from ta_candidates
+
+async function loadTACandMap() {
+  if (!_sb) return;
+  try {
+    var {data,error} = await _sb.from('ta_candidates')
+      .select('req_id,application_stage,offer_date')
+      .neq('req_id','');
+    if (error || !data || !data.length) return;
+    var STAGE_RANK = {
+      'Screening':1,'Assessments':2,
+      'Pre Offer Verification':3,'Pre Offer Checklist':4,'Pre Offer Checklist Rejected':4,
+      'Offer Letter Send to Internal Database':5,'Offer Letter Acceptance':6,'Offer Letter Rejected':6,
+      'Pre Joining Checklist':7,'Pre Joining Verification':7,
+      'Appointment Letter':8
+    };
+    var ACTIVE_STAGES = {
+      'Screening':1,'Assessments':1,'Pre Offer Verification':1,'Pre Offer Checklist':1,
+      'Offer Letter Send to Internal Database':1,'Offer Letter Acceptance':1,
+      'Pre Joining Checklist':1,'Pre Joining Verification':1,'Appointment Letter':1
+    };
+    var map = {};
+    var today = new Date(); today.setHours(0,0,0,0);
+    data.forEach(function(r) {
+      var rid = String(r.req_id||'').trim(); if (!rid) return;
+      if (!map[rid]) map[rid] = {count:0,stage:'',rank:0,lastActDays:null};
+      if (ACTIVE_STAGES[r.application_stage]) map[rid].count++;
+      var rank = STAGE_RANK[r.application_stage]||0;
+      if (rank > map[rid].rank) { map[rid].rank=rank; map[rid].stage=r.application_stage||''; }
+      if (r.offer_date) {
+        var d = new Date(r.offer_date); d.setHours(0,0,0,0);
+        var days = Math.round((today-d)/86400000);
+        if (map[rid].lastActDays===null || days<map[rid].lastActDays) map[rid].lastActDays=days;
+      }
+    });
+    _taCandMap = map;
+    var el = document.getElementById('tab-tapipeline');
+    if (el && el.classList.contains('active')) el.innerHTML = renderTAPipeline();
+  } catch(e){ console.warn('[loadTACandMap]',e.message); }
+}
 var _taView='pipeline';
 var _taRecMap=[], _taRecMapLoaded=false, _taRecMapFilter='unmapped', _taRecruiterNames=[];
 var _rmgData=[], _rmgRegion='All', _rmgStatus='All', _rmgFlag='All';
@@ -10845,6 +10920,7 @@ async function sbBoot(user){
           console.log('[sbBoot] TA_ACTIVE_REQS:',row.row_count,'rows');
         }
         if (row.id==='ta_scorecard'    && row.data) { TA_SCORECARD.length=0; row.data.forEach(function(r){TA_SCORECARD.push(r);}); console.log('[sbBoot] TA_SCORECARD:',row.data.length,'recruiters'); }
+        if (row.id==='ta_reqs'         && row.data) { setTimeout(loadTACandMap, 300); }
         if (row.id==='ta_reqs_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY req summary restored'); }
         if (row.id==='ta_cand_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY candidate fields restored'); }
         if (row.id==='summary' && row.data && row.data.total_res) { Object.assign(CMS_SUMMARY, row.data); console.log('[sbBoot] CMS_SUMMARY loaded from cache'); }
