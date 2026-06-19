@@ -9622,7 +9622,7 @@ async function processCandidate(wb) {
 
   log('✓ Candidate data refreshed — '+rows.length+' records, '+marJoined+' MTD joiners','ok');
   log('Refreshing TA Pipeline…','info');
-  
+
   // Trigger re-render of TA pipeline tab if active
   if (typeof render === 'function') render();
   const el = document.getElementById('tab-tapipeline');
@@ -9632,6 +9632,113 @@ async function processCandidate(wb) {
     await loadProspectiveJoiners();
     log('✓ Prospective Joiners refreshed','ok');
   }
+
+  // ── Populate ta_candidates from candidate transaction report ─────────────
+  // File has title at row 0, actual headers at row 3 (0-indexed).
+  // Use header:1 raw parse to handle the offset correctly.
+  try {
+    const _tcWs = wb.Sheets[wb.SheetNames[0]];
+    const _tcRaw = XLSX.utils.sheet_to_json(_tcWs, {header:1, raw:false, defval:''});
+    // Find header row — first row with >5 non-empty cells
+    var _tcHdrIdx = -1;
+    for (var _tci=0; _tci<Math.min(_tcRaw.length,8); _tci++) {
+      if ((_tcRaw[_tci]||[]).filter(function(c){return String(c).trim();}).length > 5) {
+        _tcHdrIdx = _tci; break;
+      }
+    }
+    if (_tcHdrIdx < 0) { log('ta_candidates: could not find header row','warn'); }
+    else {
+      var _tcHdrs = _tcRaw[_tcHdrIdx].map(function(h){return String(h||'').trim();});
+      function _tcIdx(name){ return _tcHdrs.indexOf(name); }
+      function _tcVal(row, name){ var i=_tcIdx(name); return i>=0?String(row[i]||'').trim():''; }
+      function _tcDate(raw){
+        if (!raw) return null;
+        var s = String(raw).trim();
+        if (!s || s==='0' || s==='') return null;
+        // YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
+        // DD MMM YYYY or DD-MMM-YYYY
+        var MON={jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',
+                 jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+        var pts = s.replace(/-/g,' ').split(' ').filter(function(p){return p.trim();});
+        if (pts.length>=3) {
+          var dd=pts[0].padStart(2,'0');
+          var mm=MON[(pts[1]||'').toLowerCase().substring(0,3)];
+          var yy=pts[2]; if(yy.length===2) yy='20'+yy;
+          if(mm) return yy+'-'+mm+'-'+dd;
+        }
+        try { var d=new Date(s); if(!isNaN(d)) return d.toISOString().substring(0,10); } catch(e){}
+        return null;
+      }
+      // Extract sourced_by_code from recruiter string "(11012345)"
+      function _tcCode(raw){
+        var m = String(raw||'').match(/\((\d{5,10})\)/);
+        return m ? m[1] : '';
+      }
+      function _tcRecName(raw){
+        if (!raw) return '';
+        return String(raw).replace(/\([^)]+\)/g,'').replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i,'').replace(/\s+/g,' ').trim();
+      }
+
+      var _tcDataRows = _tcRaw.slice(_tcHdrIdx+1).filter(function(r){
+        return r && String(r[0]||'').trim();
+      });
+      log(_tcDataRows.length+' rows found for ta_candidates','info');
+
+      var _tcBatch = 'CandTx_'+new Date().toISOString().substring(0,10);
+      var _tcToday = new Date().toISOString().substring(0,10);
+      var _tcUpsertRows = _tcDataRows.map(function(r){
+        var recRaw = _tcVal(r,'Recruiter Name');
+        // TAT: req_date → ecode_date
+        var _reqDt  = _tcDate(_tcVal(r,'Requisition Date'));
+        var _ecDt   = _tcDate(_tcVal(r,'ECode Creation Date'));
+        var _tatDays = null;
+        if (_reqDt && _ecDt) {
+          var diff = (new Date(_ecDt) - new Date(_reqDt)) / 86400000;
+          if (!isNaN(diff) && diff>=0) _tatDays = Math.round(diff);
+        }
+        return {
+          candidate_name:    _tcVal(r,'Candidate Name'),
+          req_id:            _tcVal(r,'Requisition ID'),
+          req_title:         _tcVal(r,'Requisition Title'),
+          req_status:        _tcVal(r,'Requisition Status'),
+          req_date:          _tcDate(_tcVal(r,'Requisition Date')),
+          req_approval_date: _tcDate(_tcVal(r,'Requisition Approval Date')),
+          sourced_by_name:   _tcRecName(recRaw.split(',')[0]||recRaw),
+          sourced_by_code:   _tcCode(recRaw),
+          resume_source:     _tcVal(r,'Resume Source'),
+          customer_name:     _tcVal(r,'Customer Name')||_tcVal(r,'Customer Name Role and Location').split(' - ')[0].trim(),
+          region:            _tcVal(r,'Region'),
+          application_stage: _tcVal(r,'Application Stage'),
+          offer_status:      _tcVal(r,'Offer Status'),
+          offer_date:        _tcDate(_tcVal(r,'Offer Letter Acceptance Date')),
+          final_doj:         _tcDate(_tcVal(r,'Final Date of Joining')||_tcVal(r,'Tentative Date Of Joining')),
+          ecode_date:        _tcDate(_tcVal(r,'ECode Creation Date')),
+          employee_code:     _tcVal(r,'Employee Code'),
+          tat_days:          _tatDays,
+          data_as_of:        _tcToday,
+          upload_batch:      _tcBatch
+        };
+      }).filter(function(r){ return r.candidate_name; });
+
+      if (_tcUpsertRows.length) {
+        // Delete previous batch and re-insert — this is a snapshot, not an accumulation
+        var {error:_tcDelErr} = await _sb.from('ta_candidates').delete().neq('id','00000000-0000-0000-0000-000000000000');
+        if (_tcDelErr) log('ta_candidates clear error: '+_tcDelErr.message,'warn');
+        // Batch insert in chunks of 50
+        var _tcChunk=50, _tcInserted=0;
+        for (var _tck=0; _tck<_tcUpsertRows.length; _tck+=_tcChunk) {
+          var chunk = _tcUpsertRows.slice(_tck, _tck+_tcChunk);
+          var {error:_tcInsErr} = await _sb.from('ta_candidates').insert(chunk);
+          if (_tcInsErr) { log('ta_candidates insert error: '+_tcInsErr.message,'warn'); break; }
+          _tcInserted += chunk.length;
+        }
+        log('✓ ta_candidates: '+_tcInserted+' rows written ('+_tcBatch+')','ok');
+      } else {
+        log('ta_candidates: no valid rows extracted — check header row detection','warn');
+      }
+    }
+  } catch(_tcE){ log('ta_candidates error: '+_tcE.message,'err'); }
 }
 
 // ── REQ TAT PARSER ───────────────────────────────────────────────────────
