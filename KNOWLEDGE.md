@@ -304,7 +304,48 @@ RMG GO-LIVE (19 Jun):
 - user_profiles seeded via hardcoded UUID INSERT (JOIN-based SQL failed)
 - All 4 confirmed in user_profiles with role=rmg
 
+ADDITIONAL COMMITS — 19 Jun 2026 (session continued):
+- ebdc980: Onboarding Tracker full redesign — card pipeline by week (This Week/Next Week/2-4 Weeks), HRBP auto-scope by region, overdue action buttons (Joined/No Show/Drop), Joined MTD header, RMG access added, updatePJStatus alias added, dropout rate admin-only
+- 5335867: Dropout rate fix (_pjData not data) + TA Commitments retired from sidebar
+- 732f602: mar_joined KPI sourced from NewJoinee DOJ in Super Employee Master (not ECode date)
+- 8c1839e: processEmployeeMaster — persist to employee_master + auto-reconcile prospective_joiners by name match (24 auto-cleared on first run)
+- d6129e9: Prospective Joiners ±60d DOJ window default (superseded by ebdc980 rewrite)
+- 1e613bf: sync ta_candidates → prospective_joiners on every candidate transaction upload — Appointment Letter + Pre Joining stages, tier enriched from customer_accounts, manually-resolved rows protected, 39 rows synced on first run (28 Joined, 11 Offer Accepted)
+
+ONBOARDING TRACKER — ARCHITECTURE (confirmed 19 Jun):
+- Sidebar renamed: Prospective Joiners → Onboarding Tracker
+- Data source: ta_candidates (candidate transaction upload) → syncs to prospective_joiners on every upload
+- Upcoming joiners: Offer Accepted rows with future DOJ (no emp_code in ta_candidates)
+- Confirmed joiners: Joined rows auto-set when emp_code populated in ta_candidates
+- Auto-reconcile: Super Employee Master upload matches by name → marks Joined in prospective_joiners
+- Tier enrichment: customer_accounts.tier joined by name during sync — correct Platinum/Gold/Silver/Regular
+- HRBP auto-scope: role=hrbp users auto-filtered to their region on load
+- 14 legacy overdue candidates (Mar-Apr DOJ) unresolvable by automation — need manual recruiter update
+- Onboarding Tracker accessible to: admin, executive, hrops, hrbp, ta, rmg
+
+PROSPECTIVE JOINERS DATA MODEL (corrected understanding):
+- prospective_joiners is NOT a manual upload table anymore
+- It is now a derived table — rebuilt from ta_candidates on every candidate transaction upload
+- Manually resolved statuses (Joined/No Show/Dropped Out) are protected from overwrite
+- employee_master (Super Emp Master) is the authoritative source for confirmed joiners and MTD count
+
+KPI SOURCE MAP (updated):
+- People Joined MTD → employee_master NewJoinee + DOJ current month (Super Emp Master upload)
+- Upcoming Joiners → prospective_joiners Offer Accepted + future DOJ (candidate transaction upload)
+- Pipe/Stage/ActvD per req → ta_candidates (candidate transaction upload)
+- Open Reqs / Aging → data_cache.ta_reqs (TAT upload + enrich RPC)
+
+PENDING NEXT SESSION:
+- Designation extraction from req_title in prospective_joiners sync (currently raw req_title string)
+- eSep surfacing
+- Close action for RMG manual status override
+- RMG Workspace candidate visibility (Pipe/Stage per req in RMG grid)
+- KNOWLEDGE.md re-upload to Claude.ai project (current file is stale)
+
 ### Recent Commits (newest first)
+- 1e613bf (19 Jun): sync ta_candidates → prospective_joiners: Appointment Letter + Pre Joining stages with tier enrichment
+- ebdc980 (19 Jun): Onboarding Tracker: full redesign — pipeline by week, HRBP auto-scope, action needed, joined MTD
+- d6129e9 (19 Jun): Prospective Joiners: default ±60d DOJ window filter + toggle to show all
 - 732f602 (19 Jun): fix: mar_joined KPI sourced from NewJoinee DOJ in Super Employee Master
 - 5335867 (19 Jun): fix dropout rate use full _pjData; retire TA Commitments sidebar
 - 8c1839e (19 Jun): processEmployeeMaster: persist to employee_master + auto-reconcile prospective_joiners
