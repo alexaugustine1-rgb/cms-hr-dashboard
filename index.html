@@ -12046,6 +12046,41 @@ async function processEmployeeMaster(wb) {
       }
       log('✓ employee_master: '+_emInserted+' active employees persisted','ok');
 
+      // ── Compute MTD joiners from NewJoinee rows ──────────────────────────
+      var _nowRef2 = new Date();
+      var _curMon = _nowRef2.getMonth();
+      var _curYr  = _nowRef2.getFullYear();
+      var _marJoined = _emRows.filter(function(r){
+        if (r.emp_status !== 'NewJoinee' || !r.doj) return false;
+        var d = new Date(r.doj);
+        return d.getMonth() === _curMon && d.getFullYear() === _curYr;
+      }).length;
+      log('MTD Joiners (NewJoinee DOJ this month): '+_marJoined,'ok');
+
+      // Patch TA_SUMMARY so KPI updates immediately
+      if (typeof TA_SUMMARY !== 'undefined') {
+        TA_SUMMARY.mar_joined = _marJoined;
+      }
+
+      // Persist to data_cache so it survives page reload
+      try {
+        var {data:_tcsCurrent} = await _sb.from('data_cache')
+          .select('data').eq('id','ta_cand_summary').maybeSingle();
+        var _tcsData = (_tcsCurrent && _tcsCurrent.data) ? _tcsCurrent.data : {};
+        _tcsData.mar_joined = _marJoined;
+        _tcsData.joined_source = 'super_emp_master';
+        _tcsData.joined_as_of = new Date().toISOString().substring(0,10);
+        await _sb.from('data_cache').upsert(
+          {id:'ta_cand_summary', data:_tcsData, row_count:1, uploaded_at:new Date().toISOString()},
+          {onConflict:'id'}
+        );
+        log('✓ mar_joined persisted to data_cache from Super Employee Master','ok');
+      } catch(_tcsE){ log('mar_joined cache error: '+_tcsE.message,'err'); }
+
+      // Re-render TA Pipeline KPI if active
+      var _taPEl = document.getElementById('tab-tapipeline');
+      if (_taPEl && _taPEl.classList.contains('active')) _taPEl.innerHTML = renderTAPipeline();
+
       // ── Auto-reconcile prospective_joiners → mark Joined if in employee_master ─
       // Match by name_normalized (UPPER TRIM) against prospective_joiners.candidate_name
       // Only update rows still in active statuses (not already resolved)
