@@ -5213,6 +5213,93 @@ function renderJoinersTab(el) {
     +'<div style="margin-bottom:18px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Status</span>'+sfBtns+'</div>'
     +overdueBanner
 
+    // ── Joining this week / next week strip ──────────────────────────────
+    +(function(){
+      var _today = new Date(); _today.setHours(0,0,0,0);
+      var _7d = new Date(_today); _7d.setDate(_7d.getDate()+7);
+      var _14d = new Date(_today); _14d.setDate(_14d.getDate()+14);
+      var _activeStatuses = ['Offer Accepted','Induction Scheduled'];
+      var _thisWeek = data.filter(function(r){
+        if(!r.doj || !_activeStatuses.includes(r.status)) return false;
+        var d = new Date(r.doj+'T00:00:00'); d.setHours(0,0,0,0);
+        return d >= _today && d <= _7d;
+      }).sort(function(a,b){
+        var tierOrd = {Platinum:0,Gold:1,Silver:2,Regular:3};
+        return (tierOrd[a.account_tier]||3)-(tierOrd[b.account_tier]||3);
+      });
+      var _nextWeek = data.filter(function(r){
+        if(!r.doj || !_activeStatuses.includes(r.status)) return false;
+        var d = new Date(r.doj+'T00:00:00'); d.setHours(0,0,0,0);
+        return d > _7d && d <= _14d;
+      }).sort(function(a,b){
+        var tierOrd = {Platinum:0,Gold:1,Silver:2,Regular:3};
+        return (tierOrd[a.account_tier]||3)-(tierOrd[b.account_tier]||3);
+      });
+      if(!_thisWeek.length && !_nextWeek.length) return '';
+      var _tc = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Regular:'var(--muted2)'};
+      function _dojCard(r){
+        var days = Math.round((new Date(r.doj+'T00:00:00')-_today)/86400000);
+        var col = _tc[r.account_tier]||'var(--muted2)';
+        return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+col
+          +';border-radius:8px;padding:10px 14px;min-width:180px;max-width:220px">'
+          +'<div style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.candidate_name||'—')+'</div>'
+          +'<div style="font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc((r.customer||'').substring(0,24))+'</div>'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">'
+            +'<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.2);color:'+col+'">'+esc(r.account_tier||'Regular')+'</span>'
+            +'<span style="font-size:11px;font-weight:700;color:'+(days===0?'var(--red)':days<=2?'var(--amber)':'var(--green)')+'">'+
+              (days===0?'Today':days===1?'Tomorrow':days+'d away')+'</span>'
+          +'</div>'
+        +'</div>';
+      }
+      var out = '<div style="margin-bottom:18px">';
+      if(_thisWeek.length){
+        out += '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--red);margin-bottom:8px">🔴 Joining This Week ('+_thisWeek.length+')</div>'
+          +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+_thisWeek.map(_dojCard).join('')+'</div>';
+      }
+      if(_nextWeek.length){
+        out += '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--amber);margin-bottom:8px">🟡 Joining Next Week ('+_nextWeek.length+')</div>'
+          +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+_nextWeek.map(_dojCard).join('')+'</div>';
+      }
+      out += '</div>';
+      return out;
+    })()
+
+    // ── Dropout rate by recruiter (admin only) ───────────────────────────
+    +(isAdmin ? (function(){
+      var _drMap = {};
+      data.forEach(function(r){
+        var rec = (r.recruiter_name||'Unknown').split(' ')[0];
+        if(!_drMap[rec]) _drMap[rec] = {offered:0,dropped:0};
+        _drMap[rec].offered++;
+        if(r.status==='Dropped Out' || r.status==='No Show') _drMap[rec].dropped++;
+      });
+      var _drRows = Object.entries(_drMap)
+        .filter(function(e){return e[1].offered>=3;})
+        .map(function(e){
+          var pct = Math.round(e[1].dropped/e[1].offered*100);
+          var col = pct>=30?'var(--red)':pct>=15?'var(--amber)':'var(--green)';
+          return {name:e[0], offered:e[1].offered, dropped:e[1].dropped, pct:pct, col:col};
+        })
+        .sort(function(a,b){return b.pct-a.pct;});
+      if(!_drRows.length) return '';
+      return '<div style="margin-bottom:18px">'
+        +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Dropout Rate by Recruiter — No Show + Dropped Out ÷ Total Offers (min 3)</div>'
+        +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+        +'<div style="display:grid;grid-template-columns:120px 60px 60px 80px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+        +['Recruiter','Offers','Drops','Drop%'].map(function(h){
+          return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
+        }).join('')+'</div>'
+        +_drRows.map(function(r){
+          return '<div style="display:grid;grid-template-columns:120px 60px 60px 80px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+            +'<div style="color:var(--text);font-weight:500">'+esc(r.name)+'</div>'
+            +'<div style="color:var(--muted)">'+r.offered+'</div>'
+            +'<div style="color:var(--muted)">'+r.dropped+'</div>'
+            +'<div style="font-weight:700;color:'+r.col+'">'+r.pct+'%</div>'
+            +'</div>';
+        }).join('')
+        +'</div></div>';
+    })() : '')
+
     // Table
     +'<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">'
     +'<table style="width:100%;border-collapse:collapse">'
