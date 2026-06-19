@@ -5267,7 +5267,7 @@ function renderJoinersTab(el) {
     // ── Dropout rate by recruiter (admin only) ───────────────────────────
     +(isAdmin ? (function(){
       var _drMap = {};
-      data.forEach(function(r){
+      _pjData.forEach(function(r){
         var rec = (r.recruiter_name||'Unknown').split(' ')[0];
         if(!_drMap[rec]) _drMap[rec] = {offered:0,dropped:0};
         _drMap[rec].offered++;
