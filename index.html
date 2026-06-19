@@ -4999,6 +4999,7 @@ var _pjLoaded       = false;
 var _pjRegion       = 'All';
 var _pjTier         = 'All';
 var _pjStatusFilter = 'Active';
+var _pjDojWindow    = 60;
 
 async function loadProspectiveJoiners() {
   if(!_sbUser) return;
@@ -5050,6 +5051,7 @@ function renderJoinersTab(el) {
   var canUpdate = isAdmin || isTa || isHrbp;
 
   // Filter data
+  var _today2 = new Date(); _today2.setHours(0,0,0,0);
   var data = _pjData.slice();
   if(_pjRegion !== 'All') data = data.filter(function(r){return r.region===_pjRegion;});
   if(_pjTier   !== 'All') data = data.filter(function(r){return r.account_tier===_pjTier;});
@@ -5057,6 +5059,17 @@ function renderJoinersTab(el) {
     data = data.filter(function(r){return !['Joined','No Show','Dropped Out'].includes(r.status);});
   else if(_pjStatusFilter !== 'All')
     data = data.filter(function(r){return r.status===_pjStatusFilter;});
+  // DOJ window: for Active filter, only show candidates with DOJ within
+  // last _pjDojWindow days or in the future. Overdue beyond window
+  // surface only in the banner, not the main table.
+  if (_pjStatusFilter==='Active') {
+    data = data.filter(function(r){
+      if (!r.doj) return true;
+      var dojD = new Date(r.doj+'T00:00:00'); dojD.setHours(0,0,0,0);
+      var daysDiff = Math.round((_today2 - dojD)/86400000);
+      return daysDiff <= _pjDojWindow;
+    });
+  }
 
   // TA sees only own candidates — match on full display_name vs recruiter_name
   if(isTa && !isAdmin && _sbRole.display_name) {
@@ -5098,6 +5111,7 @@ function renderJoinersTab(el) {
   var regBtns = REGIONS.map(function(v){return fbtn(v,_pjRegion===v,'_pjRegion=\''+v+'\';renderJoinersTab()');}).join('');
   var tierBtns= TIERS.map(function(v){return fbtn(v,_pjTier===v,'_pjTier=\''+v+'\';renderJoinersTab()');}).join('');
   var sfBtns  = SF_OPTS.map(function(v){return fbtn(v,_pjStatusFilter===v,'_pjStatusFilter=\''+v+'\';renderJoinersTab()');}).join('');
+  var dojWinBtn = '<button onclick="_pjDojWindow=_pjDojWindow===60?999:60;renderJoinersTab()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(_pjDojWindow===60?700:500)+';border:1px solid '+(_pjDojWindow===60?'var(--accent)':'var(--border)')+';background:'+(_pjDojWindow===60?'rgba(96,165,250,.15)':'none')+';color:'+(_pjDojWindow===60?'var(--accent)':'var(--muted)')+';cursor:pointer">'+(_pjDojWindow===60?'±60d window':'Show all')+'</button>';
 
   function fmtDoj(dojStr){
     if(!dojStr) return '—';
@@ -5210,7 +5224,9 @@ function renderJoinersTab(el) {
     // Filters
     +'<div style="margin-bottom:8px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Region</span>'+regBtns+'</div>'
     +'<div style="margin-bottom:8px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Tier</span>'+tierBtns+'</div>'
-    +'<div style="margin-bottom:18px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Status</span>'+sfBtns+'</div>'
+    +'<div style="margin-bottom:18px"><span style="font-size:10px;color:var(--muted2);text-transform:uppercase;letter-spacing:.8px;margin-right:10px">Status</span>'+sfBtns
+    +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px;display:inline-block"></span>'
+    +dojWinBtn+'</div>'
     +overdueBanner
 
     // ── Joining this week / next week strip ──────────────────────────────
