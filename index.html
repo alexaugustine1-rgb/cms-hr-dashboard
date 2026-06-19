@@ -8382,7 +8382,7 @@ function renderTAPipeline(){
   var phantomCount = data.filter(function(r){
     return !_taCandMap[String(r.req_id)] && !(r.ta_recruiter&&r.ta_recruiter.trim()) && r.tat>30;
   }).length;
-  var reqRows=displayData.slice(0,150).map(function(r){
+  var reqRows=displayData.slice(0,250).map(function(r){
     var tatCol=r.tat>90?'#dc2626':r.tat>60?'var(--red)':r.tat>45?'#f97316':r.tat>30?'var(--amber)':'var(--muted)';
     var bg=r.tat>45?'rgba(248,113,113,.02)':'';
     var tierColor=r.tier==='Platinum'?'#a78bfa':r.tier==='Gold'?'#f59e0b':'transparent';
