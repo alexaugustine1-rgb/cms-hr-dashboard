@@ -9813,6 +9813,98 @@ async function processCandidate(wb) {
           _tcInserted += chunk.length;
         }
         log('✓ ta_candidates: '+_tcInserted+' rows written ('+_tcBatch+')','ok');
+
+      // ── Sync Appointment Letter / Pre Joining candidates → prospective_joiners ─
+      // Stages that represent confirmed joiners or imminent joiners
+      var _pjSyncStages = {
+        'Appointment Letter':1,'Pre Joining Checklist':1,'Pre Joining Verification':1
+      };
+      // Statuses that are manually resolved — never overwrite these
+      var _pjResolvedStatuses = ['Joined','No Show','Dropped Out'];
+
+      try {
+        // Fetch existing prospective_joiners to know which are already resolved
+        var {data:_pjExisting} = await _sb.from('prospective_joiners')
+          .select('id,candidate_name,req_id,status');
+        var _pjResolvedSet = {};
+        (_pjExisting||[]).forEach(function(r){
+          var key = (r.candidate_name||'').toUpperCase().trim()+'__'+(r.req_id||'');
+          if (_pjResolvedStatuses.includes(r.status)) _pjResolvedSet[key] = r.id;
+        });
+
+        // Fetch customer tier lookup from customer_accounts
+        var {data:_caRows} = await _sb.from('customer_accounts').select('name,tier');
+        var _tierMap = {};
+        (_caRows||[]).forEach(function(c){
+          if(c.name && c.tier) _tierMap[c.name.toUpperCase().trim()] = c.tier;
+        });
+
+        // Build rows to sync from ta_candidates
+        var _today3 = new Date().toISOString().substring(0,10);
+        var _syncRows = _tcUpsertRows.filter(function(r){
+          return _pjSyncStages[r.application_stage];
+        }).map(function(r){
+          var key = (r.candidate_name||'').toUpperCase().trim()+'__'+(r.req_id||'');
+          // Skip if already manually resolved
+          if (_pjResolvedSet[key]) return null;
+          // Determine status: if has emp_code → Joined, else Offer Accepted
+          var derivedStatus = (r.employee_code && r.employee_code.trim()) ? 'Joined' : 'Offer Accepted';
+          // Extract designation from req_title (part after customer name and before date)
+          var _desig = '';
+          if (r.req_title) {
+            var _tp = r.req_title.split(' - ');
+            _desig = _tp.length>1 ? _tp[1].replace(/\[.*?\]/g,'').trim() : '';
+          }
+          // Tier from customer_accounts
+          var _tier = _tierMap[(r.customer_name||'').toUpperCase().trim()] || 'Regular';
+          return {
+            candidate_name:    r.candidate_name,
+            designation:       _desig || r.req_title || '',
+            customer:          r.customer_name || '',
+            account_tier:      _tier,
+            region:            r.region,
+            doj:               r.final_doj || null,
+            recruiter_name:    r.sourced_by_name,
+            resume_source:     r.resume_source,
+            req_id:            r.req_id,
+            offer_status:      r.offer_status || 'Accepted',
+            status:            derivedStatus,
+            emp_code:          r.employee_code || '',
+            data_as_of:        _today3,
+            upload_batch:      _tcBatch,
+            updated_at:        new Date().toISOString()
+          };
+        }).filter(Boolean);
+
+        if (_syncRows.length) {
+          // Upsert by candidate_name + req_id — use a temp approach:
+          // delete non-resolved rows for these req_ids then re-insert
+          var _syncReqIds = [...new Set(_syncRows.map(function(r){return r.req_id;}).filter(Boolean))];
+          if (_syncReqIds.length) {
+            // Only delete rows that are NOT manually resolved
+            var {data:_toDelete} = await _sb.from('prospective_joiners')
+              .select('id,candidate_name,req_id,status')
+              .in('req_id', _syncReqIds);
+            var _deleteIds = (_toDelete||[])
+              .filter(function(r){ return !_pjResolvedStatuses.includes(r.status); })
+              .map(function(r){ return r.id; });
+            if (_deleteIds.length) {
+              await _sb.from('prospective_joiners').delete().in('id', _deleteIds);
+            }
+          }
+          // Insert fresh rows in chunks
+          var _pjChunk=50, _pjInserted=0;
+          for(var _pji=0; _pji<_syncRows.length; _pji+=_pjChunk){
+            var _pjSlice = _syncRows.slice(_pji, _pji+_pjChunk);
+            var {error:_pjSyncErr} = await _sb.from('prospective_joiners').insert(_pjSlice);
+            if(_pjSyncErr){ log('prospective_joiners sync error: '+_pjSyncErr.message,'err'); break; }
+            _pjInserted += _pjSlice.length;
+          }
+          log('✓ Prospective Joiners synced from ta_candidates: '+_pjInserted+' rows (Appointment Letter + Pre Joining stages)','ok');
+        } else {
+          log('Prospective Joiners sync: no eligible rows from ta_candidates','info');
+        }
+      } catch(_pjSyncE){ log('Prospective Joiners sync error: '+_pjSyncE.message,'err'); }
       } else {
         log('ta_candidates: no valid rows extracted — check header row detection','warn');
       }
