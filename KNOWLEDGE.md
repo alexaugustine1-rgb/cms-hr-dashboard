@@ -11,36 +11,27 @@
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
 
-### 18 Jun 2026 — RMG status model, TAT enrich, filter-responsive cards
-- **req_tracker is now a FULL MIRROR of the TAT (~774 rows).** processReqTAT had been
-  truncating to ~417 rows — the root cause of the 189-vs-217-vs-182 open-count
-  confusion. Now retains all 774 rows, adds raw `zinghr_status` column, and derives
-  `status` = Open only when zinghr_status='Approved', else Closed. Enrich Step 3
-  closes anything with balance ≤ 0. Verified: 774 rows ≈ 189 Open / ≈ 215 stale.
-  (312fb7a; full-mirror groundwork 1368754)
-- **TAT enrich is live.** Supabase RPC `sync_positions_from_req_tracker` pushes
-  req_status + age from req_tracker onto RMG positions, auto-fires after every TAT
-  upload, and writes ONLY req_status / req_age_days / audit columns — manual fields
-  cannot be touched. Status vocab aligned to Open/Closed across the Add form and
-  filter pills. Verified by hand (req_status=rt.status, req_age=rt.tat exact). (fccee3d)
-- **Filter-responsive RMG cards (fixed).** Root cause was a wrong-source bug: the five
-  cards read the full array while the grid read the filtered copy. Cards now read a
-  Region+Status subset (`cardBase`); flag pills filter grid rows only and the cards
-  hold their RED/AMBER/GREEN breakdown. (e970c51)
-- **RMG users + sidebar scoping (this Cowork session).** 4 RMG users (Sonal Rale,
-  Pruthvi SS, Nehal Shaikh, Chander Mohan) via seed SQL; sidebar scoped to 7 tabs;
-  Long Absenteeism gated read-only for RMG. node --check PASS. Pending commit + push
-  and SQL run (after Alex creates the 4 Supabase Auth accounts).
-- **Decisions locked:** RMG Workspace holds ALL reqs incl non-delivery/corporate;
-  only a few confidential searches excluded (confidential flag still to build.)
-  Two-status model locked (see Key Learnings + Current State).
-- **Phantom-open principle:** system ~190 open vs Neha's real ≤100 ⇒ ~90 phantom-open
-  ON TOP of the 217 stale. Surface with signal flags, let cleanup converge the count;
-  do not redefine "open" down. (See Key Learnings.)
-- **Still open:** visual confirm on cards → fork between Close action vs Candidate
-  enrich → eSep surfacing → open-position-health view. Confirm what Neha's 100 counts
-  (all active open vs TA-sourced active).
-- **Recurring:** Vercel MCP 403 on team scope — needs connector re-auth (2nd session).
+### 18 Jun 2026 — RMG status model + filter-responsive cards
+- Session 18 Jun 2026 — RMG status model + filter-responsive cards. Commits: 312fb7a req_tracker
+  full mirror (all 774 TAT rows retained, was truncating to 417; zinghr_status raw column added;
+  status derived Open-only-if-zinghr_status='Approved', else Closed; enrich Step 3 closes balance≤0;
+  verified 774 rows ≈189 Open / ≈215 stale), fccee3d TAT enrich (Supabase RPC
+  sync_positions_from_req_tracker called after enrich in processReqTAT, writes ONLY
+  req_status/req_age_days/audit cols — manual fields untouched; auto-fires every TAT upload; Add
+  default + status pills → Open/Closed; verified via manual RPC run, req_status=rt.status and
+  req_age=rt.tat exact), e970c51 filter-responsive RMG cards (cards now read cardBase = region+status
+  filtered subset; flag pills filter grid rows only, cards keep RED/AMBER/GREEN breakdown; root cause
+  was wrong-source bug — counts read full _rmgData not filtered data). RMG scope CONFIRMED: holds ALL
+  reqs incl non-delivery/corp; only a few confidential searches excluded (confidential flag pending).
+  Neha constraint: true open ≤100 vs system ~190 → ~90 phantom-open beyond the 217 stale; handle by
+  surfacing phantom-signal flags (aged-no-movement / no recruiter / no candidate / balance-vs-joined),
+  not by massaging the count; balance unreliable as real-open signal; candidate pipeline activity is the
+  key real-vs-phantom discriminator. NEXT: Candidate enrich (pipeline stage into req_tracker +
+  account_positions_log via req_id; serves TA Pipeline + RMG grid + phantom discriminator; start with
+  diagnostic to read real stage vocabulary + req linkage before building the ladder). Then Close action
+  (status = manual RMG override + reason), eSep surfacing, open-position-health view (phantom flags +
+  RMG-vs-TA parity strip + confidential flag). Confirm what Neha's 100 counts (all active open vs
+  TA-sourced active). Vercel MCP 403 on team scope recurring — needs connector re-auth.
 
 ---
 
@@ -296,10 +287,16 @@ pipeline activity (not balance) is the real-vs-phantom discriminator for the nex
 
 ## Current File State — 18 Jun 2026
 - Line count: ~13,152 (index.html). True size only visible via file tools in Cowork (see Dropbox sync note).
-- Latest committed HEAD: e970c51 — RMG filter-responsive cards
+- req_tracker: FULL MIRROR of TAT (~774 rows). zinghr_status (raw) column added. status derived = 'Open' only when zinghr_status='Approved', else 'Closed'. No single-status assumption — two-status model (see below).
+- account_positions_log: gains live req_status/req_age_days via RPC sync_positions_from_req_tracker, auto-called after every TAT upload. Writes ONLY req_status/req_age_days/audit — never status, notes, demand_class, backfill_*, or elah_demand_id.
+- TWO-STATUS MODEL: req_status = auto (ZingHR/TAT-enrich owned). status = manual RMG override, owned by the Close action (not yet built). Prevents upload-clobber/bounce-back.
+- RMG Workspace cards: filter-responsive — counts follow Region+Status; flag pills filter grid rows only, flag cards keep full breakdown.
+- RMG scope: ALL reqs incl non-delivery/corp; exceptions are a few confidential searches (confidential flag pending).
+- Latest committed HEAD: ae3fc58 — KNOWLEDGE 18 Jun update
 - Pending (NOT yet committed): RMG sidebar scoping in showSidebarAfterLogin + Long Absenteeism read-only gate for RMG. node --check PASS.
 
 ### Recent Commits (newest first)
+- ae3fc58 (18 Jun): KNOWLEDGE: 18 Jun — RMG status model, TAT enrich, filter-responsive cards, phantom-open principle
 - e970c51 (18 Jun): RMG filter-responsive cards — counts follow Region+Status, flag filters rows only
 - fccee3d (18 Jun): RMG: TAT enrich live + Open/Closed pills + filter-responsive cards
 - 312fb7a (18 Jun): fix derived status Open-only for Approved
@@ -352,7 +349,8 @@ pipeline activity (not balance) is the real-vs-phantom discriminator for the nex
 ### TAT Enrichment + sync RPC (18 Jun 2026)
 - `sync_positions_from_req_tracker()` RPC created (migration: sync_positions_from_req_tracker_20260618).
   Updates account_positions_log.req_status = rt.status, req_age_days = rt.tat WHERE rt.req_id = apl.zinghr_req_id.
-  Only touches those 4 cols (req_status, req_age_days, updated_at, updated_by). Manual fields untouched.
+  Only touches those 4 cols (req_status, req_age_days, updated_at, updated_by). NEVER writes
+  status, notes, demand_class, backfill_* or elah_demand_id — those are manual RMG fields.
 - Called in processReqTAT immediately after enrich_req_tracker_from_accounts RPC.
 - Vocab alignment: status filter pills changed from ['All','Approved','Closed'] → ['All','Open','Closed'].
   submitRMGNewPosition default req_status changed from 'Approved' → 'Open'.
@@ -383,8 +381,9 @@ pipeline activity (not balance) is the real-vs-phantom discriminator for the nex
 ### NEXT (in order)
 1. **STEP 5 verification** (after next TAT upload) — confirm req_status/req_age_days populated in account_positions_log; manual fields untouched; non-matching rows unchanged. Run 3 queries in KNOWLEDGE §TAT Enrichment above.
 2. **Commit + push** 18 Jun RMG sidebar scoping; run RMG users SQL after auth accounts created.
-2. **Designation fix** — contract_workforce parser + eSep enrichment join (prompt written, not committed).
-3. **Phase 6A — Resignation backfill trigger** — eSep upload flags resignations needing backfill; RMG review queue (Raise Req / Deploy from Bench / No Replacement). Designation enrichment: join contract_workforce by emp_code at eSep parse time. Design complete.
+3. **Candidate enrich** — pipeline stage into req_tracker + account_positions_log via req_id; serves TA Pipeline + RMG grid + phantom discriminator. Start with diagnostic: read real stage vocabulary + req linkage before building the ladder.
+4. **Designation fix** — contract_workforce parser + eSep enrichment join (prompt written, not committed).
+5. **Phase 6A — Resignation backfill trigger** — eSep upload flags resignations needing backfill; RMG review queue (Raise Req / Deploy from Bench / No Replacement). Designation enrichment: join contract_workforce by emp_code at eSep parse time. Design complete.
 4. **HC Budget module** — after Elah/ZingHR reconciliation (469 mapping exceptions). Elah total 2,529 vs ZingHR 2,621 (gap 92; 11 multi-account tagged; bench in Elah 146). Schema: hc_budget table when data is clean.
 5. **ATE stale record cleanup** — after Ramesh confirms ZingHR headcount (61 active in tracker vs 27 last upload).
 6. **Resignation Past LWD section** — 211 already-left employees; design pending (collapsed vs escalation panel). Phase 8B priority.
