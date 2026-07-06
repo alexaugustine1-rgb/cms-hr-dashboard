@@ -3908,7 +3908,18 @@ async function loadAbsentCases() {
       .not('status', 'eq', 'Resolved — Resigned')
       .order('consecutive_absent', { ascending: false });
     if (error) throw error;
-    _absentCases = data || [];
+    var _rawCases = data || [];
+    // Cross-reference with employee_master — only show employees still active
+    // (Existing or NewJoinee). Resigned / FnF Locked / FnF In Process employees
+    // are absent from employee_master, so filtering to the whitelist removes them.
+    try {
+      const { data: emRows } = await _sb.from('employee_master').select('emp_code');
+      if (emRows && emRows.length) {
+        var _activeCodes = new Set(emRows.map(function(r){ return String(r.emp_code); }));
+        _rawCases = _rawCases.filter(function(c){ return _activeCodes.has(String(c.emp_code)); });
+      }
+    } catch(e) { console.warn('[loadAbsentCases] employee_master cross-ref failed:', e.message); }
+    _absentCases = _rawCases;
     _absentLoaded = true;
     // Build eSep emp code set for cross-reference flag
     // Prefer esep_codes cache (full unfiltered list from ZingHR extract);
