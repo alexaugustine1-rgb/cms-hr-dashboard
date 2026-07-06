@@ -8851,12 +8851,28 @@ function _renderRMGGrid(){
     addEl.innerHTML=_rmgShowAdd&&canEdit?_renderRMGAddForm():'';
   }
 
+  var _rmgNow = Date.now();
+  function _rmgTimeAgo(ts){
+    if(!ts) return '—';
+    var d = new Date(ts);
+    var h = Math.round((_rmgNow - d)/3600000);
+    if(h<1) return 'Just now';
+    if(h<24) return h+'h ago';
+    var days = Math.floor(h/24);
+    return days+'d ago';
+  }
+  function _rmgFmtDate(ts){
+    if(!ts) return '—';
+    var d = new Date(ts);
+    return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'});
+  }
+
   var hdr='<div style="display:grid;'
-    +'grid-template-columns:90px 90px 170px 65px 140px 75px 80px 55px 95px;'
+    +'grid-template-columns:90px 90px 170px 65px 140px 75px 80px 55px 95px 100px 80px;'
     +'padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border);'
     +'border-radius:8px 8px 0 0">'
     +['Req ID','Elah ID','Account','Region','Position Type',
-      'Backfill Emp','Status','Age (d)','Flag'].map(function(h){
+      'Backfill Emp','Status','Age (d)','Flag','Added By','Added On'].map(function(h){
       return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;'
         +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
     }).join('')+'</div>';
@@ -8868,8 +8884,12 @@ function _renderRMGGrid(){
       :(r.req_age_days||0)>45?'#f97316':'var(--muted)';
     var flagBadge='<span style="font-size:9px;padding:2px 7px;border-radius:3px;'
       +'font-weight:600;background:'+flag.bg+';color:'+flag.col+'">'+flag.label+'</span>';
-    var rowBg=flag.type==='RED'?'rgba(248,113,113,.02)'
+
+    // Highlight rows added in last 48h with amber left border
+    var isNew = r.created_at && (_rmgNow - new Date(r.created_at).getTime()) < 48*3600000;
+    var rowBg = flag.type==='RED'?'rgba(248,113,113,.02)'
       :flag.type==='AMBER'?'rgba(251,191,36,.02)':'';
+    var rowBorder = isNew ? 'border-left:3px solid var(--amber);' : '';
 
     var elahCell=canEdit
       ?'<input value="'+esc(r.elah_demand_id||'')+'" placeholder="Elah ID" '
@@ -8895,10 +8915,14 @@ function _renderRMGGrid(){
         +'border:1px solid var(--border);background:var(--surface);color:var(--text)">'
       :esc(r.backfill_emp_code||'—');
 
+    var addedBy = r.raised_by || '—';
+    var addedOn = _rmgFmtDate(r.created_at);
+    var addedAgo = _rmgTimeAgo(r.created_at);
+
     return '<div style="display:grid;'
-      +'grid-template-columns:90px 90px 170px 65px 140px 75px 80px 55px 95px;'
+      +'grid-template-columns:90px 90px 170px 65px 140px 75px 80px 55px 95px 100px 80px;'
       +'padding:6px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;'
-      +'align-items:center;background:'+rowBg+'">'
+      +'align-items:center;background:'+rowBg+';'+rowBorder+'">'
       +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--muted2)">'
       +esc(r.zinghr_req_id||'—')+'</div>'
       +'<div>'+elahCell+'</div>'
@@ -8912,6 +8936,8 @@ function _renderRMGGrid(){
       +esc(r.req_status||'—')+'</div>'
       +'<div style="font-weight:700;color:'+ageCol+'">'+(r.req_age_days||0)+'</div>'
       +'<div>'+flagBadge+'</div>'
+      +'<div style="font-size:10px;color:'+(isNew?'var(--amber)':'var(--muted)')+';font-weight:'+(isNew?600:400)+'">'+esc(addedBy)+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2)" title="'+esc(addedOn)+'">'+esc(addedAgo)+'</div>'
       +'</div>';
   }).join('');
 
@@ -9047,6 +9073,8 @@ async function submitRMGNewPosition(){
     notes:           notes.trim()||null,
     req_status:      'Open',
     req_age_days:    0,
+    raised_by:       user,
+    raised_by_id:    (_sbUser&&_sbUser.id)||null,
     updated_by:      user,
     updated_at:      now,
     created_at:      now
