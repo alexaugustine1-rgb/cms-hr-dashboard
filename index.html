@@ -12158,6 +12158,22 @@ async function processEmployeeMaster(wb) {
         } else {
           log('Auto-reconcile: no pending candidates found in active employee list','info');
         }
+
+      // ── Fuzzy + DOJ reconciliation (catches middle-name variants, extra spaces) ──
+      try {
+        var {data:_fuzzData, error:_fuzzErr} = await _sb.rpc('reconcile_prospective_joiners');
+        if (_fuzzErr) {
+          log('Fuzzy reconcile error: '+_fuzzErr.message,'warn');
+        } else {
+          var _fuzzCount = _fuzzData || 0;
+          if (_fuzzCount > 0) {
+            log('✓ Fuzzy reconcile: '+_fuzzCount+' additional candidates matched Joined (name similarity + DOJ)','ok');
+          } else {
+            log('Fuzzy reconcile: no additional matches found','info');
+          }
+        }
+      } catch(_fuzzE){ log('Fuzzy reconcile error: '+_fuzzE.message,'warn'); }
+
       }
     } catch(_emE){ log('employee_master error: '+_emE.message,'err'); }
 
