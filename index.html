@@ -5230,7 +5230,11 @@ function renderHiringReport(el) {
       +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(a.customer)+'">'+esc(a.customer.substring(0,32))+'</div>'
       +'<div style="color:var(--muted)">'+esc(a.region)+'</div>'
       +'<div style="font-weight:700;color:var(--green);text-align:center">'+a.joined+'</div>'
-      +'<div style="font-size:10px;color:var(--muted2)">'+esc(a.doj_min===a.doj_max?a.doj_min:a.doj_min+' → '+a.doj_max)+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2)">'+esc((function(){
+          var MONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          function fmtD(s){if(!s)return'—';var p=s.split('-');return parseInt(p[2])+' '+MONS[parseInt(p[1])-1];}
+          return a.doj_min===a.doj_max?fmtD(a.doj_min):fmtD(a.doj_min)+' → '+fmtD(a.doj_max);
+        })())+'</div>'
       +'</div>';
   }).join('');
 
@@ -11251,6 +11255,9 @@ function showSidebarAfterLogin(role) {
         if(lbl && hideAdmin.indexOf(lbl.textContent.trim()) >= 0) el.style.display = 'none';
       });
     }
+    // Hiring Report is TA/admin/executive only — always hide for HRBP
+    var _hrBtn = document.getElementById('snav-hiringreport');
+    if(_hrBtn) _hrBtn.style.display = 'none';
     // Hide empty sidebar groups
     document.querySelectorAll('.sidebar-group').forEach(function(g){
       var vis = Array.from(g.querySelectorAll('.sidebar-item')).some(function(i){return i.style.display!=='none';});
