@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.1.0 | **Last updated:** 18 Jun 2026 — two-status model locked, phantom-open principle, RMG users + sidebar scoping, session log added
+**Version:** 3.4.0 | **Last updated:** 6 Jul 2026 — Hiring Report tab, DOJ date format, HRBP/RMG sidebar gating
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,30 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 6 Jul 2026 — Hiring Report tab, sidebar gating (session 3)
+- **Hiring Report tab (7dc1cbe):** New tab `📈 Hiring Report` added after TA Pipeline in sidebar. Tab id: `hiringreport`. Functions: `loadHiringReport`, `_loadHRCycleData`, `renderHiringReport`, `saveHiringCycle`. Data sources: `hiring_cycles` table (named cycle periods), `employee_master` (DOJ-ranged joiners), `req_tracker` (open reqs + critical aging >100d), `prospective_joiners` (next cycle pipeline — Offer Accepted, DOJ after cycle end), `_taCandMap` (pipe/stage per req). Renders: KPI strip (total joined + region cards with realization %), account-wise closures table, critical aging grid, next cycle pipeline. New cycle form (admin/TA only). Access: admin, ta (function_type), executive — all others blocked.
+- **DOJ date format (8b66bfa):** Account closures DOJ Range column now shows `1 Jul → 14 Jul` instead of raw ISO strings. IIFE pattern inline in acctRows map.
+- **Sidebar gating (8b66bfa):** `snav-hiringreport` hidden for all HRBP roles (inserted in `showSidebarAfterLogin` HRBP block, line ~11254). RMG already excluded — `Hiring Report` absent from `_rmgAllowed` whitelist.
+- **Pending:** `hiring_cycles` table migration needed in Supabase before tab renders data (will show "No cycle data available" until created).
+- **Commits this session:** 7dc1cbe, 8b66bfa
+
+### 6 Jul 2026 — Fuzzy+DOJ reconcile RPC, RMG Pipe+Stage columns, SQL cleanup (session 2)
+- **Fuzzy+DOJ reconcile (b575f9c):** `processEmployeeMaster` now calls `reconcile_prospective_joiners()` RPC after the existing name-match auto-reconcile. Catches middle-name variants, extra spaces, and DOJ-bounded matches missed by the exact-match pass. Returns count of additional rows marked Joined.
+- **RMG Pipe+Stage columns (fee8bbc):** `_renderRMGGrid` grid expanded from 11 to 13 columns. New cols: `Pipe` (active candidate count from `_taCandMap` keyed by `zinghr_req_id`) and `Stage` (abbreviated stage label with rank-based colour). IIFE pattern keeps the row builder self-contained. Header + data row `grid-template-columns` both updated.
+- **Postgres function:** `reconcile_prospective_joiners()` created (migration: `reconcile_prospective_joiners_fuzzy_doj`). Uses pg_trgm similarity + DOJ window to fuzzy-match prospective_joiners against employee_master. Returns integer count of rows updated to Joined.
+- **Manual SQL cleanup:** 13 prospective_joiners rows manually marked Joined via cross-reference with employee_master (direct SQL UPDATE). 4 duplicate rows deleted.
+- **Commits this session:** b575f9c, fee8bbc
+
+### 6 Jul 2026 — Long Absenteeism filter, Onboarding Tracker, RMG enhancements, login fixes (session 1)
+- **Long Absenteeism (3e949dd):** `loadAbsentCases` now cross-references `employee_master` after fetch. Keeps only employees present in master (Existing/NewJoinee). Resigned/FnF Locked/FnF In Process employees are absent from the master and get filtered. Reduced from ~420 to ~251 actionable rows.
+- **RMG Workspace (f008615):** Added "Added By" + "Added On" columns to grid; amber left-border + amber cell for rows added in last 48h. `submitRMGNewPosition` now populates `raised_by` + `raised_by_id`. Existing seed rows renamed "Elah Import" via SQL UPDATE.
+- **Onboarding Tracker rewrite (ebdc980):** Renamed from "Prospective Joiners". Full `renderJoinersTab` rewrite — card pipeline by week (This Week / Next Week / 2-4 Weeks), HRBP auto-scope to region, overdue action buttons (Joined/No Show/Drop), Joined MTD in header, admin dropout rate by recruiter. RMG access added. `updatePJStatus` alias added.
+- **ta_candidates → prospective_joiners sync (1e613bf):** On every candidate upload, syncs Appointment Letter + Pre Joining stage candidates to `prospective_joiners`. Tier enriched from `customer_accounts`. Manually-resolved rows (Joined/No Show/Dropped Out) protected from overwrite.
+- **employee_master + mar_joined (8c1839e):** `processEmployeeMaster` upserts active employees to `employee_master` (conflict on emp_code). `mar_joined` KPI now sources from NewJoinee DOJ in Super Employee Master.
+- **TA Pipeline (8ebea20):** Grid slice raised from 150 → 250.
+- **Login fixes:** Sonal Rale + Pruthvi SS — `email_confirmed_at` was NULL; fixed via SQL UPDATE + temp password `CMS@2026!`. Neha's 404 was wrong URL (trailing `/and`). Prapti Patel — wrong password, reset needed via Supabase dashboard. Nehal + Chander — pending check.
+- **Commits this session:** 8ebea20, 7d047db, 8c1839e, 732f602, 5335867, d6129e9, ebdc980, 1e613bf, f008615, 3e949dd
 
 ### 18 Jun 2026 — RMG status model + filter-responsive cards
 - Session 18 Jun 2026 — RMG status model + filter-responsive cards. Commits: 312fb7a req_tracker
@@ -339,10 +363,17 @@ PENDING NEXT SESSION:
 - Designation extraction from req_title in prospective_joiners sync (currently raw req_title string)
 - eSep surfacing
 - Close action for RMG manual status override
-- RMG Workspace candidate visibility (Pipe/Stage per req in RMG grid)
+- ~~RMG Workspace candidate visibility (Pipe/Stage per req in RMG grid)~~ ✅ done (fee8bbc, 6 Jul)
+- ~~Hiring Report tab (cycle-based TA closure report)~~ ✅ done (7dc1cbe, 6 Jul)
+- **hiring_cycles Supabase migration** — create table before Hiring Report tab goes live (cols: id uuid PK, name text, label text, cycle_from date, cycle_to date, notes text, created_by text, created_at timestamptz). Add RLS select policy for authenticated users; insert/update for admin+ta.
 - KNOWLEDGE.md re-upload to Claude.ai project (current file is stale)
 
 ### Recent Commits (newest first)
+- 8b66bfa (6 Jul): Hiring Report: DOJ date format + hide from HRBP sidebar
+- 7dc1cbe (6 Jul): Hiring Report tab: named cycles, region realization %, account closures, critical aging, next pipeline
+- fee8bbc (6 Jul): RMG Workspace: Pipe + Stage columns from _taCandMap (13-col grid)
+- b575f9c (6 Jul): processEmployeeMaster: fuzzy+DOJ reconcile via reconcile_prospective_joiners() RPC
+- 3e949dd (6 Jul): Long Absenteeism: filter against employee_master; RMG added-by/added-on columns
 - 1e613bf (19 Jun): sync ta_candidates → prospective_joiners: Appointment Letter + Pre Joining stages with tier enrichment
 - ebdc980 (19 Jun): Onboarding Tracker: full redesign — pipeline by week, HRBP auto-scope, action needed, joined MTD
 - d6129e9 (19 Jun): Prospective Joiners: default ±60d DOJ window filter + toggle to show all
@@ -478,6 +509,7 @@ PENDING NEXT SESSION:
 - account_positions_log (393 rows after June load — see schema below)
 - elah_deployment (empty), planned_leaves (empty)
 - training_sessions (31 rows seeded), training_pipeline
+- hiring_cycles (migration PENDING — needed for Hiring Report tab; cols: id, name, label, cycle_from, cycle_to, notes, created_by, created_at)
 
 ### account_positions_log Schema (17 Jun 2026, updated 18 Jun 2026)
 393 rows after June load. Migration: rmg_positions_log_columns_and_rls (20260617).
@@ -504,6 +536,10 @@ planned_leaves, employee_account_mapping (not yet built), account_positions_log.
 ### Postgres Functions
 - normalise_account_name(raw_name text) → text (pg_trgm, similarity >0.4; exact →
   elah_name → fuzzy → raw). Shared with OPS360 — call, don't reimplement.
+- reconcile_prospective_joiners() → integer (migration: reconcile_prospective_joiners_fuzzy_doj, 6 Jul 2026).
+  Fuzzy-matches prospective_joiners against employee_master using pg_trgm similarity + DOJ window.
+  Updates matched rows to status='Joined'. Returns count of rows updated.
+  Called in processEmployeeMaster after the exact-name auto-reconcile pass.
 
 ---
 
