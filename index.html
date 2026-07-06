@@ -582,6 +582,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <button class="sidebar-item" id="snav-tapipeline" onclick="snavClick('tapipeline',this)">
         <span class="item-icon">🎯</span><span class="item-label">TA Pipeline</span>
       </button>
+      <button class="sidebar-item" id="snav-hiringreport" onclick="snavClick('hiringreport',this)">
+        <span class="item-icon">📈</span><span class="item-label">Hiring Report</span>
+      </button>
       <button class="sidebar-item" id="snav-ta" onclick="snavClick('ta',this)" style="display:none">
         <span class="item-icon">📋</span><span class="item-label">TA Commitments</span>
       </button>
@@ -737,6 +740,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-actioncentre" class="tab-content"></div>
   <div id="tab-od" class="tab-content"></div>
   <div id="tab-tapipeline" class="tab-content"></div>
+  <div id="tab-hiringreport" class="tab-content"></div>
   <div id="tab-rmg" class="tab-content"></div>
   
   
@@ -4684,6 +4688,7 @@ function switchTab(id, btn) {
   else if(id==='submit') renderSubmitTab(el);
   else if(id==='absenteeism') renderAbsenteeism(el);
   else if(id==='joiners'){if(!_pjLoaded)loadProspectiveJoiners();else renderJoinersTab(el);}
+  else if(id==='hiringreport'){loadHiringReport(el);}
 }
 
 // ── UPLOAD & PARSE ────────────────────────────────────────────────────────
@@ -5046,6 +5051,290 @@ async function loadProspectiveJoiners() {
     if(el) el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Could not load: '+esc(e.message)+'</div>';
   }
 }
+
+// ── HIRING REPORT ─────────────────────────────────────────────────────────
+var _hrCycles = [];        // all cycles from Supabase
+var _hrCycleId = null;     // currently selected cycle id
+var _hrCycleData = null;   // {cycle, joiners, byRegion, byAccount, criticalAging, nextPipeline}
+var _hrLoaded = false;
+
+async function loadHiringReport(el) {
+  if (!el) el = document.getElementById('tab-hiringreport');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Loading hiring cycles…</div>';
+  try {
+    var {data:cycles, error:cycErr} = await _sb.from('hiring_cycles')
+      .select('*').order('cycle_from', {ascending:false});
+    if (cycErr) throw new Error(cycErr.message);
+    _hrCycles = cycles || [];
+    if (!_hrCycleId && _hrCycles.length) _hrCycleId = _hrCycles[0].id;
+    if (_hrCycleId) await _loadHRCycleData(_hrCycleId);
+    renderHiringReport(el);
+  } catch(e) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--red)">Error loading hiring report: '+esc(e.message)+'</div>';
+  }
+}
+
+async function _loadHRCycleData(cycleId) {
+  var cycle = _hrCycles.find(function(c){return c.id===cycleId;});
+  if (!cycle) return;
+  var from = cycle.cycle_from;
+  var to   = cycle.cycle_to;
+  try {
+    // Joiners from employee_master where DOJ in cycle range
+    var {data:joiners} = await _sb.from('employee_master')
+      .select('emp_code,name,doj,customer,region,designation')
+      .gte('doj', from).lte('doj', to)
+      .in('emp_status', ['NewJoinee','Existing']);
+    joiners = joiners || [];
+
+    // Open reqs by region for realization rate
+    var {data:openReqs} = await _sb.from('req_tracker')
+      .select('req_id,customer,region,tat,ta_recruiter,designation')
+      .eq('status','Open');
+    openReqs = openReqs || [];
+
+    // Critical aging: open reqs >100d
+    var criticalAging = openReqs
+      .filter(function(r){return (r.tat||0)>100;})
+      .sort(function(a,b){return (b.tat||0)-(a.tat||0);})
+      .slice(0,25)
+      .map(function(r){
+        var cm = _taCandMap ? _taCandMap[String(r.req_id||'')] : null;
+        var SABB={'Screening':'Screening','Assessments':'Assessments',
+          'Pre Offer Verification':'Pre Offer','Pre Offer Checklist':'Pre Offer',
+          'Offer Letter Acceptance':'Offer Accepted','Appointment Letter':'Appointment Letter',
+          'Pre Joining Checklist':'Pre Joining','Pre Joining Verification':'Pre Joining'};
+        return {
+          req_id: r.req_id, customer: r.customer, region: r.region,
+          age: r.tat, recruiter: (r.ta_recruiter||'').replace(/\([^)]+\)/g,'').split(',')[0].trim()||'Unassigned',
+          stage: cm ? (SABB[cm.stage]||cm.stage||'—') : '—',
+          pipe: cm ? cm.count : 0
+        };
+      });
+
+    // By region: joiners + open reqs + realization
+    var REGIONS = ['West','South','North','East'];
+    var byRegion = REGIONS.map(function(rgn){
+      var rgnJoiners = joiners.filter(function(j){return j.region===rgn;}).length;
+      var rgnOpen    = openReqs.filter(function(r){return r.region===rgn;}).length;
+      var realPct    = rgnOpen>0 ? Math.round(rgnJoiners/rgnOpen*100) : 0;
+      return {region:rgn, joined:rgnJoiners, open:rgnOpen, realization:realPct};
+    }).filter(function(r){return r.joined>0||r.open>0;});
+
+    // By account: aggregate joiners, normalise customer name
+    var acctMap = {};
+    joiners.forEach(function(j){
+      var cust = (j.customer||'Unknown').trim()
+        .replace(/\s+/g,' ')
+        .split(' - ')[0].split(' · ')[0].trim();
+      if (!acctMap[cust]) acctMap[cust] = {customer:cust, region:j.region, joined:0, doj_min:j.doj, doj_max:j.doj};
+      acctMap[cust].joined++;
+      if (j.doj < acctMap[cust].doj_min) acctMap[cust].doj_min = j.doj;
+      if (j.doj > acctMap[cust].doj_max) acctMap[cust].doj_max = j.doj;
+    });
+    var byAccount = Object.values(acctMap)
+      .filter(function(a){return a.customer && a.customer.length>2 && !/^\d/.test(a.customer);})
+      .sort(function(a,b){return b.joined-a.joined;});
+
+    // Next cycle pipeline: Offer Accepted with future DOJ
+    var {data:pipeline} = await _sb.from('prospective_joiners')
+      .select('candidate_name,designation,customer,account_tier,region,doj,recruiter_name,status')
+      .eq('status','Offer Accepted')
+      .gte('doj', to)
+      .order('doj');
+    pipeline = pipeline || [];
+
+    _hrCycleData = {cycle:cycle, joiners:joiners, byRegion:byRegion, byAccount:byAccount, criticalAging:criticalAging, pipeline:pipeline};
+  } catch(e) {
+    console.warn('[_loadHRCycleData]', e.message);
+    _hrCycleData = null;
+  }
+}
+
+function renderHiringReport(el) {
+  if (!el) el = document.getElementById('tab-hiringreport');
+  if (!el) return;
+
+  var role   = (typeof _sbRole!=='undefined'&&_sbRole) ? (_sbRole.role||'') : '';
+  var fnType = (typeof _sbRole!=='undefined'&&_sbRole) ? (_sbRole.function_type||'') : '';
+  var isAdmin   = role==='admin';
+  var isTAHead  = role==='ta' || fnType==='ta';
+  var isExec    = role==='executive';
+  var canEdit   = isAdmin || isTAHead;
+
+  if (!isAdmin && !isTAHead && !isExec) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Access restricted to TA and leadership.</div>';
+    return;
+  }
+
+  var d = _hrCycleData;
+  var cycle = d ? d.cycle : null;
+
+  // ── Cycle selector ────────────────────────────────────────────────────
+  var cycleOpts = _hrCycles.map(function(c){
+    return '<option value="'+c.id+'"'+(c.id===_hrCycleId?' selected':'')+'>'+esc(c.name)+' — '+esc(c.label)+'</option>';
+  }).join('');
+
+  var cycleSelector = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+    +'<select onchange="_hrCycleId=this.value;_hrCycleData=null;loadHiringReport()" '
+    +'style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;cursor:pointer">'
+    +cycleOpts+'</select>'
+    +(canEdit?'<button onclick="_hrShowNewCycle=!_hrShowNewCycle;renderHiringReport()" '
+    +'style="padding:6px 14px;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);font-size:11px;cursor:pointer">+ New Cycle</button>':'')
+    +'</div>';
+
+  // ── New cycle form ────────────────────────────────────────────────────
+  var newCycleForm = '';
+  if (canEdit && _hrShowNewCycle) {
+    newCycleForm = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">'
+      +'<div><div style="font-size:10px;color:var(--muted2);margin-bottom:4px">CYCLE NAME</div>'
+      +'<input id="hr_new_name" placeholder="e.g. Cycle 28" style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;width:120px"></div>'
+      +'<div><div style="font-size:10px;color:var(--muted2);margin-bottom:4px">LABEL</div>'
+      +'<input id="hr_new_label" placeholder="e.g. 7–14 Jul 2026" style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;width:160px"></div>'
+      +'<div><div style="font-size:10px;color:var(--muted2);margin-bottom:4px">FROM</div>'
+      +'<input id="hr_new_from" type="date" style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px"></div>'
+      +'<div><div style="font-size:10px;color:var(--muted2);margin-bottom:4px">TO</div>'
+      +'<input id="hr_new_to" type="date" style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px"></div>'
+      +'<button onclick="saveHiringCycle()" style="padding:7px 16px;background:var(--accent);border:none;border-radius:6px;color:#0f1923;font-size:12px;font-weight:700;cursor:pointer">Save</button>'
+      +'<button onclick="_hrShowNewCycle=false;renderHiringReport()" style="padding:7px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted);font-size:12px;cursor:pointer">Cancel</button>'
+      +'</div>';
+  }
+
+  if (!d || !cycle) {
+    el.innerHTML = '<div style="padding:20px 28px;max-width:1280px">'
+      +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Talent Acquisition</div>'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text);margin-bottom:16px">Hiring Report</div>'
+      +cycleSelector+newCycleForm
+      +'<div style="margin-top:32px;text-align:center;color:var(--muted)">No cycle data available. Select a cycle or create one above.</div>'
+      +'</div>';
+    return;
+  }
+
+  var totalJoined = d.joiners.length;
+
+  // ── Region cards ──────────────────────────────────────────────────────
+  var regionCards = d.byRegion.map(function(r){
+    var realCol = r.realization>=20?'var(--green)':r.realization>=10?'var(--amber)':'var(--red)';
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;min-width:130px">'
+      +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);margin-bottom:6px">'+esc(r.region)+'</div>'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:32px;color:var(--text);line-height:1">'+r.joined+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);margin-top:2px">joined of '+r.open+' open</div>'
+      +'<div style="font-size:13px;font-weight:700;color:'+realCol+';margin-top:4px">'+r.realization+'% realization</div>'
+      +'</div>';
+  }).join('');
+
+  // ── Account closures table ────────────────────────────────────────────
+  var acctRows = d.byAccount.map(function(a){
+    return '<div style="display:grid;grid-template-columns:240px 70px 80px 100px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+      +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(a.customer)+'">'+esc(a.customer.substring(0,32))+'</div>'
+      +'<div style="color:var(--muted)">'+esc(a.region)+'</div>'
+      +'<div style="font-weight:700;color:var(--green);text-align:center">'+a.joined+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2)">'+esc(a.doj_min===a.doj_max?a.doj_min:a.doj_min+' → '+a.doj_max)+'</div>'
+      +'</div>';
+  }).join('');
+
+  // ── Critical aging table ──────────────────────────────────────────────
+  var agingRows = d.criticalAging.map(function(r){
+    var ageCol = r.age>200?'#dc2626':r.age>150?'var(--red)':'var(--amber)';
+    var stageCol = r.stage==='—'?'var(--muted2)':r.pipe>0?'var(--accent)':'var(--muted)';
+    return '<div style="display:grid;grid-template-columns:50px 200px 65px 70px 100px 130px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+      +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--muted2)">'+esc(r.req_id)+'</div>'
+      +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.customer)+'">'+esc((r.customer||'—').substring(0,26))+'</div>'
+      +'<div style="color:var(--muted)">'+esc(r.region)+'</div>'
+      +'<div style="font-weight:700;color:'+ageCol+'">'+r.age+'d</div>'
+      +'<div style="font-size:10px;color:'+stageCol+'">'+esc(r.stage)+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.recruiter)+'</div>'
+      +'</div>';
+  }).join('');
+
+  // ── Next cycle pipeline ───────────────────────────────────────────────
+  var pipeRows = d.pipeline.map(function(r){
+    var days = Math.round((new Date(r.doj+'T00:00:00')-new Date())/86400000);
+    return '<div style="display:grid;grid-template-columns:160px 160px 65px 80px 120px;padding:7px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+      +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.candidate_name||'—')+'</div>'
+      +'<div style="color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.customer||'')+'">'+esc((r.customer||'—').substring(0,20))+'</div>'
+      +'<div style="color:var(--muted)">'+esc(r.region||'—')+'</div>'
+      +'<div style="font-weight:700;color:'+(days<=7?'var(--red)':days<=14?'var(--amber)':'var(--green)')+'">'+days+'d</div>'
+      +'<div style="font-size:10px;color:var(--muted2)">'+esc((r.recruiter_name||'—').split(' ')[0])+'</div>'
+      +'</div>';
+  }).join('');
+
+  function secHdr(label, count) {
+    return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">'+label+(count!==undefined?' ('+count+')':'')+'</div>';
+  }
+  function tblHdr(cols, widths) {
+    return '<div style="display:grid;grid-template-columns:'+widths+';padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+      +cols.map(function(h){return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';}).join('')
+      +'</div>';
+  }
+
+  el.innerHTML = '<div style="padding:20px 28px;max-width:1280px">'
+    +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">'
+      +'<div>'
+        +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Talent Acquisition</div>'
+        +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">Hiring Report</div>'
+      +'</div>'
+      +'<div style="text-align:right;font-size:11px;color:var(--muted2)">'
+        +'<div style="font-weight:600;color:var(--text)">'+esc(cycle.name)+' &nbsp;·&nbsp; '+esc(cycle.label)+'</div>'
+        +(cycle.notes?'<div style="font-size:10px;margin-top:2px">'+esc(cycle.notes)+'</div>':'')
+      +'</div>'
+    +'</div>'
+    +cycleSelector+newCycleForm
+    +'<div style="display:flex;align-items:center;gap:16px;margin:18px 0;flex-wrap:wrap">'
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:8px;padding:12px 20px;text-align:center;min-width:100px">'
+        +'<div style="font-family:Bebas_Neue,sans-serif;font-size:36px;color:var(--green);line-height:1">'+totalJoined+'</div>'
+        +'<div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:4px">Joined This Cycle</div>'
+      +'</div>'
+      +regionCards
+    +'</div>'
+    +'<div style="margin-bottom:20px">'
+      +secHdr('Account-wise Closures', d.byAccount.length)
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+        +tblHdr(['Account','Region','Joined','DOJ Range'],'240px 70px 80px 100px')
+        +(acctRows||'<div style="padding:20px;text-align:center;color:var(--muted)">No closures recorded</div>')
+      +'</div>'
+    +'</div>'
+    +'<div style="margin-bottom:20px">'
+      +secHdr('Critical Aging — Open Reqs >100 Days', d.criticalAging.length)
+      +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+        +tblHdr(['Req','Account','Rgn','Age','Stage','Recruiter'],'50px 200px 65px 70px 100px 130px')
+        +(agingRows||'<div style="padding:20px;text-align:center;color:var(--muted)">No critical aging reqs</div>')
+      +'</div>'
+    +'</div>'
+    +(d.pipeline.length?
+      '<div style="margin-bottom:20px">'
+        +secHdr('Next Cycle Pipeline — Upcoming Joiners', d.pipeline.length)
+        +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+          +tblHdr(['Candidate','Account','Rgn','DOJ','Recruiter'],'160px 160px 65px 80px 120px')
+          +pipeRows
+        +'</div>'
+      +'</div>'
+    :'')
+    +'</div>';
+}
+
+async function saveHiringCycle() {
+  var name  = (document.getElementById('hr_new_name')||{}).value||'';
+  var label = (document.getElementById('hr_new_label')||{}).value||'';
+  var from  = (document.getElementById('hr_new_from')||{}).value||'';
+  var to    = (document.getElementById('hr_new_to')||{}).value||'';
+  if (!name||!from||!to) { showToast('Please fill Name, From and To dates','warn'); return; }
+  if (!label) label = from+' – '+to;
+  var {data, error} = await _sb.from('hiring_cycles').insert({
+    name:name, label:label, cycle_from:from, cycle_to:to,
+    created_by: (typeof _sbUser!=='undefined'&&_sbUser)?(_sbUser.email||'admin'):'admin'
+  }).select().single();
+  if (error) { showToast('Save failed: '+error.message,'err'); return; }
+  _hrCycles.unshift(data);
+  _hrCycleId = data.id;
+  _hrShowNewCycle = false;
+  await _loadHRCycleData(_hrCycleId);
+  renderHiringReport(document.getElementById('tab-hiringreport'));
+  showToast('Cycle saved ✓','ok');
+}
+
+var _hrShowNewCycle = false;
 
 function renderJoinersTab(el) {
   if (!el) el = document.getElementById('tab-joiners');
