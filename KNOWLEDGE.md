@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.4.0 | **Last updated:** 6 Jul 2026 — Hiring Report tab, DOJ date format, HRBP/RMG sidebar gating
+**Version:** 3.4.1 | **Last updated:** 6 Jul 2026 — Hiring Report header cleanup (7846abc)
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -369,6 +369,7 @@ PENDING NEXT SESSION:
 - KNOWLEDGE.md re-upload to Claude.ai project (current file is stale)
 
 ### Recent Commits (newest first)
+- 7846abc (6 Jul): Hiring Report: remove notes from header, DOJ date format, hide from HRBP sidebar (cleanup — 2 of 3 changes were already live)
 - 8b66bfa (6 Jul): Hiring Report: DOJ date format + hide from HRBP sidebar
 - 7dc1cbe (6 Jul): Hiring Report tab: named cycles, region realization %, account closures, critical aging, next pipeline
 - fee8bbc (6 Jul): RMG Workspace: Pipe + Stage columns from _taCandMap (13-col grid)
