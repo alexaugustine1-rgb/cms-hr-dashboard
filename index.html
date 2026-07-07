@@ -5143,8 +5143,7 @@ async function _loadHRCycleData(cycleId) {
       .eq('status','Closed')
       .gte('updated_at', from+'T00:00:00')
       .lte('updated_at', to+'T23:59:59')
-      .not('primary_recruiter','is',null)
-      .neq('primary_recruiter','');
+      .gt('primary_recruiter','');
     closedReqs = closedReqs || [];
 
     // Aggregate by recruiter
