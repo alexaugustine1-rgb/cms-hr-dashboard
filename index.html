@@ -5075,12 +5075,35 @@ async function loadHiringReport(el) {
   }
 }
 
+var _tierMap = {}, _tierList = [];
+function _lookupTier(custName) {
+  if (!custName) return 'Regular';
+  var k = custName.toUpperCase().trim().replace(/\s+/g,' ');
+  if (_tierMap[k]) return _tierMap[k];
+  for (var _ti=0; _ti<_tierList.length; _ti++) {
+    var _tk = _tierList[_ti].key.replace(/\s+/g,' ');
+    if (_tk.indexOf(k)>=0 || k.indexOf(_tk)>=0) return _tierList[_ti].tier;
+  }
+  return 'Regular';
+}
+
 async function _loadHRCycleData(cycleId) {
   var cycle = _hrCycles.find(function(c){return c.id===cycleId;});
   if (!cycle) return;
   var from = cycle.cycle_from;
   var to   = cycle.cycle_to;
   try {
+    // Populate tier lookup
+    var {data:_caRows} = await _sb.from('customer_accounts').select('name,tier');
+    _tierMap = {}; _tierList = [];
+    (_caRows||[]).forEach(function(c){
+      if(c.name && c.tier) {
+        var k = c.name.toUpperCase().trim();
+        _tierMap[k] = c.tier;
+        _tierList.push({key:k, tier:c.tier});
+      }
+    });
+
     // Joiners from employee_master where DOJ in cycle range
     var {data:joiners} = await _sb.from('employee_master')
       .select('emp_code,name,doj,customer,region,designation')
@@ -10239,30 +10262,6 @@ async function processCandidate(wb) {
           var key = (r.candidate_name||'').toUpperCase().trim()+'__'+(r.req_id||'');
           if (_pjResolvedStatuses.includes(r.status)) _pjResolvedSet[key] = r.id;
         });
-
-        // Fetch customer tier lookup from customer_accounts
-        var {data:_caRows} = await _sb.from('customer_accounts').select('name,tier');
-        var _tierMap = {};
-        var _tierList = []; // [{key, tier}] for substring fallback
-        (_caRows||[]).forEach(function(c){
-          if(c.name && c.tier) {
-            var k = c.name.toUpperCase().trim();
-            _tierMap[k] = c.tier;
-            _tierList.push({key:k, tier:c.tier});
-          }
-        });
-        function _lookupTier(custName) {
-          if (!custName) return 'Regular';
-          var k = custName.toUpperCase().trim().replace(/\s+/g,' '); // collapse double spaces
-          // Pass 1: exact match
-          if (_tierMap[k]) return _tierMap[k];
-          // Pass 2: substring match — does customer_accounts name contain this name or vice versa?
-          for (var _ti=0; _ti<_tierList.length; _ti++) {
-            var _tk = _tierList[_ti].key.replace(/\s+/g,' ');
-            if (_tk.indexOf(k)>=0 || k.indexOf(_tk)>=0) return _tierList[_ti].tier;
-          }
-          return 'Regular';
-        }
 
         // Build rows to sync from ta_candidates
         var _today3 = new Date().toISOString().substring(0,10);
