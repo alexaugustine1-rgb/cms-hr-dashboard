@@ -10181,9 +10181,26 @@ async function processCandidate(wb) {
         // Fetch customer tier lookup from customer_accounts
         var {data:_caRows} = await _sb.from('customer_accounts').select('name,tier');
         var _tierMap = {};
+        var _tierList = []; // [{key, tier}] for substring fallback
         (_caRows||[]).forEach(function(c){
-          if(c.name && c.tier) _tierMap[c.name.toUpperCase().trim()] = c.tier;
+          if(c.name && c.tier) {
+            var k = c.name.toUpperCase().trim();
+            _tierMap[k] = c.tier;
+            _tierList.push({key:k, tier:c.tier});
+          }
         });
+        function _lookupTier(custName) {
+          if (!custName) return 'Regular';
+          var k = custName.toUpperCase().trim().replace(/\s+/g,' '); // collapse double spaces
+          // Pass 1: exact match
+          if (_tierMap[k]) return _tierMap[k];
+          // Pass 2: substring match — does customer_accounts name contain this name or vice versa?
+          for (var _ti=0; _ti<_tierList.length; _ti++) {
+            var _tk = _tierList[_ti].key.replace(/\s+/g,' ');
+            if (_tk.indexOf(k)>=0 || k.indexOf(_tk)>=0) return _tierList[_ti].tier;
+          }
+          return 'Regular';
+        }
 
         // Build rows to sync from ta_candidates
         var _today3 = new Date().toISOString().substring(0,10);
@@ -10202,7 +10219,7 @@ async function processCandidate(wb) {
             _desig = _tp.length>1 ? _tp[1].replace(/\[.*?\]/g,'').trim() : '';
           }
           // Tier from customer_accounts
-          var _tier = _tierMap[(r.customer_name||'').toUpperCase().trim()] || 'Regular';
+          var _tier = _lookupTier(r.customer_name||'');
           return {
             candidate_name:    r.candidate_name,
             designation:       _desig || r.req_title || '',
