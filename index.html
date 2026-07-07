@@ -129,7 +129,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .week-bar{position:relative;z-index:10;background:var(--surface);border-bottom:1px solid var(--border);padding:0 36px;display:flex;align-items:center;gap:0;justify-content:flex-start;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .week-bar-left{display:flex;gap:0;flex-shrink:0}
 .week-bar::-webkit-scrollbar{display:none}
-  .week-btn{padding:13px 20px;font-family:DM_Mono,monospace;font-size:11px;border:none;border-bottom:2px solid transparent;background:none;color:var(--muted);cursor:pointer;transition:all .2s;letter-spacing:.5px;white-space:nowrap}
+  .ov-range-btn{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;transition:all .15s}
+.ov-range-btn.active{border-color:var(--accent);background:rgba(96,165,250,.15);color:var(--accent);font-weight:700}
+.week-btn{padding:13px 20px;font-family:DM_Mono,monospace;font-size:11px;border:none;border-bottom:2px solid transparent;background:none;color:var(--muted);cursor:pointer;transition:all .2s;letter-spacing:.5px;white-space:nowrap}
 .week-btn:hover{color:var(--text)}
 .week-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
 .week-btn.latest::after{content:'LATEST';font-size:8px;vertical-align:super;margin-left:4px;color:var(--green);letter-spacing:1px}
@@ -706,9 +708,20 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div style="font-size:11px;color:var(--muted)">WoW vs <span id="prevWeekLabel">previous week</span> &nbsp;·&nbsp; <span id="respondentCount">—</span> team submissions</div>
   </div>
 </div>
-<div class="week-bar">
-  <div class="week-bar-left" id="weekBtns"></div>
-  <div class="wow-indicator" id="wowSummary"></div>
+<div class="week-bar" id="ovRangeBar" style="display:flex;align-items:center;gap:6px;padding:6px 16px;flex-wrap:wrap">
+  <span style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">Period:</span>
+  <button id="ovBtn-month"     onclick="_setOvPreset('month')"     class="ov-range-btn active">This Month</button>
+  <button id="ovBtn-lastmonth" onclick="_setOvPreset('lastmonth')" class="ov-range-btn">Last Month</button>
+  <button id="ovBtn-week"      onclick="_setOvPreset('week')"      class="ov-range-btn">This Week</button>
+  <button id="ovBtn-lastweek"  onclick="_setOvPreset('lastweek')"  class="ov-range-btn">Last Week</button>
+  <button id="ovBtn-custom"    onclick="_showOvCustom()"           class="ov-range-btn">Custom…</button>
+  <span id="ovCustomInputs" style="display:none;align-items:center;gap:4px">
+    <input type="date" id="ovFromInput" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 6px;color:var(--text);font-size:11px">
+    <span style="color:var(--muted2)">→</span>
+    <input type="date" id="ovToInput"   style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 6px;color:var(--text);font-size:11px">
+    <button onclick="_applyOvCustom()" style="padding:3px 10px;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);font-size:11px;cursor:pointer">Apply</button>
+  </span>
+  <div class="wow-indicator" id="wowSummary" style="margin-left:auto"></div>
 </div>
 <!-- Mobile nav bar (bottom) -->
 <div class="mobile-nav-bar">
@@ -1053,26 +1066,14 @@ function renderOverview(w, pw) {
   // pending_cases = active long-absent cases with no eSep raised
   var openReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.length : (S.total_reqs||0);
   var critReqs  = TA_ACTIVE_REQS ? TA_ACTIVE_REQS.filter(function(r){return r.tat>45;}).length : (S.reqs_critical||0);
-  // Joiners this week — priority: ta_closed (from NewJoinee in Super Emp) → WI.joiners_by_week → prospective_joiners
+  // Joiners — sourced from employee_master (NewJoinee DOJ in selected range) as primary
   var _curWkKey = typeof getCurrentWeekKey==='function' ? getCurrentWeekKey() : '';
   var _selWkKey = (w && w.week_key) || _curWkKey;
-  var mJoiners = w.ta_closed || 0;
+  var mJoiners = (_emWeekJoiners !== null) ? _emWeekJoiners : (w.ta_closed || 0);
   if (!mJoiners && W && W.joiners_by_week && W.joiners_by_week[_selWkKey]) {
     mJoiners = W.joiners_by_week[_selWkKey];
   }
-  if (!mJoiners && typeof _prospectiveJoiners !== 'undefined' && _prospectiveJoiners.length && w.from_label && w.to_label) {
-    try {
-      var _wYear = new Date().getFullYear();
-      var _wFrom = new Date(w.from_label + ' ' + _wYear);
-      var _wTo   = new Date(w.to_label   + ' ' + _wYear);
-      if (!isNaN(_wFrom) && !isNaN(_wTo)) {
-        mJoiners = _prospectiveJoiners.filter(function(j){
-          var d = new Date(j.doj);
-          return !isNaN(d) && d >= _wFrom && d <= _wTo;
-        }).length;
-      }
-    } catch(e) {}
-  }
+  var _mtdJoiners = (_emMTDJoiners !== null) ? _emMTDJoiners : (S.mar_joined || 0);
 
   function cmdKpi(icon, val, label, color, sub) {
     return '<div style="flex:1;min-width:140px;background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+color+';border-radius:10px;padding:14px 16px">'
@@ -1086,7 +1087,7 @@ function renderOverview(w, pw) {
   var cmdStrip = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'
     +cmdKpi('👥', ((W.active_hc_current||W.active_hc_mar||W.active_hc||0)).toLocaleString(), 'Total Headcount', 'var(--accent)', 'Active as on '+(W._super_emp_updated?new Date(W._super_emp_updated).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'latest upload'))
     +cmdKpi('📋', openReqs, 'Open Positions', openReqs>200?'var(--red)':'var(--amber)', critReqs+' critical (>45d)')
-    +cmdKpi('✅', mJoiners, 'W'+w.week_num+' Joiners', mJoiners>5?'var(--green)':'var(--muted)', w.ta_offers+' offers released')
+    +cmdKpi('✅', mJoiners, esc(_ovLabel()||'Joiners')+' Joiners', mJoiners>5?'var(--green)':'var(--muted)', 'MTD: '+_mtdJoiners+' · from Super Emp Master')
     +cmdKpi('📈', q1attr+'%', 'Annualised Attrition', q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)', q1exits+' exits '+_attrPeriodLabel)
     +cmdKpi('🚨', absCases, 'Long Absent Cases', absCases>20?'var(--red)':absCases>10?'var(--amber)':'var(--muted)', 'Pending action / no eSep')
     +'</div>';
@@ -1346,8 +1347,8 @@ function renderOverview(w, pw) {
   return '<div style="padding:20px 28px;max-width:1400px">'
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">'
     +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Command Centre</div>'
-    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:28px;letter-spacing:1px;color:var(--text)">HR Intelligence Overview — '+esc(w.label)+'</div></div>'
-    +'<div style="font-size:11px;color:var(--muted)">W'+esc(String(w.week_num||''))+' &nbsp;·&nbsp; '+esc(w.from_label||'')+'&ndash;'+esc(w.to_label||'')+'</div>'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:28px;letter-spacing:1px;color:var(--text)">HR Intelligence Overview — '+esc(_ovLabel()||w.label)+'</div></div>'
+    +'<div style="font-size:11px;color:var(--muted)">'+esc(_ovFrom||w.from_label||'')+'&ndash;'+esc(_ovTo||w.to_label||'')+'</div>'
     +'</div>'
     +cmdStrip
     +regionPanel
@@ -8986,6 +8987,97 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
 var _taRegion='All',_taTier='All',_taPosType='All',_taBilling='All',_taPhantom=false,_taRecruiterFilter='All';
 var _taCandMap = {}; // {req_id: {count,stage,rank,lastActDays}} loaded from ta_candidates
 var _taClosedMTDMap = {}; // {firstName: closedCount} for current month from req_tracker
+var _emWeekJoiners = null;
+var _emMTDJoiners  = null;
+var _ovPreset = 'month';       // 'week' | 'lastweek' | 'month' | 'lastmonth' | 'custom'
+var _ovFrom   = '';            // YYYY-MM-DD
+var _ovTo     = '';            // YYYY-MM-DD
+
+function _initOvRange() {
+  var _t = new Date();
+  function _ld(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  if (_ovPreset === 'week') {
+    var _day = _t.getDay(); var _diff = _day===0?-6:1-_day;
+    var _mon = new Date(_t); _mon.setDate(_t.getDate()+_diff);
+    _ovFrom = _ld(_mon);
+    _ovTo   = _ld(_t);
+  } else if (_ovPreset === 'lastweek') {
+    var _day2 = _t.getDay(); var _diff2 = _day2===0?-6:1-_day2;
+    var _thisMon = new Date(_t); _thisMon.setDate(_t.getDate()+_diff2);
+    var _lastMon = new Date(_thisMon); _lastMon.setDate(_thisMon.getDate()-7);
+    var _lastSun = new Date(_lastMon); _lastSun.setDate(_lastMon.getDate()+6);
+    _ovFrom = _ld(_lastMon);
+    _ovTo   = _ld(_lastSun);
+  } else if (_ovPreset === 'lastmonth') {
+    var _lm = new Date(_t.getFullYear(), _t.getMonth()-1, 1);
+    var _lme = new Date(_t.getFullYear(), _t.getMonth(), 0);
+    _ovFrom = _ld(_lm);
+    _ovTo   = _ld(_lme);
+  } else {
+    // default: this month
+    _ovFrom = _ld(new Date(_t.getFullYear(), _t.getMonth(), 1));
+    _ovTo   = _ld(_t);
+  }
+}
+
+function _ovLabel() {
+  var MONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function _fmt(s){ if(!s)return''; var p=s.split('-'); return parseInt(p[2])+' '+MONS[parseInt(p[1])-1]; }
+  return _ovFrom===_ovTo ? _fmt(_ovFrom) : _fmt(_ovFrom)+' – '+_fmt(_ovTo);
+}
+
+async function loadEMJoinerCounts() {
+  if (!_sb) return;
+  try {
+    if (!_ovFrom || !_ovTo) _initOvRange();
+    var {data:_emRows} = await _sb.from('employee_master')
+      .select('doj').eq('emp_status','NewJoinee')
+      .gte('doj', _ovFrom).lte('doj', _ovTo);
+    _emWeekJoiners = (_emRows||[]).length;
+    var _mtdFrom = new Date();
+    _mtdFrom = new Date(_mtdFrom.getFullYear(), _mtdFrom.getMonth(), 1).toISOString().substring(0,10);
+    var _mtdTo = new Date().toISOString().substring(0,10);
+    if (_ovPreset==='month' || _ovPreset==='week') {
+      var {data:_mtdRows} = await _sb.from('employee_master')
+        .select('doj').eq('emp_status','NewJoinee')
+        .gte('doj', _mtdFrom).lte('doj', _mtdTo);
+      _emMTDJoiners = (_mtdRows||[]).length;
+    } else {
+      _emMTDJoiners = _emWeekJoiners;
+    }
+    var _ovEl = document.getElementById('tab-overview');
+    if (_ovEl && _ovEl.classList.contains('active') && typeof render === 'function') render();
+  } catch(e){ console.warn('[loadEMJoinerCounts]',e.message); }
+}
+
+function _showOvCustom() {
+  var ci = document.getElementById('ovCustomInputs');
+  if (ci) { ci.style.display = 'flex'; document.getElementById('ovFromInput').value = _ovFrom; document.getElementById('ovToInput').value = _ovTo; }
+}
+function _applyOvCustom() {
+  var f = (document.getElementById('ovFromInput')||{}).value;
+  var t = (document.getElementById('ovToInput')||{}).value;
+  if (f && t && f <= t) {
+    document.querySelectorAll('.ov-range-btn').forEach(function(b){b.classList.remove('active');});
+    document.getElementById('ovBtn-custom').classList.add('active');
+    var ci = document.getElementById('ovCustomInputs'); if(ci) ci.style.display='none';
+    _setOvPreset('custom', f, t);
+  }
+}
+function _setOvPreset(preset, customFrom, customTo) {
+  // Update button active state
+  document.querySelectorAll('.ov-range-btn').forEach(function(b){b.classList.remove('active');});
+  var _activeBtn = document.getElementById('ovBtn-'+preset);
+  if (_activeBtn) _activeBtn.classList.add('active');
+  _ovPreset = preset;
+  if (preset === 'custom' && customFrom && customTo) {
+    _ovFrom = customFrom; _ovTo = customTo;
+  } else {
+    _initOvRange();
+  }
+  _emWeekJoiners = null; _emMTDJoiners = null;
+  loadEMJoinerCounts();
+}
 
 async function loadTAClosedMTD() {
   if (!_sb) return;
@@ -11580,6 +11672,7 @@ async function sbBoot(user){
         }
         if (row.id==='ta_scorecard'    && row.data) { TA_SCORECARD.length=0; row.data.forEach(function(r){TA_SCORECARD.push(r);}); console.log('[sbBoot] TA_SCORECARD:',row.data.length,'recruiters'); }
         if (row.id==='ta_reqs'         && row.data) { setTimeout(loadTACandMap, 300); setTimeout(loadTAClosedMTD, 400); }
+        if (row.id==='account_hc'      && row.data) { _initOvRange(); setTimeout(loadEMJoinerCounts, 500); }
         if (row.id==='ta_reqs_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY req summary restored'); }
         if (row.id==='ta_cand_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY candidate fields restored'); }
         if (row.id==='summary' && row.data && row.data.total_res) { Object.assign(CMS_SUMMARY, row.data); console.log('[sbBoot] CMS_SUMMARY loaded from cache'); }
