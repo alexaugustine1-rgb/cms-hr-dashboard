@@ -5137,6 +5137,38 @@ async function _loadHRCycleData(cycleId) {
       .filter(function(a){return a.customer && a.customer.length>2 && !/^\d/.test(a.customer);})
       .sort(function(a,b){return b.joined-a.joined;});
 
+    // Recruiter-wise closures: closed reqs within cycle window with primary_recruiter
+    var {data:closedReqs} = await _sb.from('req_tracker')
+      .select('req_id,customer,region,designation,primary_recruiter,updated_at,tat')
+      .eq('status','Closed')
+      .gte('updated_at', from+'T00:00:00')
+      .lte('updated_at', to+'T23:59:59')
+      .not('primary_recruiter','is',null)
+      .neq('primary_recruiter','');
+    closedReqs = closedReqs || [];
+
+    // Aggregate by recruiter
+    var recClosureMap = {};
+    closedReqs.forEach(function(r){
+      var rec = (r.primary_recruiter||'').replace(/\([^)]+\)/g,'').trim();
+      var firstName = rec.split(' ')[0];
+      if (!recClosureMap[rec]) recClosureMap[rec] = {
+        name: rec, firstName: firstName, closures:0, accounts:[], plat_gold:0, avg_tat:0, tat_sum:0
+      };
+      recClosureMap[rec].closures++;
+      recClosureMap[rec].tat_sum += (r.tat||0);
+      var custShort = (r.customer||'').split(' ').slice(0,3).join(' ');
+      if (custShort && recClosureMap[rec].accounts.indexOf(custShort)<0)
+        recClosureMap[rec].accounts.push(custShort);
+      // Tier lookup for Plat/Gold flag
+      var t = _lookupTier(r.customer||'');
+      if (t==='Platinum'||t==='Gold') recClosureMap[rec].plat_gold++;
+    });
+    var recruiterClosures = Object.values(recClosureMap).map(function(r){
+      r.avg_tat = r.closures>0 ? Math.round(r.tat_sum/r.closures) : 0;
+      return r;
+    }).sort(function(a,b){return b.closures-a.closures;});
+
     // Next cycle pipeline: Offer Accepted with future DOJ
     var {data:pipeline} = await _sb.from('prospective_joiners')
       .select('candidate_name,designation,customer,account_tier,region,doj,recruiter_name,status')
@@ -5145,7 +5177,7 @@ async function _loadHRCycleData(cycleId) {
       .order('doj');
     pipeline = pipeline || [];
 
-    _hrCycleData = {cycle:cycle, joiners:joiners, byRegion:byRegion, byAccount:byAccount, criticalAging:criticalAging, pipeline:pipeline};
+    _hrCycleData = {cycle:cycle, joiners:joiners, byRegion:byRegion, byAccount:byAccount, criticalAging:criticalAging, pipeline:pipeline, recruiterClosures:recruiterClosures};
   } catch(e) {
     console.warn('[_loadHRCycleData]', e.message);
     _hrCycleData = null;
@@ -5305,6 +5337,37 @@ function renderHiringReport(el) {
         +(agingRows||'<div style="padding:20px;text-align:center;color:var(--muted)">No critical aging reqs</div>')
       +'</div>'
     +'</div>'
+    // ── Recruiter closures ────────────────────────────────────────────────
+    +(d.recruiterClosures && d.recruiterClosures.length ?
+      '<div style="margin-bottom:20px">'
+        +secHdr('Recruiter Performance — Closures This Cycle', d.recruiterClosures.length+' recruiters')
+        +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+          +tblHdr(
+            ['Recruiter','Closures','Plat/Gold','Avg TAT','Accounts'],
+            '160px 80px 80px 80px 1fr'
+          )
+          +d.recruiterClosures.map(function(r){
+            var closureCol = r.closures>=5?'var(--green)':r.closures>=3?'var(--accent)':'var(--muted)';
+            var tatCol = r.avg_tat>60?'var(--red)':r.avg_tat>30?'var(--amber)':'var(--green)';
+            return '<div style="display:grid;grid-template-columns:160px 80px 80px 80px 1fr;'
+              +'padding:8px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+              +'<div style="font-weight:600;color:var(--text)">'+esc(r.firstName)+'</div>'
+              +'<div style="font-weight:700;color:'+closureCol+';font-size:16px">'+r.closures+'</div>'
+              +'<div style="color:'+(r.plat_gold>0?'#a78bfa':'var(--muted2)')+';font-weight:'+(r.plat_gold>0?700:400)+'">'+
+                (r.plat_gold>0?r.plat_gold+' ★':'—')+'</div>'
+              +'<div style="color:'+tatCol+'">'+r.avg_tat+'d</div>'
+              +'<div style="font-size:10px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"'
+              +' title="'+esc(r.accounts.join(', '))+'">'+esc(r.accounts.slice(0,3).join(', '))+'</div>'
+              +'</div>';
+          }).join('')
+        +'</div>'
+        +'<div style="font-size:10px;color:var(--muted2);margin-top:6px;padding:0 2px">'
+          +'Attribution: primary recruiter mapping (Neha). '
+          +(d.recruiterClosures.reduce(function(s,r){return s+r.closures;},0))+' of ~'+d.joiners.length+' cycle closures attributed.'
+        +'</div>'
+      +'</div>'
+    :'')
+
     +(d.pipeline.length?
       '<div style="margin-bottom:20px">'
         +secHdr('Next Cycle Pipeline — Upcoming Joiners', d.pipeline.length)
