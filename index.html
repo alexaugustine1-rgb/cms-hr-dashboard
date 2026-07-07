@@ -8684,6 +8684,23 @@ function renderTAPipeline(){
   var pf=['All','New','Replacement'].map(function(v){return fbtn(v,_taPosType===v,"_taPosType='"+v+"';document.getElementById('tab-tapipeline').innerHTML=renderTAPipeline()");}).join('');
   var bf=['All','T&M','MS'].map(function(v){return fbtn(v,_taBilling===v,"_taBilling='"+v+"';document.getElementById('tab-tapipeline').innerHTML=renderTAPipeline()");}).join('');
   var phantomBtn='<button onclick="_taPhantom=!_taPhantom;document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(_taPhantom?700:500)+';border:1px solid '+(_taPhantom?'var(--red)':'var(--border)')+';background:'+(_taPhantom?'rgba(248,113,113,.15)':'none')+';color:'+(_taPhantom?'var(--red)':'var(--muted)')+';cursor:pointer">⚠ Phantom only</button>';
+var _HRBP_DD=['suhail','somasri','ayush','abhishek','priya paul','shambhavi'];
+var _ddNames=['All'].concat(
+  (TA_SCORECARD||[])
+    .filter(function(r){
+      if(!r.active&&!r.pipeline) return false;
+      var nl=(r.name||'').toLowerCase();
+      return !_HRBP_DD.some(function(h){return nl.indexOf(h)>=0;});
+    })
+    .map(function(r){return r.name.split(' ')[0];})
+    .filter(function(v,i,a){return v&&a.indexOf(v)===i;})
+    .sort()
+);
+var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline()" '
+  +'style="background:var(--surface2);border:1px solid '+(_taRecruiterFilter!=='All'?'#8b5cf6':'var(--border)')+';border-radius:20px;padding:3px 10px;color:'+(_taRecruiterFilter!=='All'?'#8b5cf6':'var(--muted)')+';font-size:11px;font-weight:'+(_taRecruiterFilter!=='All'?700:500)+';cursor:pointer;outline:none">'
+  +_ddNames.map(function(v){
+    return '<option value="'+v+'"'+(_taRecruiterFilter===v?' selected':'')+'>'+v+'</option>';
+  }).join('')+'</select>';
 
   function asof(dt,col){return '<div style="font-size:9px;color:'+(col||'var(--muted2)')+';margin-top:3px">as of '+dt+'</div>';}
 
@@ -8825,7 +8842,7 @@ function renderTAPipeline(){
     var fillStr=r.fill_cnt>0?r.avg_fill_days+'d':'—';
     var _isFiltered=_taRecruiterFilter!=='All'&&r.name&&r.name.toLowerCase().indexOf(_taRecruiterFilter.toLowerCase().split(' ')[0])>=0;
     return'<div onclick="_taRecruiterFilter=\''+esc(r.name.split(' ')[0])+'\';document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline()" '
-      +'style="display:grid;grid-template-columns:150px 50px 50px 65px 50px 55px 50px 50px 50px 55px;padding:8px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;cursor:pointer;'
+      +'style="display:grid;grid-template-columns:150px 50px 50px 65px 50px 55px 60px 55px 55px;padding:8px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;cursor:pointer;'
       +(_isFiltered?'background:rgba(139,92,246,.08);border-left:3px solid #8b5cf6;':'')+'">'
       +'<div style="font-weight:500;color:'+(_isFiltered?'#8b5cf6':'var(--accent)')+';text-decoration:underline;text-underline-offset:2px;cursor:pointer" title="Click to filter pipeline to '+esc(shortName)+'">'+esc(shortName)+'</div>'
       +'<div style="font-weight:700;color:'+loadCol+'">'+r.active+'</div>'
@@ -8833,8 +8850,8 @@ function renderTAPipeline(){
       +'<div style="color:'+ageCol+'" title="How old is the open backlog">'+r.backlog_age+'d</div>'
       +'<div style="color:'+(r.plat_gold>0?'#a78bfa':'var(--muted)')+'">'+r.plat_gold+'</div>'
       +'<div style="color:var(--muted)">'+r.pipeline+'</div>'
-      +'<div style="color:'+(r.joined>5?'var(--green)':'var(--muted)')+'">'+r.joined+'</div>'
-      +'<div style="color:'+(r.mar_joined>3?'var(--green)':'var(--muted)')+'">'+r.mar_joined+'</div>'
+      +(function(){var _cm=_taClosedMTDMap[(r.name||'').split(' ')[0]]||0;return '<div style="color:'+(_cm>5?'var(--green)':_cm>2?'var(--accent)':'var(--muted)')+'">'+_cm+'</div>';})()
+
       +'<div style="color:'+(r.fill_cnt>0?'var(--green)':'var(--muted2)')+'">'+fillStr+'</div>'
       +'<div style="font-weight:700;color:'+convCol+'">'+convPct+'%</div>'
       +'</div>';
@@ -8916,6 +8933,8 @@ function renderTAPipeline(){
     +'<span style="font-size:11px;color:var(--muted)">Billing:</span>'+bf
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
     +phantomBtn
+    +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px;display:inline-block"></span>'
+    +'<span style="font-size:11px;color:var(--muted)">Recruiter:</span> '+recDropdown
     +(_taRecruiterFilter!=='All'?
       '<span style="width:1px;height:16px;background:var(--border);margin:0 4px;display:inline-block"></span>'
       +'<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(139,92,246,.15);border:1px solid #8b5cf6;color:#8b5cf6;font-weight:600">&#x1F464; '+esc(_taRecruiterFilter)+'</span>'
@@ -8931,8 +8950,8 @@ function renderTAPipeline(){
     +(reqRows||'<div style="padding:32px;text-align:center;color:var(--muted)">No reqs match filters</div>')+'</div>'
     +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:7px">Recruiter Scorecard — Sourced By attribution · as of '+TAT_DATE+'</div>'
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'
-    +'<div style="display:grid;grid-template-columns:150px 50px 50px 65px 50px 55px 50px 50px 50px 55px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['Recruiter','Active','Crit','BacklogAge','Plat/G','Pipeline','Joined','MTDJoin','FillSpd','Conv%'].map(function(h){
+    +'<div style="display:grid;grid-template-columns:150px 50px 50px 65px 50px 55px 60px 55px 55px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+    +['Recruiter','Active','Crit','Backlog','P/G','Pipeline','Closed MTD','Avg TAT','Conv%'].map(function(h){
       return'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)" title="'+({'BacklogAge':'Avg age of open backlog (how long reqs have been sitting)','FillSpd':'Avg Req Date → ECode Date for joined candidates'}[h]||'')+'">'+h+'</div>';
     }).join('')+'</div>'+scoreRows+'</div>'
     +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:7px">Source Effectiveness — Conv% = Joined ÷ Pipeline · Blue bar = share of total pipeline</div>'
@@ -8946,6 +8965,31 @@ function renderTAPipeline(){
 }
 var _taRegion='All',_taTier='All',_taPosType='All',_taBilling='All',_taPhantom=false,_taRecruiterFilter='All';
 var _taCandMap = {}; // {req_id: {count,stage,rank,lastActDays}} loaded from ta_candidates
+var _taClosedMTDMap = {}; // {firstName: closedCount} for current month from req_tracker
+
+async function loadTAClosedMTD() {
+  if (!_sb) return;
+  try {
+    var _now2 = new Date();
+    var _monStart = new Date(_now2.getFullYear(), _now2.getMonth(), 1).toISOString();
+    var _monEnd   = new Date(_now2.getFullYear(), _now2.getMonth()+1, 0, 23, 59, 59).toISOString();
+    var {data:_closed} = await _sb.from('req_tracker')
+      .select('primary_recruiter')
+      .eq('status','Closed')
+      .gte('updated_at', _monStart)
+      .lte('updated_at', _monEnd)
+      .gt('primary_recruiter','');
+    if (!_closed || !_closed.length) return;
+    var map = {};
+    _closed.forEach(function(r){
+      var first = (r.primary_recruiter||'').replace(/\([^)]+\)/g,'').trim().split(' ')[0];
+      if (first) map[first] = (map[first]||0) + 1;
+    });
+    _taClosedMTDMap = map;
+    var el = document.getElementById('tab-tapipeline');
+    if (el && el.classList.contains('active')) el.innerHTML = renderTAPipeline();
+  } catch(e){ console.warn('[loadTAClosedMTD]',e.message); }
+}
 
 async function loadTACandMap() {
   if (!_sb) return;
@@ -11496,7 +11540,7 @@ async function sbBoot(user){
           console.log('[sbBoot] TA_ACTIVE_REQS:',row.row_count,'rows');
         }
         if (row.id==='ta_scorecard'    && row.data) { TA_SCORECARD.length=0; row.data.forEach(function(r){TA_SCORECARD.push(r);}); console.log('[sbBoot] TA_SCORECARD:',row.data.length,'recruiters'); }
-        if (row.id==='ta_reqs'         && row.data) { setTimeout(loadTACandMap, 300); }
+        if (row.id==='ta_reqs'         && row.data) { setTimeout(loadTACandMap, 300); setTimeout(loadTAClosedMTD, 400); }
         if (row.id==='ta_reqs_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY req summary restored'); }
         if (row.id==='ta_cand_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY candidate fields restored'); }
         if (row.id==='summary' && row.data && row.data.total_res) { Object.assign(CMS_SUMMARY, row.data); console.log('[sbBoot] CMS_SUMMARY loaded from cache'); }
