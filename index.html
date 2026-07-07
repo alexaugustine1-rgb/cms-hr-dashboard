@@ -8910,16 +8910,21 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
           +'</div>';
       }
       return '<div style="background:rgba(139,92,246,.05);border:1px solid rgba(139,92,246,.2);border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:0;flex-wrap:wrap">'
-        +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#8b5cf6;padding:0 16px 0 0;border-right:1px solid rgba(139,92,246,.2);margin-right:0;min-width:120px">&#x1F464; '+esc(_taRecruiterFilter.split(' ')[0])+'\'s Pipeline</div>'
-        +_kc(_recData.length,'Open Reqs','var(--text)')
-        +_kc(_recCritical,'Critical >45d','var(--red)')
-        +_kc(_recPlatGold,'Plat/Gold','#a78bfa')
-        +_kc(_recScore.joined||0,'Joined MTD','var(--green)')
-        +_kc(_recScore.avg_fill_days||0,'Avg TAT (d)','var(--accent)')
-        +'<div style="text-align:center;padding:0 16px">'
-          +'<div style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:var(--amber);line-height:1">'+(_recScore.dropouts||0)+'</div>'
-          +'<div style="font-family:DM_Mono,monospace;font-size:8px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);margin-top:2px">Dropouts</div>'
-        +'</div>'
+        +(function(){
+          var _recFirstName = _taRecruiterFilter.split(' ')[0];
+          var _recClosedMTD = _taClosedMTDMap[_recFirstName] || 0;
+          var _recAvgTAT    = _taClosedMTDMap[_recFirstName+'_tat'] || (_recScore?_recScore.avg_fill_days:0) || 0;
+          return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#8b5cf6;padding:0 16px 0 0;border-right:1px solid rgba(139,92,246,.2);margin-right:0;min-width:120px">&#x1F464; '+esc(_recFirstName)+'\'s Pipeline</div>'
+            +_kc(_recData.length,'Open Reqs','var(--text)')
+            +_kc(_recCritical,'Critical >45d','var(--red)')
+            +_kc(_recPlatGold,'Plat/Gold','#a78bfa')
+            +_kc(_recClosedMTD,'Closed MTD','var(--green)')
+            +_kc(Math.round(_recAvgTAT)+'d','Avg TAT','var(--accent)')
+            +'<div style="text-align:center;padding:0 16px">'
+              +'<div style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:var(--amber);line-height:1">'+(_recScore?(_recScore.dropouts||0):0)+'</div>'
+              +'<div style="font-family:DM_Mono,monospace;font-size:8px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2);margin-top:2px">Dropouts</div>'
+            +'</div>';
+        }())
         +'</div>';
     })() : '')
     +unassignedAlert+agHTML+filledUnclosedBanner+pgAlert
@@ -8974,16 +8979,26 @@ async function loadTAClosedMTD() {
     var _monStart = new Date(_now2.getFullYear(), _now2.getMonth(), 1).toISOString();
     var _monEnd   = new Date(_now2.getFullYear(), _now2.getMonth()+1, 0, 23, 59, 59).toISOString();
     var {data:_closed} = await _sb.from('req_tracker')
-      .select('primary_recruiter')
+      .select('primary_recruiter,tat')
       .eq('status','Closed')
       .gte('updated_at', _monStart)
       .lte('updated_at', _monEnd)
       .gt('primary_recruiter','');
     if (!_closed || !_closed.length) return;
     var map = {};
+    var tatMap = {};
     _closed.forEach(function(r){
       var first = (r.primary_recruiter||'').replace(/\([^)]+\)/g,'').trim().split(' ')[0];
-      if (first) map[first] = (map[first]||0) + 1;
+      if (first) {
+        map[first] = (map[first]||0) + 1;
+        tatMap[first] = (tatMap[first]||[]);
+        if (r.tat) tatMap[first].push(r.tat);
+      }
+    });
+    // Store avg TAT as firstName_tat key
+    Object.keys(tatMap).forEach(function(k){
+      var vals = tatMap[k];
+      map[k+'_tat'] = vals.length ? Math.round(vals.reduce(function(a,b){return a+b;},0)/vals.length) : 0;
     });
     _taClosedMTDMap = map;
     var el = document.getElementById('tab-tapipeline');
