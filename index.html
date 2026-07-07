@@ -8709,17 +8709,32 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     {label:'Open Reqs',     val:data.length,           color:'var(--accent)',  note:asof(TAT_DATE)},
     {label:'Critical >45d', val:data.filter(function(r){return r.tat>45;}).length, color:'var(--red)', note:asof(TAT_DATE)},
     {label:'Plat/Gold Open',val:data.filter(function(r){return r.tier==='Platinum'||r.tier==='Gold';}).length, color:'#a78bfa', note:asof(TAT_DATE)},
-    {label:'Roles Filled (MTD)', val:S.mar_fulfilled||S.mar_closed, color:'var(--green)', note:'<div style="font-size:9px;color:var(--muted2);margin-top:3px">fulfilled reqs · '+asof(TAT_DATE).replace('<div style="font-size:9px;color:var(--muted2);margin-top:3px">','').replace('</div>','')+'</div>'},
-    {label:'People Joined (MTD)', val:S.mar_joined, color:'#34d399', note:asof(CAND_DATE,'#f59e0b')},
     {label:'Avg Fill Speed', val:(S.avg_closed_tat||31)+'d', color:'var(--amber)', note:'<div style="font-size:9px;color:var(--muted2);margin-top:3px">Req→ECode · '+asof(CAND_DATE).replace('<div style="font-size:9px;color:var(--muted2);margin-top:3px">','').replace('</div>','')+'</div>'},
   ];
-  var kpis='<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px">'
+  var _filled = S.mar_fulfilled||S.mar_closed||0;
+  var _joined = S.mar_joined||0;
+  var _pending = Math.max(0, _filled - _joined);
+  var _filledJoinedCard = '<div style="background:var(--surface2);border:1px solid var(--border);'
+    +'border-top:3px solid var(--green);border-radius:8px;padding:12px;text-align:center">'
+    +'<div style="display:flex;align-items:baseline;justify-content:center;gap:6px;line-height:1">'
+      +'<span style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:var(--green)">'+_filled+'</span>'
+      +'<span style="font-size:14px;color:var(--muted2)">→</span>'
+      +'<span style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:#34d399">'+_joined+'</span>'
+    +'</div>'
+    +'<div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;'
+      +'color:var(--muted);margin-top:3px">Filled → Joined (MTD)</div>'
+    +(_pending>0
+      ? '<div style="font-size:9px;color:var(--amber);margin-top:2px">'+_pending+' pending joining</div>'
+      : '<div style="font-size:9px;color:var(--green);margin-top:2px">all joined ✓</div>')
+    +asof(TAT_DATE)
+    +'</div>';
+  var kpis='<div style="display:grid;grid-template-columns:repeat(4,1fr) 1.2fr;gap:8px;margin-bottom:14px">'
     +kpiCards.map(function(k){
       return'<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+k.color+';border-radius:8px;padding:12px;text-align:center">'
         +'<div style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:'+k.color+';line-height:1">'+k.val+'</div>'
         +'<div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:3px">'+k.label+'</div>'
         +k.note+'</div>';
-    }).join('')+'</div>';
+    }).join('')+_filledJoinedCard+'</div>';
 
   // ── Unassigned alert ────────────────────────────────────────────────────
   var unassignedCount = allData.filter(function(r){return !r.ta_recruiter||!r.ta_recruiter.trim();}).length;
@@ -10552,12 +10567,21 @@ async function processReqTAT(wb) {
   // Build TA_SCORECARD from active reqs — per recruiter aggregates
   const _recMap = {};
   active.forEach(function(r) {
-    // Split multi-recruiter strings — ZingHR puts all assignees in one field
-    var recs = (r.ta_recruiter||'').split(',').map(function(s){
-      return s.replace(/\(.*?\)/g,'').trim();
-    }).filter(function(s){return s.length>2;});
-    // Use first recruiter as primary
-    var primary = recs[0]||'Unassigned';
+    // Prefer primary_recruiter (Neha's manual mapping) over raw ZingHR ta_recruiter
+    var primary;
+    if (r.primary_recruiter && r.primary_recruiter.trim()) {
+      primary = r.primary_recruiter.replace(/\([^)]+\)/g,'').trim();
+    } else {
+      // Fallback: split ZingHR multi-recruiter string, skip HRBPs, take first
+      var _HRBP_SC=['suhail','somasri','ayush','abhishek','priya paul','shambhavi'];
+      var recs = (r.ta_recruiter||'').split(',').map(function(s){
+        return s.replace(/\(.*?\)/g,'').trim();
+      }).filter(function(s){return s.length>2;});
+      primary = recs.find(function(s){
+        var sl=s.toLowerCase();
+        return !_HRBP_SC.some(function(h){return sl.indexOf(h)>=0;});
+      }) || recs[0] || 'Unassigned';
+    }
     if (!_recMap[primary]) _recMap[primary] = {name:primary,active:0,critical:0,plat_gold:0,backlog_age:0,joined:0,offers:0,pipeline:0,dropouts:0,avg_fill_days:0,fill_cnt:0,top_source:'',sources:{}};
     _recMap[primary].active++;
     if (r.tat>45) _recMap[primary].critical++;
