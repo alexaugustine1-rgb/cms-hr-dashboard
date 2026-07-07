@@ -8827,7 +8827,7 @@ function renderTAPipeline(){
     return'<div onclick="_taRecruiterFilter=\''+esc(r.name.split(' ')[0])+'\';document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline()" '
       +'style="display:grid;grid-template-columns:150px 50px 50px 65px 50px 55px 50px 50px 50px 55px;padding:8px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;cursor:pointer;'
       +(_isFiltered?'background:rgba(139,92,246,.08);border-left:3px solid #8b5cf6;':'')+'">'
-      +'<div style="font-weight:500;color:var(--text)">'+esc(shortName)+'</div>'
+      +'<div style="font-weight:500;color:'+(_isFiltered?'#8b5cf6':'var(--accent)')+';text-decoration:underline;text-underline-offset:2px;cursor:pointer" title="Click to filter pipeline to '+esc(shortName)+'">'+esc(shortName)+'</div>'
       +'<div style="font-weight:700;color:'+loadCol+'">'+r.active+'</div>'
       +'<div style="color:var(--red)">'+r.critical+'</div>'
       +'<div style="color:'+ageCol+'" title="How old is the open backlog">'+r.backlog_age+'d</div>'
