@@ -8811,7 +8811,12 @@ function renderTAPipeline(){
   }).join('');
 
   // ── Recruiter scorecard ────────────────────────────────────────────────
-  var scoreRows=TA_SCORECARD.filter(function(r){return r.pipeline>0||r.active>0;}).map(function(r){
+  var _HRBP=['suhail','somasri','ayush','abhishek','priya paul','shambhavi'];
+  var scoreRows=TA_SCORECARD.filter(function(r){
+    if(!r.pipeline&&!r.active) return false;
+    var nl=(r.name||'').toLowerCase();
+    return !_HRBP.some(function(h){return nl.indexOf(h)>=0;});
+  }).map(function(r){
     var shortName=r.name.split(' ').slice(0,2).join(' ');
     var loadCol=r.active>20?'var(--red)':r.active>10?'var(--amber)':'var(--text)';
     var convPct=r.pipeline>0?Math.round(r.joined/r.pipeline*100):0;
