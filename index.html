@@ -8632,6 +8632,29 @@ function renderOD(){
     +'</div>';
 }
 
+function _taOwner(r){
+  var HRBP=['suhail','somasri','ayush','abhishek','priya paul','shambhavi'];
+  var raw=(r&&r.primary_recruiter&&String(r.primary_recruiter).trim())?String(r.primary_recruiter):'';
+  if(!raw){
+    var recs=String((r&&r.ta_recruiter)||'').split(',').map(function(s){return s.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim();}).filter(function(s){return s.length>2;});
+    raw=recs.find(function(s){var sl=s.toLowerCase();return !HRBP.some(function(h){return sl.indexOf(h)>=0;});})||recs[0]||'Unassigned';
+  }
+  return raw.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim();
+}
+function _taBuildRecCounts(rows){
+  var m={};
+  (rows||[]).forEach(function(r){
+    var owner=_taOwner(r); if(!owner) return;
+    var k=owner.toLowerCase().split(' ')[0];
+    if(!m[k]) m[k]={name:owner,active:0,critical:0,plat_gold:0,backlog_age:0};
+    m[k].active++;
+    var t=(+r.tat)||0;
+    if(t>45) m[k].critical++;
+    if(r.tier==='Platinum'||r.tier==='Gold') m[k].plat_gold++;
+    if(t>m[k].backlog_age) m[k].backlog_age=t;
+  });
+  return m;
+}
 function renderTAPipeline(){
   if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _taRegion = _sbRole.region; }
   // View router — delegate to sub-views
@@ -8668,9 +8691,9 @@ function renderTAPipeline(){
   if(_taTier!=='All') data=data.filter(function(r){return r.tier===_taTier;});
   if(_taPosType!=='All') data=data.filter(function(r){return r.pos_type===_taPosType;});
   if(_taBilling!=='All') data=data.filter(function(r){return r.billing_type===_taBilling;});
+  window._taLiveCounts=_taBuildRecCounts(data);
   if(_taRecruiterFilter!=='All') data=data.filter(function(r){
-    var recRaw=(r.primary_recruiter||r.ta_recruiter||'').toLowerCase();
-    return recRaw.indexOf(_taRecruiterFilter.toLowerCase().split(' ')[0].toLowerCase())>=0;
+    return _taOwner(r).toLowerCase().split(' ')[0]===_taRecruiterFilter.toLowerCase().split(' ')[0];
   });
   data.sort(function(a,b){return b.tat-a.tat;});
 
@@ -8845,11 +8868,23 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
 
   // ── Recruiter scorecard ────────────────────────────────────────────────
   var _HRBP=['suhail','somasri','ayush','abhishek','priya paul','shambhavi'];
-  var scoreRows=TA_SCORECARD.filter(function(r){
-    if(!r.pipeline&&!r.active) return false;
+  var _lc=window._taLiveCounts||{};
+  var _scMap={};
+  TA_SCORECARD.forEach(function(r){ if(r&&r.name){ _scMap[r.name.toLowerCase().split(' ')[0]]=Object.assign({},r); } });
+  Object.keys(_lc).forEach(function(k){ if(!_scMap[k]){ _scMap[k]={name:_lc[k].name,pipeline:0,joined:0,offers:0,fill_cnt:0,avg_fill_days:0,top_source:''}; } });
+  var scoreRows=Object.keys(_scMap).map(function(k){return _scMap[k];}).filter(function(r){
     var nl=(r.name||'').toLowerCase();
-    return !_HRBP.some(function(h){return nl.indexOf(h)>=0;});
+    if(_HRBP.some(function(h){return nl.indexOf(h)>=0;})) return false;
+    var lc=_lc[nl.split(' ')[0]];
+    if(!r.pipeline&&!(lc&&lc.active)) return false;
+    return true;
+  }).sort(function(a,b){
+    var la=(_lc[(a.name||'').toLowerCase().split(' ')[0]]||{}).active||0;
+    var lb=(_lc[(b.name||'').toLowerCase().split(' ')[0]]||{}).active||0;
+    return lb-la;
   }).map(function(r){
+    var lc=_lc[(r.name||'').toLowerCase().split(' ')[0]]||{active:0,critical:0,plat_gold:0,backlog_age:0};
+    r.active=lc.active; r.critical=lc.critical; r.plat_gold=lc.plat_gold; r.backlog_age=lc.backlog_age;
     var shortName=r.name.split(' ').slice(0,2).join(' ');
     var loadCol=r.active>20?'var(--red)':r.active>10?'var(--amber)':'var(--text)';
     var convPct=r.pipeline>0?Math.round(r.joined/r.pipeline*100):0;
@@ -8914,8 +8949,7 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
       });
       if (!_recScore) return '';
       var _recData = allData.filter(function(r){
-        var recRaw=(r.primary_recruiter||r.ta_recruiter||'').toLowerCase();
-        return recRaw.indexOf(_taRecruiterFilter.toLowerCase().split(' ')[0])>=0;
+        return _taOwner(r).toLowerCase().split(' ')[0]===_taRecruiterFilter.toLowerCase().split(' ')[0];
       });
       var _recCritical = _recData.filter(function(r){return (r.tat||0)>45;}).length;
       var _recPlatGold = _recData.filter(function(r){return r.tier==='Platinum'||r.tier==='Gold';}).length;
