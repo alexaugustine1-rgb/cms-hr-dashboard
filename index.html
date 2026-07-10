@@ -10239,10 +10239,20 @@ var CUSTOMER_TIER_MAP = {
 };
 
 var TA_STAGE_RANK = {
-  'Screening':1,'Shortlisted':2,'Assessments':3,'Interview':4,
-  'Pre Offer Verification':5,'Pre Offer Checklist':6,'Pre Offer Checklist Rejected':6,
-  'Offer Letter Send to Internal Database':7,'Offer Letter Acceptance':8,'Offer Letter Rejected':8,
-  'Pre Joining Checklist':9,'Pre Joining Verification':9,
+  'Screening':1,'Screening Rejected':1,
+  'Shortlisted':2,'Shortlisted Rejected':2,
+  'Assessments':3,'Assessments Rejected':3,
+  'Interview':4,'Interviews':4,
+  'Pre Offer Verification':5,'Pre Offer Verification Rejected':5,
+  'Salary Fitment':6,'Salary Fitment Rejected':6,
+  'Pre Offer Checklist':6,'Pre Offer Checklist Rejected':6,
+  'Approvals Send to Internal Database':7,
+  'Offer Letter':7,'Offer Letter Send to Internal Database':7,
+  'Offer Letter Acceptance':8,'Offer Letter Acceptance Rejected':8,
+  'Offer Letter Rejected':8,'Offer Letter Blacklisted':8,
+  'Offer Letter Acceptance Send to Internal Database':8,
+  'Pre Joining Checklist':9,'Pre Joining Checklist Rejected':9,'Pre Joining Verification':9,
+  'Joining Confirmation':10,
   'Appointment Letter':10,'Dropped Out':11,'No Show':12
 };
 function taEffectiveStage(r) {
