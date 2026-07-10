@@ -8825,7 +8825,7 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     {label:'Avg Fill Speed', val:(S.avg_closed_tat||31)+'d', color:'var(--amber)', note:'<div style="font-size:9px;color:var(--muted2);margin-top:3px">Req→ECode · '+asof(CAND_DATE).replace('<div style="font-size:9px;color:var(--muted2);margin-top:3px">','').replace('</div>','')+'</div>'},
   ];
   var _filled = S.mar_fulfilled||S.mar_closed||0;
-  var _joined = S.mar_joined||0;
+  var _joined = (_emMTDJoiners!==null)?_emMTDJoiners:(S.mar_joined||0);
   var _pending = Math.max(0, _filled - _joined);
   var _filledJoinedCard = '<div style="background:var(--surface2);border:1px solid var(--border);'
     +'border-top:3px solid var(--green);border-radius:8px;padding:12px;text-align:center">'
@@ -9264,7 +9264,7 @@ async function loadTACandMap() {
   if (!_sb) return;
   try {
     var {data,error} = await _sb.from('ta_candidates')
-      .select('req_id,application_stage,offer_date')
+      .select('req_id,application_stage,interview_reached,offer_date')
       .neq('req_id','');
     if (error || !data || !data.length) return;
     var STAGE_RANK = {
@@ -9284,9 +9284,10 @@ async function loadTACandMap() {
     data.forEach(function(r) {
       var rid = String(r.req_id||'').trim(); if (!rid) return;
       if (!map[rid]) map[rid] = {count:0,stage:'',rank:0,lastActDays:null};
+      var effStage = taEffectiveStage(r);
       if (ACTIVE_STAGES[r.application_stage]) map[rid].count++;
-      var rank = STAGE_RANK[r.application_stage]||0;
-      if (rank > map[rid].rank) { map[rid].rank=rank; map[rid].stage=r.application_stage||''; }
+      var rank = TA_STAGE_RANK[effStage]||0;
+      if (rank > map[rid].rank) { map[rid].rank=rank; map[rid].stage=effStage; }
       if (r.offer_date) {
         var d = new Date(r.offer_date); d.setHours(0,0,0,0);
         var days = Math.round((today-d)/86400000);
@@ -10237,6 +10238,18 @@ var CUSTOMER_TIER_MAP = {
   'INDUS TOWERS LIMITED':'Gold'
 };
 
+var TA_STAGE_RANK = {
+  'Screening':1,'Shortlisted':2,'Assessments':3,'Interview':4,
+  'Pre Offer Verification':5,'Pre Offer Checklist':6,'Pre Offer Checklist Rejected':6,
+  'Offer Letter Send to Internal Database':7,'Offer Letter Acceptance':8,'Offer Letter Rejected':8,
+  'Pre Joining Checklist':9,'Pre Joining Verification':9,
+  'Appointment Letter':10,'Dropped Out':11,'No Show':12
+};
+function taEffectiveStage(r) {
+  if (r.interview_reached) return 'Interview';
+  return r.application_stage || '';
+}
+
 async function processCandidate(wb) {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows = getRows(ws);
@@ -10603,43 +10616,67 @@ async function processCandidate(wb) {
           var diff = (new Date(_ecDt) - new Date(_reqDt)) / 86400000;
           if (!isNaN(diff) && diff>=0) _tatDays = Math.round(diff);
         }
+        var _ivDates = [
+          _tcDate(_tcVal(r,'Client Round 3 Date')),
+          _tcDate(_tcVal(r,'HR interview Date')),
+          _tcDate(_tcVal(r,'HR Round Date')),
+          _tcDate(_tcVal(r,'T1 Interview Date')),
+          _tcDate(_tcVal(r,'T2 Interview Date')),
+          _tcDate(_tcVal(r,'Techincal Round 1 Date')),
+          _tcDate(_tcVal(r,'Technical Round 2 Date'))
+        ].filter(Boolean);
         return {
-          candidate_name:    _tcVal(r,'Candidate Name'),
-          req_id:            _tcVal(r,'Requisition ID'),
-          req_title:         _tcVal(r,'Requisition Title'),
-          req_status:        _tcVal(r,'Requisition Status'),
-          req_date:          _tcDate(_tcVal(r,'Requisition Date')),
-          req_approval_date: _tcDate(_tcVal(r,'Requisition Approval Date')),
-          sourced_by_name:   _tcRecName(recRaw.split(',')[0]||recRaw),
-          sourced_by_code:   _tcCode(recRaw),
-          resume_source:     _tcVal(r,'Resume Source'),
-          customer_name:     _tcVal(r,'Customer Name')||_tcVal(r,'Customer Name Role and Location').split(' - ')[0].trim(),
-          region:            _tcVal(r,'Region'),
-          application_stage: _tcVal(r,'Application Stage'),
-          offer_status:      _tcVal(r,'Offer Status'),
-          offer_date:        _tcDate(_tcVal(r,'Offer Letter Acceptance Date')),
-          final_doj:         _tcDate(_tcVal(r,'Final Date of Joining')||_tcVal(r,'Tentative Date Of Joining')),
-          ecode_date:        _tcDate(_tcVal(r,'ECode Creation Date')),
-          employee_code:     _tcVal(r,'Employee Code'),
-          tat_days:          _tatDays,
-          data_as_of:        _tcToday,
-          upload_batch:      _tcBatch
+          application_id:       _tcVal(r,'ApplicationID'),
+          candidate_name:       _tcVal(r,'Candidate Name'),
+          req_id:               _tcVal(r,'Requisition ID'),
+          req_title:            _tcVal(r,'Requisition Title'),
+          req_status:           _tcVal(r,'Requisition Status'),
+          req_date:             _tcDate(_tcVal(r,'Requisition Date')),
+          req_approval_date:    _tcDate(_tcVal(r,'Requisition Approval Date')),
+          sourced_by_name:      _tcRecName(recRaw.split(',')[0]||recRaw),
+          sourced_by_code:      _tcCode(recRaw),
+          resume_source:        _tcVal(r,'Resume Source'),
+          customer_name:        _tcVal(r,'Customer Name')||_tcVal(r,'Customer Name Role and Location').split(' - ')[0].trim(),
+          region:               _tcVal(r,'Region'),
+          application_stage:    _tcVal(r,'Application Stage'),
+          offer_status:         _tcVal(r,'Offer Status'),
+          offer_date:           _tcDate(_tcVal(r,'Offer Letter Acceptance Date')),
+          final_doj:            _tcDate(_tcVal(r,'Final Date of Joining')||_tcVal(r,'Tentative Date Of Joining')),
+          ecode_date:           _tcDate(_tcVal(r,'ECode Creation Date')),
+          employee_code:        _tcVal(r,'Employee Code'),
+          tat_days:             _tatDays,
+          interview_reached:    _ivDates.length > 0,
+          first_interview_date: _ivDates.length ? _ivDates.slice().sort()[0] : null,
+          last_interview_date:  _ivDates.length ? _ivDates.slice().sort().pop() : null,
+          data_as_of:           _tcToday,
+          upload_batch:         _tcBatch
         };
-      }).filter(function(r){ return r.candidate_name; });
+      });
+      var _tcSkipped = _tcUpsertRows.filter(function(r){ return !r.application_id; }).length;
+      _tcUpsertRows = _tcUpsertRows.filter(function(r){ return r.candidate_name && r.application_id; });
+      var _tcInterviewCnt = _tcUpsertRows.filter(function(r){ return taEffectiveStage(r)==='Interview'; }).length;
 
       if (_tcUpsertRows.length) {
-        // Delete previous batch and re-insert — this is a snapshot, not an accumulation
-        var {error:_tcDelErr} = await _sb.from('ta_candidates').delete().neq('id','00000000-0000-0000-0000-000000000000');
-        if (_tcDelErr) log('ta_candidates clear error: '+_tcDelErr.message,'warn');
-        // Batch insert in chunks of 50
-        var _tcChunk=50, _tcInserted=0;
+        // One-time legacy purge: rows without application_id are pre-upsert era orphans
+        await _sb.from('ta_candidates').delete().is('application_id', null);
+        // Upsert in chunks of 50 — idempotent by application_id
+        var _tcChunk=50, _tcInserted=0, _tcErrMsg='';
         for (var _tck=0; _tck<_tcUpsertRows.length; _tck+=_tcChunk) {
           var chunk = _tcUpsertRows.slice(_tck, _tck+_tcChunk);
-          var {error:_tcInsErr} = await _sb.from('ta_candidates').insert(chunk);
-          if (_tcInsErr) { log('ta_candidates insert error: '+_tcInsErr.message,'warn'); break; }
+          var {error:_tcUpsErr} = await _sb.from('ta_candidates').upsert(chunk, {onConflict:'application_id'});
+          if (_tcUpsErr) { _tcErrMsg=_tcUpsErr.message; log('ta_candidates upsert error: '+_tcUpsErr.message,'warn'); break; }
           _tcInserted += chunk.length;
         }
-        log('✓ ta_candidates: '+_tcInserted+' rows written ('+_tcBatch+')','ok');
+        if (_tcErrMsg || _tcInserted===0) {
+          var _tcErrEl = document.getElementById('uploadStatus');
+          if (_tcErrEl) _tcErrEl.innerHTML='<div style="background:#fee2e2;border:2px solid #ef4444;color:#b91c1c;'
+            +'padding:10px 14px;border-radius:6px;margin-top:8px;font-size:13px;font-weight:600">'
+            +'⚠ Upload failed: ta_candidates — '+(_tcErrMsg||'0 rows written')
+            +'<br><span style="font-weight:400;font-size:11px">Check ApplicationID column and Supabase RLS policy.</span></div>';
+        } else {
+          if (typeof showToast==='function') showToast('✓ '+_tcInserted+' candidate rows written · '+_tcInterviewCnt+' at Interview · '+_tcSkipped+' skipped (no ApplicationID)','success',4000);
+        }
+        log('✓ ta_candidates: '+_tcInserted+' rows written, '+_tcSkipped+' skipped ('+_tcBatch+')','ok');
 
       // ── Sync Appointment Letter / Pre Joining candidates → prospective_joiners ─
       // Stages that represent confirmed joiners or imminent joiners
@@ -10661,8 +10698,11 @@ async function processCandidate(wb) {
 
         // Build rows to sync from ta_candidates
         var _today3 = new Date().toISOString().substring(0,10);
+        var _pjPrevMonth = new Date(); _pjPrevMonth.setMonth(_pjPrevMonth.getMonth()-1);
+        var _pjFirstPrevMonth = new Date(_pjPrevMonth.getFullYear(), _pjPrevMonth.getMonth(), 1).toISOString().substring(0,10);
         var _syncRows = _tcUpsertRows.filter(function(r){
-          return _pjSyncStages[r.application_stage];
+          if (!_pjSyncStages[r.application_stage]) return false;
+          return (!r.employee_code||!r.employee_code.trim())||(r.final_doj&&r.final_doj>=_pjFirstPrevMonth);
         }).map(function(r){
           var key = (r.candidate_name||'').toUpperCase().trim()+'__'+(r.req_id||'');
           // Skip if already manually resolved
