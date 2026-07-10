@@ -5478,12 +5478,13 @@ function renderJoinersTab(el) {
     return ['Offer Accepted','Induction Scheduled'].includes(r.status) && parseDoj(r.doj) && parseDoj(r.doj) < today;
   }).sort(function(a,b){ return parseDoj(a.doj)-parseDoj(b.doj); });
 
-  // ── Joined this month ─────────────────────────────────────────────────────
-  var joinedMTD = base.filter(function(r){
+  // ── Joined this month — use employee_master count (authoritative), fallback to prospective_joiners ──
+  var _joinedMTDFallback = base.filter(function(r){
     if(r.status!=='Joined') return false;
     var d=parseDoj(r.doj);
     return d && d.getMonth()===today.getMonth() && d.getFullYear()===today.getFullYear();
   }).length;
+  var joinedMTD = (_emMTDJoiners!==null) ? _emMTDJoiners : _joinedMTDFallback;
 
   // ── Candidate card ────────────────────────────────────────────────────────
   function candCard(r, urgent){
@@ -8787,7 +8788,16 @@ function renderTAPipeline(){
   data.sort(function(a,b){return b.tat-a.tat;});
 
   var TAT_DATE=(TA_SUMMARY&&TA_SUMMARY.tat_as_of)||'—';
-  var CAND_DATE=(TA_SUMMARY&&TA_SUMMARY.cand_as_of)||TAT_DATE||'—';
+  // Candidate date: prefer MAX(data_as_of) from DB (set by loadTACandMap), fall back to cache
+  var _candDbFmt = _taCandDbDate ? (function(){
+    var d=new Date(_taCandDbDate); return isNaN(d)?null:d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  })() : null;
+  var CAND_DATE = _candDbFmt || (TA_SUMMARY&&TA_SUMMARY.cand_as_of) || TAT_DATE || '—';
+  // Amber warning: if summary cache is newer than DB by >1 day, last DB write may have failed
+  var _candSummaryIso = (TA_SUMMARY&&TA_SUMMARY.cand_as_of_iso) || null;
+  if (_taCandDbDate && _candSummaryIso && (_candSummaryIso > _taCandDbDate) &&
+      (new Date(_candSummaryIso) - new Date(_taCandDbDate)) > 86400000)
+    CAND_DATE += '<span style="color:var(--amber);font-size:9px"> (summary newer than DB — last DB write may have failed)</span>';
 
   function fbtn(v,active,fn){
     return '<button onclick="'+fn+'" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(active?700:500)+';border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'var(--accent)':'none')+';color:'+(active?'var(--bg)':'var(--muted)')+';cursor:pointer">'+v+'</button>';
@@ -8839,7 +8849,7 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     +(_pending>0
       ? '<div style="font-size:9px;color:var(--amber);margin-top:2px">'+_pending+' pending joining</div>'
       : '<div style="font-size:9px;color:var(--green);margin-top:2px">all joined ✓</div>')
-    +asof(TAT_DATE)
+    +asof(_emRefDate||TAT_DATE)
     +'</div>';
   var kpis='<div style="display:grid;grid-template-columns:repeat(4,1fr) 1.2fr;gap:8px;margin-bottom:14px">'
     +kpiCards.map(function(k){
@@ -9136,6 +9146,8 @@ var _taCandMap = {}; // {req_id: {count,stage,rank,lastActDays}} loaded from ta_
 var _taClosedMTDMap = {}; // {firstName: closedCount} for current month from req_tracker
 var _emWeekJoiners = null;
 var _emMTDJoiners  = null;
+var _taCandDbDate  = null; // MAX(data_as_of) from ta_candidates at boot (YYYY-MM-DD)
+var _emRefDate     = null; // employee_master last upload date (locale string)
 var _ovPreset = 'month';       // 'week' | 'lastweek' | 'month' | 'lastmonth' | 'custom'
 var _ovFrom   = '';            // YYYY-MM-DD
 var _ovTo     = '';            // YYYY-MM-DD
@@ -9186,11 +9198,19 @@ async function loadEMJoinerCounts() {
     var _mtdTo = new Date().toISOString().substring(0,10);
     if (_ovPreset==='month' || _ovPreset==='week') {
       var {data:_mtdRows} = await _sb.from('employee_master')
-        .select('doj').eq('emp_status','NewJoinee')
+        .select('doj').eq('emp_status','NewJoinee').not('emp_code','is',null)
         .gte('doj', _mtdFrom).lte('doj', _mtdTo);
       _emMTDJoiners = (_mtdRows||[]).length;
     } else {
       _emMTDJoiners = _emWeekJoiners;
+    }
+    // Capture employee_master refresh date for UI display
+    if (!_emRefDate) {
+      var {data:_emMeta} = await _sb.from('employee_master')
+        .select('uploaded_at').order('uploaded_at',{ascending:false}).limit(1);
+      if (_emMeta && _emMeta[0] && _emMeta[0].uploaded_at) {
+        _emRefDate = new Date(_emMeta[0].uploaded_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+      }
     }
     var _ovEl = document.getElementById('tab-overview');
     if (_ovEl && _ovEl.classList.contains('active') && typeof render === 'function') render();
@@ -9264,9 +9284,13 @@ async function loadTACandMap() {
   if (!_sb) return;
   try {
     var {data,error} = await _sb.from('ta_candidates')
-      .select('req_id,application_stage,interview_reached,offer_date')
+      .select('req_id,application_stage,interview_reached,offer_date,data_as_of')
       .neq('req_id','');
     if (error || !data || !data.length) return;
+    // Compute MAX(data_as_of) for header date display
+    var _maxAsOf = null;
+    data.forEach(function(r){ if(r.data_as_of&&(!_maxAsOf||r.data_as_of>_maxAsOf)) _maxAsOf=r.data_as_of; });
+    if (_maxAsOf) _taCandDbDate = _maxAsOf;
     var STAGE_RANK = {
       'Screening':1,'Assessments':2,
       'Pre Offer Verification':3,'Pre Offer Checklist':4,'Pre Offer Checklist Rejected':4,
@@ -10256,8 +10280,12 @@ var TA_STAGE_RANK = {
   'Appointment Letter':10,'Dropped Out':11,'No Show':12
 };
 function taEffectiveStage(r) {
-  if (r.interview_reached) return 'Interview';
-  return r.application_stage || '';
+  var s = (r.application_stage||'').trim();
+  if (/rejected|blacklisted/i.test(s)) return s;
+  var rank = TA_STAGE_RANK[s]||0;
+  if (r.interview_reached && rank > 0 && rank < (TA_STAGE_RANK['Pre Offer Verification']||5))
+    return 'Interview';
+  return s || '';
 }
 
 async function processCandidate(wb) {
@@ -10375,17 +10403,19 @@ async function processCandidate(wb) {
   }
 
   const _candAsOf = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  const _candAsOfIso = new Date().toISOString().substring(0,10);
   if (typeof TA_SUMMARY !== 'undefined') {
     TA_SUMMARY.total_pipeline = rows.length;
     TA_SUMMARY.total_joined_ytd = totalJoined;
     TA_SUMMARY.mar_joined = marJoined;
     TA_SUMMARY.cand_as_of = _candAsOf;
+    TA_SUMMARY.cand_as_of_iso = _candAsOfIso;
   }
   // Persist candidate summary fields so they survive page reload
   try {
     await _sb.from('data_cache').upsert({
       id:'ta_cand_summary',
-      data:{cand_as_of:_candAsOf, mar_joined:marJoined, total_pipeline:rows.length, total_joined_ytd:totalJoined},
+      data:{cand_as_of:_candAsOf, cand_as_of_iso:_candAsOfIso, mar_joined:marJoined, total_pipeline:rows.length, total_joined_ytd:totalJoined},
       row_count:1, uploaded_at:new Date().toISOString()
     },{onConflict:'id'});
   } catch(e){ console.warn('[processCandidate] summary persist:',e.message); }
@@ -10809,6 +10839,22 @@ async function processReqTAT(wb) {
     }
     return 0;
   }
+  function _tatParseIso(v) {
+    if (!v) return null;
+    var s = String(v).trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
+    var pts = s.replace(/-/g,' ').split(' ').filter(function(p){return p.trim();});
+    if (pts.length>=3) {
+      var MON={jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',
+               jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+      var dd=pts[0].padStart(2,'0'), mm=MON[(pts[1]||'').toLowerCase().substring(0,3)], yy=pts[2];
+      if(yy.length===2) yy='20'+yy;
+      if(mm) return yy+'-'+mm+'-'+dd;
+    }
+    try { var d=new Date(s); if(!isNaN(d)) return d.toISOString().substring(0,10); } catch(e){}
+    return null;
+  }
   
   function getCustomer(row) {
     // 1. Direct Customer Name field (usually blank in ZingHR TAT)
@@ -10851,6 +10897,7 @@ async function processReqTAT(wb) {
       tat: age, balance: String(row[hIdx('Balance')]||'1'),
       created: String(row[hIdx('Requisition Creation Date')]||'').substring(0,15),
       zinghr_status: status,
+      filled_date: status!=='Approved' ? _tatParseIso(String(row[hIdx('ECode Creation Date')]||'').trim()) : null,
     };
     rec.status = (status==='Approved') ? 'Open' : 'Closed';
     allRows.push(rec);
@@ -10968,6 +11015,7 @@ async function processReqTAT(wb) {
         status:          r.status,
         zinghr_status:   r.zinghr_status,
         closed_tat:      r.closed_tat||0,
+        filled_date:     r.filled_date||null,
         upload_batch:    'tat_'+_rtNow.substring(0,10),
         uploaded_at:     _rtNow,
         critical:        ['Platinum','Gold'].includes(r.tier)||false,
@@ -11960,6 +12008,21 @@ async function sbBoot(user){
     }
   } catch(e){ console.warn('[sbBoot] req_tracker load failed, using data_cache fallback:',e.message); }
   // ── end req_tracker direct load ───────────────────────────────
+
+  // ── Filled MTD: count req_tracker Closed rows with filled_date in current month ──
+  try {
+    var _ftNow2 = new Date();
+    var _ftMonStart2 = new Date(_ftNow2.getFullYear(), _ftNow2.getMonth(), 1).toISOString().substring(0,10);
+    var _ftToday2 = _ftNow2.toISOString().substring(0,10);
+    var {data:_ftRows2} = await _sb.from('req_tracker')
+      .select('req_id').eq('status','Closed')
+      .not('filled_date','is',null)
+      .gte('filled_date', _ftMonStart2).lte('filled_date', _ftToday2);
+    if (_ftRows2 !== null) {
+      TA_SUMMARY.mar_fulfilled = _ftRows2.length;
+      console.log('[sbBoot] filled MTD from req_tracker.filled_date:', TA_SUMMARY.mar_fulfilled);
+    }
+  } catch(e){ console.warn('[sbBoot] filled_date count failed:', e.message); }
 
   // Apply tab_scope restrictions
   if(_sbRole && (_sbRole.tab_scope === 'admin_facilities_only' || _sbRole.tab_scope === 'admin_facilities_overview_actions')) {
