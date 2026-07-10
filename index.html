@@ -8655,15 +8655,103 @@ function _taBuildRecCounts(rows){
   });
   return m;
 }
+var _CUST_ALIAS={
+  'THE INDIAN HOTELS COMAPANY LIMITED':'THE INDIAN HOTELS COMPANY LIMITED',
+  'CMSIT':'CMS IT'
+};
+function _normCustomer(c){
+  var s=(c||'Unknown').trim().replace(/\s+/g,' ').toUpperCase();
+  return _CUST_ALIAS[s]||s;
+}
+var _taExpandedCust={};
+function _taCustToggle(idx){
+  _taExpandedCust[idx]=!_taExpandedCust[idx];
+  document.getElementById('tab-tapipeline').innerHTML=renderTAPipeline();
+}
+function _renderTACustMatrix(regionData,allScopeData){
+  var BKTS=['<7','7-15','16-30','31-45','46-60','61-90','90+'];
+  function bkt(t){if(t<7)return 0;if(t<=15)return 1;if(t<=30)return 2;if(t<=45)return 3;if(t<=60)return 4;if(t<=90)return 5;return 6;}
+  var allMap={};
+  (allScopeData||[]).forEach(function(r){
+    var nc=_normCustomer(r.customer);
+    if(!allMap[nc]){allMap[nc]={tier:r.tier||'Regular',regions:{},total:0};}
+    if((r.tier||'Regular')!=='Regular'&&allMap[nc].tier==='Regular')allMap[nc].tier=r.tier;
+    allMap[nc].regions[r.region||'?']=true;
+    allMap[nc].total++;
+  });
+  var custMap={};
+  (regionData||[]).forEach(function(r){
+    var nc=_normCustomer(r.customer);
+    if(!custMap[nc]){custMap[nc]={buckets:[0,0,0,0,0,0,0],total:0,rows:[]};}
+    custMap[nc].buckets[bkt(r.tat||0)]++;
+    custMap[nc].total++;
+    custMap[nc].rows.push(r);
+  });
+  var TIER_ORDER=['Platinum','Gold','Silver','Regular'];
+  var groups={Platinum:[],Gold:[],Silver:[],Regular:[]};
+  Object.keys(custMap).forEach(function(nc){
+    var t=(allMap[nc]||{}).tier||'Regular';
+    (groups[t]||groups['Regular']).push(nc);
+  });
+  TIER_ORDER.forEach(function(t){groups[t].sort(function(a,b){return custMap[b].total-custMap[a].total;});});
+  var useRgn=_taRegion!=='All';
+  var SABB={'Screening':'Screen','Assessments':'Assess','Pre Offer Verification':'PreOff','Pre Offer Checklist':'PreOff','Pre Offer Checklist Rejected':'Reject','Offer Letter Send to Internal Database':'OfferDB','Offer Letter Acceptance':'OfferAcc','Offer Letter Rejected':'OfferRej','Pre Joining Checklist':'PreJoin','Pre Joining Verification':'PreJoin','Appointment Letter':'Appt'};
+  var GCOLS='200px 72px 50px 55px 55px 55px 55px 55px 60px 80px';
+  var HS='font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)';
+  var html='<div style="display:grid;grid-template-columns:'+GCOLS+';padding:5px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+    +['Account',useRgn?'Total (R/A)':'Total','<7','7-15','16-30','31-45','46-60','61-90','90+','Regions'].map(function(h){return'<div style="'+HS+'">'+h+'</div>';}).join('')+'</div>';
+  var grandTotal=0;
+  var custIdx=0;
+  TIER_ORDER.forEach(function(tier){
+    var g=groups[tier];
+    if(!g.length) return;
+    var tCol=tier==='Platinum'?'#a78bfa':tier==='Gold'?'#f59e0b':tier==='Silver'?'#94a3b8':'var(--muted2)';
+    html+='<div style="padding:3px 12px;background:rgba(0,0,0,.15);border-bottom:1px solid var(--border)">'
+      +'<span style="font-family:DM_Mono,monospace;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:'+tCol+'">'+tier+'</span></div>';
+    g.forEach(function(nc){
+      var cm=custMap[nc];
+      var am=allMap[nc]||{regions:{},total:cm.total};
+      var idx=custIdx++;
+      var isExp=!!_taExpandedCust[idx];
+      var totalCell=useRgn?('<strong>'+cm.total+'</strong><span style="color:var(--muted2);font-size:9px"> /'+am.total+'</span>'):('<strong>'+cm.total+'</strong>');
+      var regChip=Object.keys(am.regions).sort().join('/');
+      grandTotal+=cm.total;
+      html+='<div onclick="_taCustToggle('+idx+')" style="display:grid;grid-template-columns:'+GCOLS+';padding:5px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center;cursor:pointer;'+(isExp?'background:rgba(96,165,250,.04)':'')+'">'
+        +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;font-weight:600" title="'+esc(nc)+'">'+esc(nc.length>26?nc.substring(0,25)+'…':nc)+'</div>'
+        +'<div style="font-weight:700;color:var(--accent)">'+totalCell+'</div>';
+      cm.buckets.forEach(function(cnt,i){
+        var bgS=cnt>0&&i>=6?'background:rgba(220,38,38,.1);':cnt>0&&i>=5?'background:rgba(251,191,36,.1);':'';
+        html+='<div style="font-weight:'+(cnt>0?700:400)+';color:'+(cnt>0?i>=6?'#dc2626':i>=5?'var(--amber)':'var(--text)':'var(--muted2)')+';'+bgS+'text-align:center">'+(cnt>0?cnt:'·')+'</div>';
+      });
+      html+='<div style="font-size:9px;color:var(--muted2)">'+esc(regChip)+'</div></div>';
+      if(isExp){
+        cm.rows.slice().sort(function(a,b){return b.tat-a.tat;}).forEach(function(r){
+          var tC=r.tat>90?'#dc2626':r.tat>60?'var(--red)':r.tat>45?'#f97316':r.tat>30?'var(--amber)':'var(--muted)';
+          var rn=r.primary_recruiter?r.primary_recruiter.split(' ')[0]:(r.ta_recruiter?r.ta_recruiter.replace(/\([^)]+\)/g,'').split(',')[0].trim().split(' ')[0]:'—');
+          var cnd=_taCandMap&&_taCandMap[String(r.req_id)];
+          var st=cnd?(SABB[cnd.stage]||cnd.stage.substring(0,5)):'—';
+          html+='<div style="display:grid;grid-template-columns:200px 72px 50px 1fr;padding:3px 12px 3px 28px;border-bottom:1px solid rgba(42,61,82,.1);font-size:10px;align-items:center;background:rgba(96,165,250,.02)">'
+            +'<div style="font-family:DM_Mono,monospace;font-size:9px;color:var(--muted2)">'+esc(r.req_id)+' '+esc((r.designation||'—').substring(0,18))+'</div>'
+            +'<div style="font-weight:700;color:'+tC+'">'+r.tat+'d</div>'
+            +'<div style="font-size:9px;color:var(--muted)">'+esc(r.region||'—')+'</div>'
+            +'<div style="font-size:9px;color:var(--muted2)">'+esc(rn)+' · '+esc(st)+'</div></div>';
+        });
+      }
+    });
+  });
+  if(!grandTotal){html+='<div style="padding:32px;text-align:center;color:var(--muted)">No customers match filters</div>';}
+  html+='<div style="padding:5px 12px;background:var(--surface3);border-top:1px solid var(--border);font-family:DM_Mono,monospace;font-size:9px;color:var(--muted)">Total: <strong style="color:var(--accent)">'+grandTotal+'</strong> open reqs · Click a customer row to expand</div>';
+  return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+html+'</div>';
+}
 function renderTAPipeline(){
   if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') { _taRegion = _sbRole.region; }
   // View router — delegate to sub-views
   if(_taView==='recruiter-map'){
     return '<div style="padding:20px 28px;max-width:1400px">'
       +'<div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px">'
-      +['pipeline','recruiter-map'].map(function(v){
-        var labels={'pipeline':'📋 Pipeline','recruiter-map':'👤 Recruiter Mapping'};
-        var active=_taView===v;
+      +['req','recruiter-map'].map(function(v){
+        var labels={'req':'📋 Pipeline','recruiter-map':'👤 Recruiter Mapping'};
+        var active=v==='req'?(_taView==='req'||_taView==='customer'):_taView===v;
         return '<button onclick="_taView=\''+v+'\';document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline();'
           +(v==='recruiter-map'?'loadTARecruiterMap();':'')+'" '
           +'style="padding:6px 16px;border-radius:6px;font-size:12px;font-weight:'+(active?700:500)+';'
@@ -8695,6 +8783,7 @@ function renderTAPipeline(){
   if(_taRecruiterFilter!=='All') data=data.filter(function(r){
     return _taOwner(r).toLowerCase().split(' ')[0]===_taRecruiterFilter.toLowerCase().split(' ')[0];
   });
+  if(_taCustomerFilter!=='All') data=data.filter(function(r){return _normCustomer(r.customer)===_taCustomerFilter;});
   data.sort(function(a,b){return b.tat-a.tat;});
 
   var TAT_DATE=(TA_SUMMARY&&TA_SUMMARY.tat_as_of)||'—';
@@ -8834,6 +8923,25 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
   var phantomCount = data.filter(function(r){
     return !_taCandMap[String(r.req_id)] && !(r.ta_recruiter&&r.ta_recruiter.trim()) && r.tat>30;
   }).length;
+  var subToggle='<div style="display:flex;gap:6px;margin-bottom:10px;align-items:center">'
+    +'<span style="font-size:11px;color:var(--muted)">View:</span>'
+    +['req','customer'].map(function(v){
+      var vActive=_taView===v;
+      var lbl=v==='req'?'By Req':'By Customer';
+      return '<button onclick="_taView=\''+v+'\';document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline()" '
+        +'style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(vActive?700:500)+';border:1px solid '+(vActive?'var(--accent)':'var(--border)')+';background:'+(vActive?'var(--accent)':'none')+';color:'+(vActive?'var(--bg)':'var(--muted)')+';cursor:pointer">'+lbl+'</button>';
+    }).join('')+'</div>';
+  var custBase=allData.slice();
+  if(_taTier!=='All') custBase=custBase.filter(function(r){return r.tier===_taTier;});
+  if(_taPosType!=='All') custBase=custBase.filter(function(r){return r.pos_type===_taPosType;});
+  if(_taBilling!=='All') custBase=custBase.filter(function(r){return r.billing_type===_taBilling;});
+  if(_taRecruiterFilter!=='All') custBase=custBase.filter(function(r){return _taOwner(r).toLowerCase().split(' ')[0]===_taRecruiterFilter.toLowerCase().split(' ')[0];});
+  if(_taCustomerFilter!=='All') custBase=custBase.filter(function(r){return _normCustomer(r.customer)===_taCustomerFilter;});
+  if(_taPhantom) custBase=custBase.filter(function(r){return !_taCandMap[String(r.req_id)]&&!(r.ta_recruiter&&r.ta_recruiter.trim())&&r.tat>30;});
+  var custNames=['All'].concat((function(){var seen={};(TA_ACTIVE_REQS||[]).forEach(function(r){var nc=_normCustomer(r.customer);if(nc)seen[nc]=true;});return Object.keys(seen).sort();})());
+  var custDropdown='<select onchange="_taCustomerFilter=this.value;document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline()" '
+    +'style="background:var(--surface2);border:1px solid '+(_taCustomerFilter!=='All'?'#f59e0b':'var(--border)')+';border-radius:20px;padding:3px 10px;color:'+(_taCustomerFilter!=='All'?'#f59e0b':'var(--muted)')+';font-size:11px;font-weight:'+(_taCustomerFilter!=='All'?700:500)+';cursor:pointer;outline:none">'
+    +custNames.map(function(v){return'<option value="'+esc(v)+'"'+(_taCustomerFilter===v?' selected':'')+'>'+esc(v==='All'?'All Customers':v.length>24?v.substring(0,23)+'…':v)+'</option>';}).join('')+'</select>';
   var reqRows=displayData.slice(0,250).map(function(r){
     var tatCol=r.tat>90?'#dc2626':r.tat>60?'var(--red)':r.tat>45?'#f97316':r.tat>30?'var(--amber)':'var(--muted)';
     var bg=r.tat>45?'rgba(248,113,113,.02)':'';
@@ -8927,12 +9035,12 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     +'<div><div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Talent Acquisition Intelligence</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text)">TA Pipeline &amp; Recruiter Performance</div></div>'
   +'<div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px">'
-  +['pipeline','recruiter-map'].map(function(v){
-    var labels={'pipeline':'📋 Pipeline','recruiter-map':'👤 Recruiter Mapping'};
+  +['req','recruiter-map'].map(function(v){
+    var labels={'req':'📋 Pipeline','recruiter-map':'👤 Recruiter Mapping'};
     var canSeeMap = typeof _sbRole!=='undefined'&&_sbRole&&
       (_sbRole.role==='admin'||(_sbRole.function_type==='ta'&&_sbRole.display_name==='Neha Kaur Sammi'));
     if(v==='recruiter-map'&&!canSeeMap) return '';
-    var active=_taView===v;
+    var active=v==='req'?(_taView==='req'||_taView==='customer'):_taView===v;
     return '<button onclick="_taView=\''+v+'\';document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline();'
       +(v==='recruiter-map'?'loadTARecruiterMap();':'')+'" '
       +'style="padding:6px 16px;border-radius:6px;font-size:12px;font-weight:'+(active?700:500)+';'
@@ -8978,6 +9086,7 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
         +'</div>';
     })() : '')
     +unassignedAlert+agHTML+filledUnclosedBanner+pgAlert
+    +subToggle
     +'<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">'
     +'<span style="font-size:11px;color:var(--muted)">Region:</span>'+rf
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
@@ -8990,6 +9099,8 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     +phantomBtn
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px;display:inline-block"></span>'
     +'<span style="font-size:11px;color:var(--muted)">Recruiter:</span> '+recDropdown
+    +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px;display:inline-block"></span>'
+    +'<span style="font-size:11px;color:var(--muted)">Customer:</span> '+custDropdown
     +(_taRecruiterFilter!=='All'?
       '<span style="width:1px;height:16px;background:var(--border);margin:0 4px;display:inline-block"></span>'
       +'<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(139,92,246,.15);border:1px solid #8b5cf6;color:#8b5cf6;font-weight:600">&#x1F464; '+esc(_taRecruiterFilter)+'</span>'
@@ -8997,12 +9108,14 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     :'')
     +(phantomCount>0&&!_taPhantom?'<span style="font-size:10px;color:var(--amber);margin-left:4px">'+phantomCount+' suspected phantom reqs</span>':'')
     +'</div>'
-    +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'
-    +'<div style="display:grid;grid-template-columns:50px 145px 135px 55px 38px 46px 30px 35px 58px 52px 72px;padding:5px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['Req','Designation','Account','Rgn','Type','Age','Bal','Pipe','Stage','ActvD','Recruiter'].map(function(h){
-      return'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)" title="'+({'Pipe':'Active candidates in pipeline','Stage':'Furthest pipeline stage reached','ActvD':'Days since last offer activity'}[h]||'')+'">'+h+'</div>';
-    }).join('')+'</div>'
-    +(reqRows||'<div style="padding:32px;text-align:center;color:var(--muted)">No reqs match filters</div>')+'</div>'
+    +(_taView==='customer'?_renderTACustMatrix(displayData,custBase):(
+      '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'
+      +'<div style="display:grid;grid-template-columns:50px 145px 135px 55px 38px 46px 30px 35px 58px 52px 72px;padding:5px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
+      +['Req','Designation','Account','Rgn','Type','Age','Bal','Pipe','Stage','ActvD','Recruiter'].map(function(h){
+        return'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)" title="'+({'Pipe':'Active candidates in pipeline','Stage':'Furthest pipeline stage reached','ActvD':'Days since last offer activity'}[h]||'')+'">'+h+'</div>';
+      }).join('')+'</div>'
+      +(reqRows||'<div style="padding:32px;text-align:center;color:var(--muted)">No reqs match filters</div>')+'</div>'
+    ))
     +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:7px">Recruiter Scorecard — Sourced By attribution · as of '+TAT_DATE+'</div>'
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'
     +'<div style="display:grid;grid-template-columns:150px 50px 50px 65px 50px 55px 60px 55px 55px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
@@ -9018,7 +9131,7 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     +'<div style="margin-top:7px;font-size:10px;color:var(--muted2)">Showing '+data.length+'/'+allData.length+' open reqs · Left border: purple=Platinum, amber=Gold · Backlog Age ≠ Fill Speed (see column tooltips)</div>'
     +'</div>';
 }
-var _taRegion='All',_taTier='All',_taPosType='All',_taBilling='All',_taPhantom=false,_taRecruiterFilter='All';
+var _taRegion='All',_taTier='All',_taPosType='All',_taBilling='All',_taPhantom=false,_taRecruiterFilter='All',_taCustomerFilter='All';
 var _taCandMap = {}; // {req_id: {count,stage,rank,lastActDays}} loaded from ta_candidates
 var _taClosedMTDMap = {}; // {firstName: closedCount} for current month from req_tracker
 var _emWeekJoiners = null;
@@ -9185,7 +9298,7 @@ async function loadTACandMap() {
     if (el && el.classList.contains('active')) el.innerHTML = renderTAPipeline();
   } catch(e){ console.warn('[loadTACandMap]',e.message); }
 }
-var _taView='pipeline';
+var _taView='req';
 var _taRecMap=[], _taRecMapLoaded=false, _taRecMapFilter='unmapped', _taRecruiterNames=[];
 var _rmgData=[], _rmgRegion='All', _rmgStatus='All', _rmgFlag='All';
 var _rmgShowAdd=false, _rmgAccounts=[];

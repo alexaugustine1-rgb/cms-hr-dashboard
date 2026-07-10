@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.7.0 | **Last updated:** 10 Jul 2026 — RMG parity: effective status display, Not-in-ZingHR badge, parity strip
+**Version:** 3.8.0 | **Last updated:** 10 Jul 2026 — TA Pipeline: By Customer ageing matrix, customer filter, name normaliser
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,15 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 10 Jul 2026 — TA Pipeline: By Customer ageing matrix, customer filter, name normaliser (Phase 2)
+- **New helpers:** `_CUST_ALIAS` (typo/alias map: COMAPANY→COMPANY, CMSIT→CMS IT), `_normCustomer(c)` (trim + collapse whitespace + uppercase + alias lookup), `_taExpandedCust` (row-expand state), `_taCustToggle(idx)` (global toggle fn), `_renderTACustMatrix(regionData, allScopeData)` (full matrix renderer).
+- **Customer filter:** `_taCustomerFilter='All'` added to filter globals. Customer `<select>` dropdown after Recruiter in filter bar, keyed on `_normCustomer`. All filters (KPI cards, aging strip, grid) read the same `data` base — no e970c51 regression.
+- **By Req / By Customer toggle:** `_taView` now takes values 'req' (was 'pipeline') | 'customer' | 'recruiter-map'. Sub-toggle rendered above filter row. Top-level Pipeline tab button active for both 'req' and 'customer' states.
+- **Ageing matrix:** 10-col grid (Account, Total, <7, 7-15, 16-30, 31-45, 46-60, 61-90, 90+, Regions). Tier group headers Platinum → Gold → Silver → Regular, sorted by total desc within group. 61-90 cells amber-tinted, 90+ red-tinted. Zero cells render '·'. Region filter: Total column shows "X /Y" (region count / all-scope count); regions chip shows ALL regions with open reqs regardless of filter. Row click expands customer's req rows (sorted by tat desc, showing req_id, designation, tat, region, recruiter + stage). Phantom toggle recounts matrix cells. Matrix footer shows grand total.
+- **`_taView='pipeline'` → `'req'`:** global init changed; all recruiter-map toggle buttons updated to use 'req' key with 'req'||'customer' active state.
+- **Line delta:** +113 lines (new-function additions — `_renderTACustMatrix` ~75 lines + helpers).
+- **Known Debt:** customer aliases hardcoded in `_CUST_ALIAS` — proper fix is alias column on `customer_accounts`; req with title leaked into customer field (RELIGAREBROKING…-Noida req) pending enrich fix.
 
 ### 10 Jul 2026 — RMG parity: effective status, Not-in-ZingHR badge, parity strip
 - **Context:** `sync_positions_from_req_tracker()` RPC extended (migration `sync_positions_insert_and_orphan_steps_20260709`). After every TAT upload it now: (A) refreshes req_status/req_age_days on matched rows, (B) INSERTs any Open req missing from account_positions_log (raised_by='tat_sync', manual fields null), (C) marks orphan rows (zinghr_req_id absent from req_tracker) with req_status='Not in ZingHR'. Result: account_positions_log has 173 rows req_status='Open', 9 req_status='Not in ZingHR', 323 req_status='Closed' (manual status still 'Open' on many — two-status model locked, Close action not yet built).
