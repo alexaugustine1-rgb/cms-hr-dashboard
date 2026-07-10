@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.8.0 | **Last updated:** 10 Jul 2026 — TA Pipeline: By Customer ageing matrix, customer filter, name normaliser
+**Version:** 3.9.0 | **Last updated:** 10 Jul 2026 — Candidate parser: upsert by ApplicationID, interview derivation, integrity guard, employee_master MTD
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,15 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 10 Jul 2026 — Candidate parser overhaul (Phase 3) — commit 5f82c8c
+- **Task 1 — Upsert by application_id:** `application_id: _tcVal(r,'ApplicationID')` added to mapped row. Rows with empty ApplicationID skipped (`_tcSkipped` count). `delete().neq('id',...)` removed. One-time legacy purge: `delete().is('application_id', null)` removes pre-upsert-era rows. Chunked `.insert()` replaced with `.upsert(chunk, {onConflict:'application_id'})` — upload is now idempotent; rolling-window uploads no longer destroy history.
+- **Task 2 — Interview derivation + taEffectiveStage:** 7 round-date columns scanned per candidate row: `Client Round 3 Date`, `HR interview Date`, `HR Round Date`, `T1 Interview Date`, `T2 Interview Date`, `Techincal Round 1 Date` (ZingHR typo, preserved exactly), `Technical Round 2 Date`. Derived fields written to DB: `interview_reached` (bool), `first_interview_date`, `last_interview_date`. Global `TA_STAGE_RANK` map defined (Screening→1 … Appointment Letter→10). Global `taEffectiveStage(r)` returns `'Interview'` if `r.interview_reached`, else `r.application_stage`. `loadTACandMap` boot query now selects `interview_reached`; stage ranking routes through `taEffectiveStage`. TA Pipeline stage column and RMG stage column display effective stage.
+- **Task 3 — Integrity guard:** Red persistent banner injected into `#uploadStatus` if 0 rows upserted or chunk errored (includes RLS failure message). Green `showToast` on success: `"{n} candidate rows written · {interviewCnt} at Interview · {skipped} skipped (no ApplicationID)"`. Both `_tcInserted===0` and `_tcErrMsg` paths covered.
+- **Task 4 — One MTD source:** `_joined` on Filled→Joined card now `(_emMTDJoiners!==null)?_emMTDJoiners:(S.mar_joined||0)`. `_emMTDJoiners` verified correct: employee_master rows with `emp_status='NewJoinee'`, `doj >= first of month`, `doj <= today`.
+- **Task 5 — pj rebuild guard:** `_syncRows` filter scoped to: stage in `_pjSyncStages` AND (`!employee_code OR (final_doj >= first day of prev month)`). Prevents full history re-rebuild from old uploaded data blowing away manually-set statuses on completed rows.
+- **Line delta:** +74 insertions / -34 deletions (net +40 lines).
+- **Known Debt:** `filled_date` column not yet on `req_tracker` — `_filled` KPI still reads `S.mar_fulfilled||S.mar_closed`; fix deferred (requires processReqTAT change + DB column). DB needs `application_id` unique constraint on `ta_candidates` for upsert to be truly safe — currently conflicts silently succeed but duplicate-ID rows could exist from pre-upsert era.
 
 ### 10 Jul 2026 — TA Pipeline: By Customer ageing matrix, customer filter, name normaliser (Phase 2)
 - **New helpers:** `_CUST_ALIAS` (typo/alias map: COMAPANY→COMPANY, CMSIT→CMS IT), `_normCustomer(c)` (trim + collapse whitespace + uppercase + alias lookup), `_taExpandedCust` (row-expand state), `_taCustToggle(idx)` (global toggle fn), `_renderTACustMatrix(regionData, allScopeData)` (full matrix renderer).
