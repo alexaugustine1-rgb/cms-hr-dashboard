@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.4.1 | **Last updated:** 6 Jul 2026 — Hiring Report header cleanup (7846abc)
+**Version:** 3.7.0 | **Last updated:** 10 Jul 2026 — RMG parity: effective status display, Not-in-ZingHR badge, parity strip
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,34 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 10 Jul 2026 — RMG parity: effective status, Not-in-ZingHR badge, parity strip
+- **Context:** `sync_positions_from_req_tracker()` RPC extended (migration `sync_positions_insert_and_orphan_steps_20260709`). After every TAT upload it now: (A) refreshes req_status/req_age_days on matched rows, (B) INSERTs any Open req missing from account_positions_log (raised_by='tat_sync', manual fields null), (C) marks orphan rows (zinghr_req_id absent from req_tracker) with req_status='Not in ZingHR'. Result: account_positions_log has 173 rows req_status='Open', 9 req_status='Not in ZingHR', 323 req_status='Closed' (manual status still 'Open' on many — two-status model locked, Close action not yet built).
+- **Problem fixed:** RMG Workspace was reading manual `status` only → showed 391 open instead of 173.
+- **Fix (commit this session):** Added `_rmgEffStatus(r)` helper (priority: manual Closed > Not in ZingHR > req_status Closed > null/empty req_status → Not in ZingHR > Open). All status filtering and display now use effective status. Four-pill status filter: All / Open / Closed / Not in ZingHR (violet). Not-in-ZingHR rows get violet left border. Rows auto-closed by ZingHR (req_status=Closed but manual status=Open) show Closed pill + grey "auto" suffix — manual `status` field NOT touched. Parity strip added above KPI cards: "RMG Open: 173 · TA Pipeline Open: 173 ✓" (green tick when match, red delta + message when not).
+- **Open count corrected:** 391 (reading manual status) → 173 (effective status).
+- **Known Debt:** Close action still pending — manual `status` flip not yet built. Until then, RMG cannot manually override a ZingHR-auto-closed req. The 323 rows with req_status=Closed/manual status=Open show as Closed (correct — ZingHR is authoritative for auto-close direction).
+
+### 8 Jul 2026 — TA scoreboard vs grid reconciliation (single-owner attribution)
+- **Reported gap:** Ajith's req grid (top table) showed ~16 open positions but his recruiter scoreboard read 13 active / 11 critical. Confirmed systemic — nearly every recruiter was off in both directions (e.g. Caral card 23 vs live 3, Nikita 43 vs 18, Salma 25 vs 45), plus phantom rows (bloated `Unassigned` 67, stray `Meenakshi`).
+- **Root cause (two layers):** (1) The scoreboard rendered from the frozen `data_cache.ta_scorecard` snapshot (written once at the last TAT upload, 02:56), while the grid reads live `data_cache.ta_reqs`. Reqs re-owned after the snapshot showed in the grid but not the scoreboard. (2) The stored scoreboard key had a **double space** (`"Ajith  Inguva"`) — recruiter fields carry inconsistent whitespace/leading-trailing spaces, so exact-string grouping splintered a person across variants while the grid's loose `indexOf` did not.
+- **Fix (commit 6e8e142):** Added one global `_taOwner(r)` (primary_recruiter preferred → else first non-HRBP on `ta_recruiter`, with paren-strip + whitespace-collapse + trim) and `_taBuildRecCounts(rows)`. `renderTAPipeline` now builds `window._taLiveCounts` from `data` **before** the recruiter filter, and three consumers all use `_taOwner`: the grid recruiter filter, the scoreboard rows (active/critical/plat_gold/backlog_age overridden from live counts; union of TA_SCORECARD names + live owners; sorted by active desc), and the personal-KPI `_recData`. `data_cache.ta_scorecard` is no longer trusted for active/critical/backlog — only for pipeline/offers/joined/fill (candidate-sourced). Result: clicking any recruiter yields a table whose row count equals their scoreboard number.
+- **Post-fix live distribution (active / crit>45d, 180 open total):** Salma 45/44 · Kumari 25/15 · Nilam 18/15 · Nikita 18/12 · Juee 17/14 · Ajith 16/15 · Mousumi 10/7 · Dhananjay 8/2 · Neha 6/5 · Caral 3/2 · Pijush 1/0 · Unassigned 13/0.
+- **Data flags (not display bugs):** Salma has 45 reqs with `primary_recruiter='Salma Saifi'` — real per Neha's mapping; confirm the concentration is intentional. `Unassigned` 13 = reqs with empty primary_recruiter and only HRBP names on the ZingHR requisition — need a recruiter assigned.
+- **Ops note:** commit had to be run from the local Claude Code terminal, not the Cowork bash sandbox — the sandbox served a truncated copy of the 1.2 MB index.html (git saw stale metadata / zero changes). See Cowork sync note below. Edits themselves were fine via the Read/Edit file tools; only git-from-sandbox was unsafe.
+
+### 7 Jul 2026 — TA Pipeline recruiter filter + scorecard, Hiring Report fixes, Suman login (session 1)
+- **_lookupTier global scope fix (4ff6795):** `_tierMap`, `_tierList`, `_lookupTier` were defined inside a nested async function — `_loadHRCycleData` called them before that scope ran → ReferenceError → blank Hiring Report. Promoted all three to global scope. Added `customer_accounts` fetch at top of `_loadHRCycleData` to populate tier maps before any lookup.
+- **closedReqs query fix (53d7993):** `req_tracker` closed reqs filter used chained `.not().neq()` (invalid) — replaced with `.gt('primary_recruiter','')`.
+- **Hiring Report recruiter closures (a4a2f05):** `_loadHRCycleData` now fetches closed reqs within cycle window from `req_tracker` (primary_recruiter, tat). `renderHiringReport` shows recruiter performance table with Closed, Avg TAT, and % of cycle total.
+- **TA Pipeline recruiter filter system (6137e7d, cdb597e, fb82687):** `_taRecruiterFilter` global (first-name string or 'All'). Clicking a scorecard row sets filter. Pill with clear button shown in filter bar. Personal KPI bar renders when filter active (Open Reqs, Critical, Plat/Gold, Closed MTD, Avg TAT, Dropouts). HRBP exclusion (`suhail,somasri,ayush,abhishek,priya paul,shambhavi`) applied to both scorecard rows and dropdown. Auto-scope: TA recruiter logins default to their own name.
+- **loadTAClosedMTD (05c91ea):** New async function fetches `req_tracker` (status=Closed, current month, primary_recruiter not empty), builds `_taClosedMTDMap = {firstName: count, firstName_tat: avgTAT}`. Triggered at boot after ta_reqs loads (setTimeout 400ms). Re-renders TA Pipeline tab if active.
+- **Recruiter dropdown (05c91ea):** `<select>` in TA Pipeline filter bar listing first names from TA_SCORECARD (HRBP-excluded). Highlights purple when filter active.
+- **Scorecard 9-col layout (05c91ea):** Added `Closed MTD` column sourced from `_taClosedMTDMap`. Header: `Recruiter,Active,Crit,Backlog,P/G,Pipeline,Closed MTD,Avg TAT,Conv%`.
+- **Scorecard active count source (0b57407):** Build loop now prefers `r.primary_recruiter` (Neha's manual mapping from req_tracker) over raw ZingHR `ta_recruiter`. Fallback splits `ta_recruiter` on comma, skips HRBPs, takes first. `primary_recruiter` is included in the TA_ACTIVE_REQS select (line ~11573).
+- **Combined Filled→Joined KPI card (0b57407):** Replaced two separate "Roles Filled" + "People Joined" KPI cards with one combined card showing `filled → joined` side-by-side with "N pending joining" (amber) or "all joined ✓" (green). Grid now `repeat(4,1fr) 1.2fr`.
+- **Suman Sharma login fix:** Account created via SQL → three GoTrue columns were NULL instead of `''`: `confirmation_token`, `email_change`. GoTrue crashed with `sql: Scan error on column index N, name "X": converting NULL to string is unsupported` → HTTP 500. Fixed via `UPDATE auth.users SET col = COALESCE(col,'')`. Password reset to `CMS2026` (no special chars). **Rule: any user created directly via SQL INSERT must have these columns set to `''`: `confirmation_token`, `recovery_token`, `email_change_token_new`, `email_change_token_current`, `email_change`, `phone`.**
+- **Commits this session:** 4ff6795, 53d7993, a4a2f05, 7846abc, 6137e7d, cdb597e, fb82687, 05c91ea, ff9de01, 0b57407
 
 ### 6 Jul 2026 — Hiring Report tab, sidebar gating (session 3)
 - **Hiring Report tab (7dc1cbe):** New tab `📈 Hiring Report` added after TA Pipeline in sidebar. Tab id: `hiringreport`. Functions: `loadHiringReport`, `_loadHRCycleData`, `renderHiringReport`, `saveHiringCycle`. Data sources: `hiring_cycles` table (named cycle periods), `employee_master` (DOJ-ranged joiners), `req_tracker` (open reqs + critical aging >100d), `prospective_joiners` (next cycle pipeline — Offer Accepted, DOJ after cycle end), `_taCandMap` (pipe/stage per req). Renders: KPI strip (total joined + region cards with realization %), account-wise closures table, critical aging grid, next cycle pipeline. New cycle form (admin/TA only). Access: admin, ta (function_type), executive — all others blocked.
@@ -512,18 +540,17 @@ PENDING NEXT SESSION:
 - training_sessions (31 rows seeded), training_pipeline
 - hiring_cycles (migration PENDING — needed for Hiring Report tab; cols: id, name, label, cycle_from, cycle_to, notes, created_by, created_at)
 
-### account_positions_log Schema (17 Jun 2026, updated 18 Jun 2026)
-393 rows after June load. Migration: rmg_positions_log_columns_and_rls (20260617).
-req_status and req_age_days now synced from req_tracker via sync_positions_from_req_tracker() RPC on every TAT upload.
+### account_positions_log Schema (17 Jun 2026, updated 10 Jul 2026)
+505 rows as of 09 Jul 2026 (173 Open, 9 Not in ZingHR, 323 Closed). Migration: rmg_positions_log_columns_and_rls (20260617) + sync_positions_insert_and_orphan_steps_20260709.
+req_status and req_age_days auto-synced via sync_positions_from_req_tracker() RPC on every TAT upload. RPC also INSERTs missing Open reqs (raised_by='tat_sync') and marks orphans req_status='Not in ZingHR'.
 RLS: 4 policies (aplog_select/insert/update/delete).
 Key columns: zinghr_req_id, account_name, region, position_type, designation,
 elah_demand_id (text — Elah demand line, entered by RMG), demand_region,
 emp_category (FTE/ATE/Retainer), backfill_emp_code, backfill_emp_name,
-req_status (Open/Closed — vocab aligned 18 Jun; auto-synced from req_tracker, do not hand-edit), req_age_days, in_elah (bool), days_vacant
-(GENERATED STORED), updated_by, updated_at, created_at.
-Seed breakdown — position_type: Backfill—Resignation 188, New Position 67,
-Backfill—Internal Movement 22, Redeployment 1. req_status: Approved 208, Closed 66,
-null 4. regions: West 163, South 90, null 24, East 1. in_elah: true 249, false 29.
+req_status (Open/Closed/Not in ZingHR — auto-synced from req_tracker, do not hand-edit),
+status (manual RMG override — Close action pending, not yet built),
+req_age_days, in_elah (bool), days_vacant (GENERATED STORED), raised_by, updated_by, updated_at, created_at.
+Two-status model: req_status=auto (ZingHR), status=manual (RMG). _rmgEffStatus() in UI resolves both.
 
 RMG workflow (until ZingHR position code goes live): RMG sees vacancy → raises req
 in ZingHR (gets req_id) → enters zinghr_req_id in HR CC (Resignation tab for
@@ -537,6 +564,8 @@ planned_leaves, employee_account_mapping (not yet built), account_positions_log.
 ### Postgres Functions
 - normalise_account_name(raw_name text) → text (pg_trgm, similarity >0.4; exact →
   elah_name → fuzzy → raw). Shared with OPS360 — call, don't reimplement.
+- sync_positions_from_req_tracker() — extended 09 Jul 2026 (migration: sync_positions_insert_and_orphan_steps_20260709).
+  Step A: UPDATE req_status/req_age_days on matched rows. Step B: INSERT Open reqs missing from account_positions_log (raised_by='tat_sync'). Step C: mark orphan rows req_status='Not in ZingHR'. Called in processReqTAT after enrich_req_tracker_from_accounts.
 - reconcile_prospective_joiners() → integer (migration: reconcile_prospective_joiners_fuzzy_doj, 6 Jul 2026).
   Fuzzy-matches prospective_joiners against employee_master using pg_trgm similarity + DOJ window.
   Updates matched rows to status='Joined'. Returns count of rows updated.

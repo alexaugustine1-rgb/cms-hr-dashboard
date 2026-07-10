@@ -9426,7 +9426,7 @@ function _renderRMGGrid(){
 
   var data=_rmgData.slice();
   if(_rmgRegion!=='All') data=data.filter(function(r){return r.region===_rmgRegion;});
-  if(_rmgStatus!=='All') data=data.filter(function(r){return r.req_status===_rmgStatus;});
+  if(_rmgStatus!=='All') data=data.filter(function(r){return _rmgEffStatus(r)===_rmgStatus;});
   var cardBase=data.slice();
   if(_rmgFlag!=='All')   data=data.filter(function(r){return _rmgReconFlag(r).type===_rmgFlag;});
 
@@ -9449,7 +9449,25 @@ function _renderRMGGrid(){
       +'👁 Read-only view — contact RMG to update positions</div>'
     :'';
 
-  summaryEl.innerHTML=readOnlyBanner
+  var _rmgOpenCnt=_rmgData.filter(function(r){return _rmgEffStatus(r)==='Open';}).length;
+  var _taOpenCnt=(typeof TA_ACTIVE_REQS!=='undefined'&&TA_ACTIVE_REQS)?TA_ACTIVE_REQS.length:0;
+  var _parityOk=_rmgOpenCnt===_taOpenCnt;
+  var _parityStrip='<div style="font-size:11px;padding:5px 12px;margin-bottom:10px;'
+    +'border-radius:4px;background:var(--surface3);border:1px solid var(--border);'
+    +'display:flex;align-items:center;gap:8px">'
+    +'<span style="color:var(--muted)">RMG Open: <strong style="color:var(--text)">'
+    +_rmgOpenCnt+'</strong></span>'
+    +'<span style="color:var(--muted2)">·</span>'
+    +'<span style="color:var(--muted)">TA Pipeline Open: <strong style="color:var(--text)">'
+    +_taOpenCnt+'</strong></span>'
+    +(_parityOk
+      ?'<span style="color:var(--green);font-weight:700;margin-left:4px">✓</span>'
+      :'<span style="color:var(--red);font-weight:600;margin-left:4px">Δ'
+        +Math.abs(_rmgOpenCnt-_taOpenCnt)
+        +' mismatch — run TAT upload or check orphans</span>')
+    +'</div>';
+
+  summaryEl.innerHTML=_parityStrip+readOnlyBanner
     +'<div style="display:flex;justify-content:space-between;align-items:center;'
     +'margin-bottom:10px">'
     +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
@@ -9472,8 +9490,9 @@ function _renderRMGGrid(){
     }).join('')
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
     +'<span style="font-size:11px;color:var(--muted)">Status:</span>'
-    +['All','Open','Closed'].map(function(v){
-      return fbtn(v,_rmgStatus===v,"_rmgStatus='"+v+"';_renderRMGGrid()",'var(--accent)');
+    +['All','Open','Closed','Not in ZingHR'].map(function(v){
+      return fbtn(v,_rmgStatus===v,"_rmgStatus='"+v+"';_renderRMGGrid()",
+        v==='Not in ZingHR'?'#7c3aed':'var(--accent)');
     }).join('')
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
     +'<span style="font-size:11px;color:var(--muted)">Flag:</span>'
@@ -9525,7 +9544,8 @@ function _renderRMGGrid(){
     var isNew = r.created_at && (_rmgNow - new Date(r.created_at).getTime()) < 48*3600000;
     var rowBg = flag.type==='RED'?'rgba(248,113,113,.02)'
       :flag.type==='AMBER'?'rgba(251,191,36,.02)':'';
-    var rowBorder = isNew ? 'border-left:3px solid var(--amber);' : '';
+    var rowBorder = isNew ? 'border-left:3px solid var(--amber);'
+      : _rmgEffStatus(r)==='Not in ZingHR' ? 'border-left:3px solid #7c3aed;' : '';
 
     var elahCell=canEdit
       ?'<input value="'+esc(r.elah_demand_id||'')+'" placeholder="Elah ID" '
@@ -9568,8 +9588,15 @@ function _renderRMGGrid(){
       +'<div style="font-size:10px;color:var(--muted)">'+esc(r.region||'—')+'</div>'
       +'<div>'+ptCell+'</div>'
       +'<div>'+bfCell+'</div>'
-      +'<div style="font-size:10px;color:var(--muted)">'
-      +esc(r.req_status||'—')+'</div>'
+      +(function(){
+          var _es=_rmgEffStatus(r);
+          var _esCol=_es==='Not in ZingHR'?'#7c3aed':_es==='Closed'?'var(--muted)':'var(--green)';
+          var _autoSfx=(_es==='Closed'&&(r.status||'')==='Open')
+            ?'<span style="font-size:8px;color:var(--muted2);margin-left:3px">auto</span>':'';
+          return '<div style="font-size:10px;color:'+_esCol
+            +';white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(_es)+'">'
+            +esc(_es)+_autoSfx+'</div>';
+        })()
       +'<div style="font-weight:700;color:'+ageCol+'">'+(r.req_age_days||0)+'</div>'
       +'<div>'+flagBadge+'</div>'
       +(function(){
@@ -9761,6 +9788,14 @@ function _rmgReconFlag(r){
     &&(!r.backfill_emp_code||!r.backfill_emp_code.trim()))
     return{type:'AMBER',label:'Backfill emp?',col:'var(--amber)',bg:'rgba(251,191,36,.15)'};
   return{type:'GREEN',label:'Reconciled',col:'var(--green)',bg:'rgba(52,211,153,.15)'};
+}
+
+function _rmgEffStatus(r){
+  if((r.status||'')==='Closed') return 'Closed';
+  if((r.req_status||'')==='Not in ZingHR') return 'Not in ZingHR';
+  if((r.req_status||'')==='Closed') return 'Closed';
+  if(r.req_status===null||r.req_status===undefined||r.req_status==='') return 'Not in ZingHR';
+  return 'Open';
 }
 
 async function saveRMGField(rowId,field,value){
