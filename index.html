@@ -9806,7 +9806,7 @@ function _renderRMGGrid(){
 }
 
 function exportRMGWorkspaceXlsx(){
-  var role=_currentUser||{};
+  var role=_sbRole||{};
   var canView=role.role==='admin'||role.function_type==='rmg'
     ||role.function_type==='hrbp'||role.function_type==='ta'
     ||role.function_type==='hrops';
@@ -10130,7 +10130,7 @@ function renderRMGDeployView(){
     +['All','North','South','East','West'].map(function(v){
       var active=_rmgDepRegion===v;
       var locked=regionLocked&&v!==_rmgDepRegion;
-      var onclick=regionLocked?'':'onclick="_rmgDepRegion=\''+v+'\';_renderRMGDeploy()"';
+      var onclick=regionLocked?'':'onclick="_rmgDepRegion=\''+v+'\';_rmgDepCustomer=\'All\';_renderRMGDeploy()"';
       return '<button '+onclick+' style="padding:3px 10px;border-radius:20px;font-size:11px;'
         +'border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'
         +(active?'var(--accent)':'none')+';color:'+(active?'var(--bg)':'var(--accent)')
@@ -10140,6 +10140,8 @@ function renderRMGDeployView(){
 
   var _depCustSeen={};
   var _depCustUniq=(_rmgAccounts||[]).filter(function(a){
+    return _rmgDepRegion==='All'||a.region===_rmgDepRegion;
+  }).filter(function(a){
     if(_depCustSeen[a.name]) return false; _depCustSeen[a.name]=1; return true;
   });
   var custOpts='<option value="All">All Customers</option>'
