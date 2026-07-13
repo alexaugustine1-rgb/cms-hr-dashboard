@@ -9329,6 +9329,10 @@ var _rmgData=[], _rmgRegion='All', _rmgStatus='All', _rmgFlag='All';
 var _rmgView='recon';
 var _rmgEmpData=[], _rmgDepRegion='All', _rmgDepCustomer='All', _rmgDepSearch='';
 var _rmgPendingMoves=0;
+var RMG_BENCH_BUCKETS=['BACKUP POOL'];
+var RMG_ENABLEMENT_TAGS=['ENABLEMENT'];
+function _rmgIsBench(c){return RMG_BENCH_BUCKETS.indexOf(String(c||'').trim().toUpperCase())>=0;}
+function _rmgIsEnablement(c){return RMG_ENABLEMENT_TAGS.indexOf(String(c||'').trim().toUpperCase())>=0;}
 var _rmgShowAdd=false, _rmgAccounts=[];
 
 async function loadTARecruiterMap(){
@@ -10266,12 +10270,16 @@ function renderRMGDeployView(){
       +'<div style="font-size:10px;color:var(--muted2)">—</div>'
       +(canEditDeploy
         ?'<div style="display:flex;gap:4px">'
-          +'<button onclick="openRMGMoveModal(\''+esc(r.emp_code||'')+'\',\''+esc(r.customer||'')+'\',\''+esc(r.region||'')+'\',\''+esc(r.emp_status||'')+'\')" '
-          +'style="padding:2px 8px;font-size:10px;border-radius:4px;border:1px solid var(--accent);'
-          +'background:none;color:var(--accent);cursor:pointer">Move</button>'
-          +'<button onclick="openRMGBenchModal(\''+esc(r.emp_code||'')+'\',\''+esc(r.customer||'')+'\',\''+esc(r.region||'')+'\',\''+esc(r.emp_status||'')+'\')" '
-          +'style="padding:2px 8px;font-size:10px;border-radius:4px;border:1px solid var(--amber);'
-          +'background:none;color:var(--amber);cursor:pointer">Bench&#8594;Bill</button>'
+          +(!_rmgIsBench(r.customer)&&!_rmgIsEnablement(r.customer)
+            ?'<button onclick="openRMGMoveModal(\''+esc(r.emp_code||'')+'\',\''+esc(r.customer||'')+'\',\''+esc(r.region||'')+'\',\''+esc(r.emp_status||'')+'\')" '
+              +'style="padding:2px 8px;font-size:10px;border-radius:4px;border:1px solid var(--accent);'
+              +'background:none;color:var(--accent);cursor:pointer">Move</button>'
+            :'')
+          +(_rmgIsBench(r.customer)
+            ?'<button onclick="openRMGBenchModal(\''+esc(r.emp_code||'')+'\',\''+esc(r.customer||'')+'\',\''+esc(r.region||'')+'\',\''+esc(r.emp_status||'')+'\')" '
+              +'style="padding:2px 8px;font-size:10px;border-radius:4px;border:1px solid var(--amber);'
+              +'background:none;color:var(--amber);cursor:pointer">Bench&#8594;Bill</button>'
+            :'')
           +'</div>'
         :'')
       +'</div>';
