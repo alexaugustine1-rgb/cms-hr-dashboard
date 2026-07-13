@@ -9661,10 +9661,10 @@ function _renderRMGGrid(){
   }
 
   var hdr='<div style="display:grid;'
-    +'grid-template-columns:90px 90px 170px 65px 140px 75px 80px 55px 95px 38px 65px 90px 75px;'
+    +'grid-template-columns:90px 90px 170px 130px 65px 140px 75px 80px 55px 95px 38px 65px 90px 75px;'
     +'padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border);'
     +'border-radius:8px 8px 0 0">'
-    +['Req ID','Elah ID','Account','Region','Position Type',
+    +['Req ID','Elah ID','Account','Position','Region','Position Type',
       'Backfill Emp','Status','Age (d)','Flag','Pipe','Stage','Added By','Added On'].map(function(h){
       return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;'
         +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
@@ -9714,7 +9714,7 @@ function _renderRMGGrid(){
     var addedAgo = _rmgTimeAgo(r.created_at);
 
     return '<div style="display:grid;'
-      +'grid-template-columns:90px 90px 170px 65px 140px 75px 80px 55px 95px 38px 65px 90px 75px;'
+      +'grid-template-columns:90px 90px 170px 130px 65px 140px 75px 80px 55px 95px 38px 65px 90px 75px;'
       +'padding:6px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;'
       +'align-items:center;background:'+rowBg+';'+rowBorder+'">'
       +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--muted2)">'
@@ -9723,6 +9723,9 @@ function _renderRMGGrid(){
       +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;'
       +'text-overflow:ellipsis;font-size:11px" title="'+esc(r.account_name||'')+'">'
       +esc((r.account_name||'—').substring(0,24))+'</div>'
+      +'<div style="color:var(--text);white-space:nowrap;overflow:hidden;'
+      +'text-overflow:ellipsis;font-size:11px" title="'+esc((r.designation||'').replace(/\s+/g,' ').trim())+'">'
+      +esc((r.designation||'—').replace(/\s+/g,' ').trim().substring(0,22))+'</div>'
       +'<div style="font-size:10px;color:var(--muted)">'+esc(r.region||'—')+'</div>'
       +'<div>'+ptCell+'</div>'
       +'<div>'+bfCell+'</div>'
