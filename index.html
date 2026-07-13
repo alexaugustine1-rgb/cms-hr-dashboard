@@ -9641,7 +9641,7 @@ function _renderRMGGrid(){
 
   summaryEl.innerHTML=_parityStrip+readOnlyBanner
     +'<div style="display:flex;justify-content:space-between;align-items:center;'
-    +'margin-bottom:10px">'
+    +'flex-wrap:wrap;gap:8px;margin-bottom:10px">'
     +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
     +_rmgKpi('Total Positions',total,'var(--accent)')
     +_rmgKpi('No Elah Demand ID',noElah,'var(--red)')
@@ -9649,6 +9649,7 @@ function _renderRMGGrid(){
     +_rmgKpi('AMBER — Verify',ambCnt,'var(--amber)')
     +_rmgKpi('GREEN — Reconciled',grnCnt,'var(--green)')
     +'</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
     +(canEdit
       ?'<button onclick="toggleRMGAddPanel()" style="padding:7px 18px;border-radius:6px;'
         +'font-size:12px;font-weight:600;border:none;background:var(--accent);'
@@ -9657,6 +9658,7 @@ function _renderRMGGrid(){
     +'<button onclick="exportRMGWorkspaceXlsx()" style="padding:7px 14px;border-radius:6px;'
     +'font-size:12px;font-weight:600;border:1px solid var(--accent);background:none;'
     +'color:var(--accent);cursor:pointer">&#11015; Excel</button>'
+    +'</div>'
     +'</div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
     +'<span style="font-size:11px;color:var(--muted)">Region:</span>'
