@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.10.0 | **Last updated:** 10 Jul 2026 — Phase 3 gaps: taEffectiveStage rank guard, DB candidate date, EM MTD sources, filled_date
+**Version:** 3.11.0 | **Last updated:** 13 Jul 2026 — TA scoreboard/grid unified on live owner attribution; RMG grid Position/Designation column
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,13 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 13 Jul 2026 — TA scoreboard↔grid reconciliation + RMG Position column
+- **TA single-owner attribution (commit 6e8e142):** Recruiter scoreboard was rendering from the frozen `data_cache.ta_scorecard` snapshot while the top req table read live `data_cache.ta_reqs` — they disagreed for nearly every recruiter (Ajith showed 16 open in the grid vs 13/11 on the scoreboard; Caral card 23 vs live 3; Salma 25 vs 45; plus a phantom `Unassigned` 67 and stray `Meenakshi`). Root cause: two sources never reconciled + exact-string grouping splintered names on inconsistent whitespace (stored key was `"Ajith  Inguva"` with a double space). Fix: new global `_taOwner(r)` (primary_recruiter preferred → else first non-HRBP on `ta_recruiter`; paren-strip + whitespace-collapse + trim) and `_taBuildRecCounts(rows)`. `renderTAPipeline` builds `window._taLiveCounts` from `data` **before** the recruiter filter; grid recruiter filter, scoreboard rows (active/critical/plat_gold/backlog_age overridden from live counts; union of TA_SCORECARD names + live owners; sorted active desc), and personal-KPI `_recData` all use `_taOwner`. `ta_scorecard` cache no longer trusted for active/critical/backlog (still used for pipeline/offers/joined/fill). Now clicking any recruiter yields a table whose row count == their scoreboard active.
+- **Post-fix live distribution (active / crit>45d; 180 open):** Salma 45/44 · Kumari 25/15 · Nilam 18/15 · Nikita 18/12 · Juee 17/14 · Ajith 16/15 · Mousumi 10/7 · Dhananjay 8/2 · Neha 6/5 · Caral 3/2 · Pijush 1/0 · Unassigned 13/0.
+- **Data flags (not display bugs):** Salma carries 45 reqs as `primary_recruiter` — real per Neha's mapping; confirm concentration is intended. `Unassigned` 13 = empty primary_recruiter + only HRBP names on the ZingHR requisition — need a recruiter assigned.
+- **RMG grid Position/Designation column (commit 5b6c442):** `_renderRMGGrid` gained a `Position` column between Account and Region, sourced from `account_positions_log.designation` (507/507 populated, incl. tat_sync rows). Fixed 130px width, whitespace-normalized on display, truncated to 22 chars with full value in hover tooltip (same pattern as Account). Grid `grid-template-columns` widened 13→14 tracks in both header and data row; header label array gained `'Position'`. node --check: clean pass.
+- **Ops note (recurring):** Cowork bash sandbox served a stale/truncated copy of index.html (and a stale KNOWLEDGE.md — read as 3.5.0 at session start vs real 3.10.0). Commits must be run from the local Claude Code terminal; verify `git diff` is only the intended hunks first. See Cowork sync note.
 
 ### 10 Jul 2026 — Phase 3 gaps: taEffectiveStage, DB date, MTD, filled_date — commit 11ba4d9
 - **taEffectiveStage rank guard:** Fixed overly broad rule — was returning `'Interview'` for ANY `interview_reached=true` candidate, including those already at Appointment Letter. New condition: `interview_reached && rank > 0 && rank < (TA_STAGE_RANK['Pre Offer Verification']||5)`. Rejected/blacklisted stages pass through unchanged (rank=0 effectively). Candidates at Offer Letter, Appointment Letter, etc. with interview dates now show their actual stage.
