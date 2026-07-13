@@ -9326,6 +9326,8 @@ async function loadTACandMap() {
 var _taView='req';
 var _taRecMap=[], _taRecMapLoaded=false, _taRecMapFilter='unmapped', _taRecruiterNames=[];
 var _rmgData=[], _rmgRegion='All', _rmgStatus='All', _rmgFlag='All';
+var _rmgView='recon';
+var _rmgEmpData=[], _rmgDepRegion='All', _rmgDepCustomer='All', _rmgDepSearch='';
 var _rmgShowAdd=false, _rmgAccounts=[];
 
 async function loadTARecruiterMap(){
@@ -9509,20 +9511,37 @@ function renderRMGShell(){
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
   var canView=role.role==='admin'||role.function_type==='rmg'
     ||role.function_type==='hrbp'||role.function_type==='ta'
-    ||role.function_type==='hrops';
+    ||role.role==='hrops'||role.function_type==='hrops';
   if(!canView) return '<div style="padding:60px;text-align:center;'
     +'color:var(--muted)">Access restricted.</div>';
+  var canViewDeploy=role.role==='admin'||role.function_type==='rmg'
+    ||role.role==='hrops'||role.function_type==='hrops'
+    ||role.function_type==='hrbp';
+  var pills='<div style="display:flex;gap:8px;margin-bottom:20px">'
+    +'<button onclick="_rmgSwitchView(\'recon\')" id="rmg-pill-recon" style="padding:5px 16px;'
+    +'border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;'
+    +'border:1px solid var(--accent);background:var(--accent);color:var(--bg)">'
+    +'Reconciliation</button>'
+    +(canViewDeploy
+      ?'<button onclick="_rmgSwitchView(\'deploy\')" id="rmg-pill-deploy" style="padding:5px 16px;'
+        +'border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;'
+        +'border:1px solid var(--accent);background:none;color:var(--accent)">'
+        +'Deployment</button>'
+      :'')
+    +'</div>';
   return '<div style="padding:20px 28px;max-width:1400px" id="rmg-root">'
     +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
     +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">'
     +'Resource Management Group</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;'
     +'letter-spacing:1px;color:var(--text);margin-bottom:16px">'
-    +'RMG Workspace — Req ↔ Elah Reconciliation</div>'
+    +'RMG Workspace</div>'
+    +pills
     +'<div id="rmg-summary"></div>'
     +'<div id="rmg-add-panel"></div>'
     +'<div id="rmg-grid" style="margin-top:16px;color:var(--muted);'
     +'font-size:12px">Loading…</div>'
+    +'<div id="rmg-deploy-view" style="margin-top:8px"></div>'
     +'</div>';
 }
 
@@ -9530,8 +9549,15 @@ async function loadRMGTab(){
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
   var canView=role.role==='admin'||role.function_type==='rmg'
     ||role.function_type==='hrbp'||role.function_type==='ta'
-    ||role.function_type==='hrops';
+    ||role.role==='hrops'||role.function_type==='hrops';
   if(!canView) return;
+  if(_rmgView==='deploy'){
+    var canViewDeploy=role.role==='admin'||role.function_type==='rmg'
+      ||role.role==='hrops'||role.function_type==='hrops'
+      ||role.function_type==='hrbp';
+    if(!canViewDeploy) _rmgView='recon';
+    else { _rmgSwitchView('deploy'); return; }
+  }
   if(role.function_type==='hrbp'&&role.region&&role.region!=='Pan India'){
     _rmgRegion=role.region;
   }
@@ -10013,6 +10039,315 @@ async function saveRMGField(rowId,field,value){
     if(idx!==-1){_rmgData[idx][field]=prev;_renderRMGGrid();}
     if(typeof showToast==='function') showToast('Save failed: '+e.message,'error');
   }
+}
+
+function _rmgSwitchView(v){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canViewDeploy=role.role==='admin'||role.function_type==='rmg'
+    ||role.role==='hrops'||role.function_type==='hrops'
+    ||role.function_type==='hrbp';
+  if(v==='deploy'&&!canViewDeploy) v='recon';
+  _rmgView=v;
+  var pr=document.getElementById('rmg-pill-recon');
+  var pd=document.getElementById('rmg-pill-deploy');
+  var grid=document.getElementById('rmg-grid');
+  var summ=document.getElementById('rmg-summary');
+  var addp=document.getElementById('rmg-add-panel');
+  var depv=document.getElementById('rmg-deploy-view');
+  if(pr){pr.style.background=v==='recon'?'var(--accent)':'none';
+    pr.style.color=v==='recon'?'var(--bg)':'var(--accent)';}
+  if(pd){pd.style.background=v==='deploy'?'var(--accent)':'none';
+    pd.style.color=v==='deploy'?'var(--bg)':'var(--accent)';}
+  if(v==='recon'){
+    if(grid) grid.style.display='';
+    if(summ) summ.style.display='';
+    if(addp) addp.style.display='';
+    if(depv) depv.innerHTML='';
+    _renderRMGGrid();
+  } else {
+    if(grid) grid.style.display='none';
+    if(summ) summ.style.display='none';
+    if(addp) addp.style.display='none';
+    _renderRMGDeploy();
+    if(!_rmgEmpData.length) loadRMGDeployment();
+  }
+}
+
+async function loadRMGDeployment(){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  if(role.function_type==='hrbp'&&role.region&&role.region!=='Pan India'){
+    _rmgDepRegion=role.region;
+  }
+  var depv=document.getElementById('rmg-deploy-view');
+  if(depv) depv.innerHTML='<div style="padding:32px;color:var(--muted);font-size:12px">Loading employees…</div>';
+  _rmgEmpData=[];
+  var from=0, batch=1000, done=false;
+  while(!done){
+    var res=await _sb.from('employee_master')
+      .select('emp_code,name,customer,region,designation,emp_status')
+      .range(from,from+batch-1);
+    if(res.error){ if(typeof showToast==='function') showToast('Load failed: '+res.error.message,'error'); break; }
+    var rows=res.data||[];
+    _rmgEmpData=_rmgEmpData.concat(rows);
+    if(rows.length<batch) done=true;
+    else from+=batch;
+  }
+  _renderRMGDeploy();
+}
+
+function _renderRMGDeploy(){
+  var depv=document.getElementById('rmg-deploy-view');
+  if(!depv) return;
+  depv.innerHTML=renderRMGDeployView();
+}
+
+function renderRMGDeployView(){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canViewDeploy=role.role==='admin'||role.function_type==='rmg'
+    ||role.role==='hrops'||role.function_type==='hrops'
+    ||role.function_type==='hrbp';
+  if(!canViewDeploy) return '<div style="padding:60px;text-align:center;color:var(--muted)">Access restricted.</div>';
+  var canEditDeploy=role.role==='admin'||role.function_type==='rmg';
+  var regionLocked=role.function_type==='hrbp'&&role.region&&role.region!=='Pan India';
+
+  var data=_rmgEmpData.slice();
+  if(_rmgDepRegion!=='All') data=data.filter(function(r){return r.region===_rmgDepRegion;});
+  if(_rmgDepCustomer!=='All') data=data.filter(function(r){return r.customer===_rmgDepCustomer;});
+  var srch=_rmgDepSearch.trim().toLowerCase();
+  if(srch) data=data.filter(function(r){
+    return (r.emp_code||'').toLowerCase().indexOf(srch)>=0
+      ||(r.name||'').toLowerCase().indexOf(srch)>=0;
+  });
+
+  var total=data.length;
+  var capped=data.slice(0,300);
+
+  var regionPills='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
+    +'<span style="font-size:11px;color:var(--muted)">Region:</span>'
+    +['All','North','South','East','West'].map(function(v){
+      var active=_rmgDepRegion===v;
+      var locked=regionLocked&&v!==_rmgDepRegion;
+      var onclick=regionLocked?'':'onclick="_rmgDepRegion=\''+v+'\';_renderRMGDeploy()"';
+      return '<button '+onclick+' style="padding:3px 10px;border-radius:20px;font-size:11px;'
+        +'border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'
+        +(active?'var(--accent)':'none')+';color:'+(active?'var(--bg)':'var(--accent)')
+        +';cursor:'+(locked?'not-allowed':'pointer')+';opacity:'+(locked?.4:1)+'">'+v+'</button>';
+    }).join('')
+    +'</div>';
+
+  var custOpts='<option value="All">All Customers</option>'
+    +(_rmgAccounts||[]).map(function(a){
+      return '<option value="'+esc(a.name)+'"'+(a.name===_rmgDepCustomer?' selected':'')+'>'+esc(a.name)+'</option>';
+    }).join('');
+
+  var filterBar=regionPills
+    +'<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">'
+    +'<select onchange="_rmgDepCustomer=this.value;_renderRMGDeploy()" '
+    +'style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);'
+    +'background:var(--surface);color:var(--text);font-size:12px">'+custOpts+'</select>'
+    +'<input value="'+esc(_rmgDepSearch)+'" placeholder="Search emp code / name…" '
+    +'oninput="_rmgDepSearch=this.value;_renderRMGDeploy()" '
+    +'style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);'
+    +'background:var(--surface);color:var(--text);font-size:12px;min-width:200px">'
+    +'<span style="font-size:11px;color:var(--muted2);background:var(--surface2);'
+    +'border:1px solid var(--border);border-radius:12px;padding:2px 10px">'
+    +total+' employees</span>'
+    +'</div>';
+
+  var colW='80px 200px 180px 160px 70px 110px 110px'+(canEditDeploy?' 140px':'');
+  var hdr='<div style="display:grid;grid-template-columns:'+colW+';'
+    +'padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border);'
+    +'border-radius:8px 8px 0 0">'
+    +['Emp Code','Name','Designation','Customer','Region','Status','Demand ID']
+      .concat(canEditDeploy?['Actions']:[])
+      .map(function(h){
+        return '<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;'
+          +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';
+      }).join('')+'</div>';
+
+  var rows=capped.map(function(r){
+    var statusCol=r.emp_status==='Bench'?'var(--amber)'
+      :r.emp_status==='Billable'?'var(--green)':'var(--muted)';
+    return '<div style="display:grid;grid-template-columns:'+colW+';'
+      +'padding:6px 12px;border-bottom:1px solid rgba(42,61,82,.2);font-size:11px;align-items:center">'
+      +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--muted2)">'+esc(r.emp_code||'—')+'</div>'
+      +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(r.name||'')+'">'+esc(r.name||'—')+'</div>'
+      +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;color:var(--muted)" title="'+esc(r.designation||'')+'">'+esc(r.designation||'—')+'</div>'
+      +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px" title="'+esc(r.customer||'')+'">'+esc(r.customer||'—')+'</div>'
+      +'<div style="font-size:10px;color:var(--muted)">'+esc(r.region||'—')+'</div>'
+      +'<div style="font-size:10px;font-weight:600;color:'+statusCol+'">'+esc(r.emp_status||'—')+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2)">—</div>'
+      +(canEditDeploy
+        ?'<div style="display:flex;gap:4px">'
+          +'<button onclick="openRMGMoveModal(\''+esc(r.emp_code||'')+'\',\''+esc(r.customer||'')+'\',\''+esc(r.region||'')+'\',\''+esc(r.emp_status||'')+'\')" '
+          +'style="padding:2px 8px;font-size:10px;border-radius:4px;border:1px solid var(--accent);'
+          +'background:none;color:var(--accent);cursor:pointer">Move</button>'
+          +'<button onclick="openRMGBenchModal(\''+esc(r.emp_code||'')+'\',\''+esc(r.customer||'')+'\',\''+esc(r.region||'')+'\',\''+esc(r.emp_status||'')+'\')" '
+          +'style="padding:2px 8px;font-size:10px;border-radius:4px;border:1px solid var(--amber);'
+          +'background:none;color:var(--amber);cursor:pointer">Bench&#8594;Bill</button>'
+          +'</div>'
+        :'')
+      +'</div>';
+  }).join('');
+
+  return filterBar
+    +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+    +hdr
+    +(rows||'<div style="padding:32px;text-align:center;color:var(--muted)">No employees match filters</div>')
+    +'</div>'
+    +(total>300?'<div style="margin-top:6px;font-size:10px;color:var(--muted2)">Showing 300 of '+total+' employees — refine filters to see more</div>':'');
+}
+
+function openRMGMoveModal(empCode,fromCustomer,fromRegion,empStatus){
+  var existing=document.getElementById('rmg-move-modal');
+  if(existing) existing.remove();
+  var custOpts='<option value="">Select customer…</option>'
+    +(_rmgAccounts||[]).map(function(a){
+      return '<option value="'+esc(a.name)+'|'+esc(a.region||'')+'">'+esc(a.name)+(a.region?' ('+a.region+')':'')+'</option>';
+    }).join('');
+  var m=document.createElement('div');
+  m.id='rmg-move-modal';
+  m.style.cssText='position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center';
+  m.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;'
+    +'padding:28px 32px;width:480px;max-width:95vw;max-height:90vh;overflow-y:auto">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--accent);letter-spacing:1px;margin-bottom:4px">CUSTOMER TRANSFER</div>'
+    +'<div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:20px">Move Employee</div>'
+    +'<div style="display:grid;gap:14px">'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Employee</label>'
+    +'<input readonly value="'+esc(empCode)+'" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">From Customer</label>'
+    +'<input readonly value="'+esc(fromCustomer)+'" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">To Customer <span style="color:var(--red)">*</span></label>'
+    +'<select id="rmg-move-to-cust" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px">'+custOpts+'</select></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">To Demand ID</label>'
+    +'<input id="rmg-move-to-demand" placeholder="Demand / Req ID at new customer" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Requested By (Manager)</label>'
+    +'<input id="rmg-move-req-by" placeholder="Manager name" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Request Ref / Email</label>'
+    +'<input id="rmg-move-req-ref" placeholder="Email or reference" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Effective Date <span style="color:var(--red)">*</span></label>'
+    +'<input id="rmg-move-eff-date" type="date" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Reason</label>'
+    +'<input id="rmg-move-reason" placeholder="Reason for transfer" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Notes</label>'
+    +'<textarea id="rmg-move-notes" rows="2" placeholder="Additional notes" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;resize:vertical"></textarea></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">'
+    +'<button onclick="document.getElementById(\'rmg-move-modal\').remove()" '
+    +'style="padding:8px 18px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text);font-size:12px;cursor:pointer">Cancel</button>'
+    +'<button onclick="submitRMGMove(\''+esc(empCode)+'\',\''+esc(fromCustomer)+'\',\''+esc(fromRegion)+'\')" '
+    +'style="padding:8px 18px;border-radius:6px;border:none;background:var(--accent);color:var(--bg);font-size:12px;font-weight:600;cursor:pointer">Submit Transfer</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(m);
+}
+
+async function submitRMGMove(empCode,fromCustomer,fromRegion){
+  var toCustEl=document.getElementById('rmg-move-to-cust');
+  var toCustVal=toCustEl?toCustEl.value:'';
+  var effDate=(document.getElementById('rmg-move-eff-date')||{}).value||'';
+  if(!toCustVal){showToast('Select a To Customer','error');return;}
+  if(!effDate){showToast('Effective Date is required','error');return;}
+  var parts=toCustVal.split('|');
+  var toCustomer=parts[0]||'';
+  var toRegion=parts[1]||'';
+  var toDemand=(document.getElementById('rmg-move-to-demand')||{}).value||'';
+  var reqBy=(document.getElementById('rmg-move-req-by')||{}).value||'';
+  var reqRef=(document.getElementById('rmg-move-req-ref')||{}).value||'';
+  var reason=(document.getElementById('rmg-move-reason')||{}).value||'';
+  var notes=(document.getElementById('rmg-move-notes')||{}).value||'';
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var madeBy=role.display_name||'rmg';
+  var madeById=(typeof _sbUser!=='undefined'&&_sbUser)?_sbUser.id:null;
+  var payload={
+    emp_code:empCode, move_type:'Customer Transfer',
+    from_customer:fromCustomer, to_customer:toCustomer,
+    to_demand_id:toDemand||null,
+    from_region:fromRegion||null, to_region:toRegion||null,
+    requested_by:reqBy||null, request_ref:reqRef||null,
+    reason:reason||null, notes:notes||null,
+    effective_date:effDate,
+    made_by:madeBy, made_by_id:madeById
+  };
+  var res=await _sb.from('rmg_movements').insert(payload);
+  if(res.error){showToast('Insert failed: '+res.error.message,'error');return;}
+  showToast('Transfer recorded','success');
+  var m=document.getElementById('rmg-move-modal');
+  if(m) m.remove();
+}
+
+function openRMGBenchModal(empCode,fromCustomer,fromRegion,fromStatus){
+  var existing=document.getElementById('rmg-bench-modal');
+  if(existing) existing.remove();
+  var custOpts='<option value="">None / TBD</option>'
+    +(_rmgAccounts||[]).map(function(a){
+      return '<option value="'+esc(a.name)+'">'+esc(a.name)+'</option>';
+    }).join('');
+  var m=document.createElement('div');
+  m.id='rmg-bench-modal';
+  m.style.cssText='position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center';
+  m.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;'
+    +'padding:28px 32px;width:440px;max-width:95vw;max-height:90vh;overflow-y:auto">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;color:var(--amber);letter-spacing:1px;margin-bottom:4px">STATUS CHANGE</div>'
+    +'<div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:20px">Bench &#8594; Billable</div>'
+    +'<div style="display:grid;gap:14px">'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Employee</label>'
+    +'<input readonly value="'+esc(empCode)+'" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">From Status</label>'
+    +'<input readonly value="'+esc(fromStatus)+'" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">To Status</label>'
+    +'<select id="rmg-bench-to-status" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px">'
+    +'<option value="Billable" selected>Billable</option>'
+    +'<option value="Allocated">Allocated</option>'
+    +'<option value="Support">Support</option>'
+    +'</select></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">To Customer (optional)</label>'
+    +'<select id="rmg-bench-to-cust" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px">'+custOpts+'</select></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">To Demand ID (optional)</label>'
+    +'<input id="rmg-bench-to-demand" placeholder="Demand / Req ID" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Requested By</label>'
+    +'<input id="rmg-bench-req-by" placeholder="Manager name" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Effective Date <span style="color:var(--red)">*</span></label>'
+    +'<input id="rmg-bench-eff-date" type="date" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px"></div>'
+    +'<div><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Reason</label>'
+    +'<input id="rmg-bench-reason" placeholder="Reason for status change" style="width:100%;padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px"></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">'
+    +'<button onclick="document.getElementById(\'rmg-bench-modal\').remove()" '
+    +'style="padding:8px 18px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text);font-size:12px;cursor:pointer">Cancel</button>'
+    +'<button onclick="submitRMGBench(\''+esc(empCode)+'\',\''+esc(fromCustomer)+'\',\''+esc(fromRegion)+'\',\''+esc(fromStatus)+'\')" '
+    +'style="padding:8px 18px;border-radius:6px;border:none;background:var(--amber);color:#000;font-size:12px;font-weight:600;cursor:pointer">Submit</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(m);
+}
+
+async function submitRMGBench(empCode,fromCustomer,fromRegion,fromStatus){
+  var effDate=(document.getElementById('rmg-bench-eff-date')||{}).value||'';
+  if(!effDate){showToast('Effective Date is required','error');return;}
+  var toStatus=(document.getElementById('rmg-bench-to-status')||{}).value||'Billable';
+  var toCustomer=(document.getElementById('rmg-bench-to-cust')||{}).value||'';
+  var toDemand=(document.getElementById('rmg-bench-to-demand')||{}).value||'';
+  var reqBy=(document.getElementById('rmg-bench-req-by')||{}).value||'';
+  var reason=(document.getElementById('rmg-bench-reason')||{}).value||'';
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var madeBy=role.display_name||'rmg';
+  var madeById=(typeof _sbUser!=='undefined'&&_sbUser)?_sbUser.id:null;
+  var payload={
+    emp_code:empCode, move_type:'Bench→Billable',
+    from_customer:fromCustomer||null, to_customer:toCustomer||null,
+    to_demand_id:toDemand||null,
+    from_region:fromRegion||null,
+    from_status:fromStatus||null, to_status:toStatus,
+    requested_by:reqBy||null, reason:reason||null,
+    effective_date:effDate,
+    made_by:madeBy, made_by_id:madeById
+  };
+  var res=await _sb.from('rmg_movements').insert(payload);
+  if(res.error){showToast('Insert failed: '+res.error.message,'error');return;}
+  showToast('Status change recorded','success');
+  var m=document.getElementById('rmg-bench-modal');
+  if(m) m.remove();
 }
 
 function showToast(msg,type){
@@ -11838,7 +12173,7 @@ function showSidebarAfterLogin(role) {
   var _rmgNavEl = document.getElementById('snav-rmg');
   if(_rmgNavEl){
     var _rmgFn=(typeof _sbRole!=='undefined'&&_sbRole)?(_sbRole.function_type||''):'';
-    var _showRmg=(role==='admin'||_rmgFn==='rmg'||_rmgFn==='hrbp'
+    var _showRmg=(role==='admin'||role==='hrops'||_rmgFn==='rmg'||_rmgFn==='hrbp'
       ||_rmgFn==='ta'||_rmgFn==='hrops');
     _rmgNavEl.style.display=_showRmg?'':'none';
   }
