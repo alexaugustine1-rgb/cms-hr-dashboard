@@ -9514,12 +9514,12 @@ async function savePrimaryRecruiter(rowUuid, recruiterName){
 
 function renderRMGShell(){
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
-  var canView=role.role==='admin'||role.function_type==='rmg'
+  var canView=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'
     ||role.function_type==='hrbp'||role.function_type==='ta'
     ||role.role==='hrops'||role.function_type==='hrops';
   if(!canView) return '<div style="padding:60px;text-align:center;'
     +'color:var(--muted)">Access restricted.</div>';
-  var canViewDeploy=role.role==='admin'||role.function_type==='rmg'
+  var canViewDeploy=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'
     ||role.role==='hrops'||role.function_type==='hrops'
     ||role.function_type==='hrbp';
   var pills='<div style="display:flex;gap:8px;margin-bottom:20px">'
@@ -9552,12 +9552,12 @@ function renderRMGShell(){
 
 async function loadRMGTab(){
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
-  var canView=role.role==='admin'||role.function_type==='rmg'
+  var canView=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'
     ||role.function_type==='hrbp'||role.function_type==='ta'
     ||role.role==='hrops'||role.function_type==='hrops';
   if(!canView) return;
   if(_rmgView==='deploy'){
-    var canViewDeploy=role.role==='admin'||role.function_type==='rmg'
+    var canViewDeploy=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'
       ||role.role==='hrops'||role.function_type==='hrops'
       ||role.function_type==='hrbp';
     if(!canViewDeploy) _rmgView='recon';
@@ -9589,10 +9589,10 @@ function _renderRMGGrid(){
   if(!summaryEl||!gridEl) return;
 
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
-  var canView=role.role==='admin'||role.function_type==='rmg'
+  var canView=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'
     ||role.function_type==='hrbp'||role.function_type==='ta'
     ||role.role==='hrops'||role.function_type==='hrops';
-  var canEdit=role.role==='admin'||role.function_type==='rmg';
+  var canEdit=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg';
   var isReadOnly=!canEdit&&(role.function_type==='hrbp'
     ||role.function_type==='ta'||role.function_type==='hrops');
 
@@ -9812,9 +9812,9 @@ function _renderRMGGrid(){
 
 function exportRMGWorkspaceXlsx(){
   var role=_sbRole||{};
-  var canView=role.role==='admin'||role.function_type==='rmg'
+  var canView=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'
     ||role.function_type==='hrbp'||role.function_type==='ta'
-    ||role.function_type==='hrops';
+    ||role.role==='hrops'||role.function_type==='hrops';
   if(!canView){showToast('Access denied','error');return;}
   var data=_rmgData.slice();
   if(_rmgRegion!=='All') data=data.filter(function(r){return r.region===_rmgRegion;});
@@ -10051,7 +10051,7 @@ async function saveRMGField(rowId,field,value){
 
 function _rmgSwitchView(v){
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
-  var canViewDeploy=role.role==='admin'||role.function_type==='rmg'
+  var canViewDeploy=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'
     ||role.role==='hrops'||role.function_type==='hrops'
     ||role.function_type==='hrbp';
   if(v==='deploy'&&!canViewDeploy) v='recon';
@@ -10112,7 +10112,7 @@ function _renderRMGDeploy(){
 
 async function _rmgLoadPendingCount(){
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
-  var canExportMoves=role.role==='admin'||role.function_type==='rmg'||role.role==='hrops';
+  var canExportMoves=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'||role.role==='hrops';
   if(!canExportMoves) return;
   var res=await _sb.from('rmg_movements').select('id',{count:'exact',head:true}).is('exported_at',null);
   _rmgPendingMoves=(res.count||0);
@@ -10122,7 +10122,7 @@ async function _rmgLoadPendingCount(){
 
 async function exportRMGMovementsForZingHR(){
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
-  var canExportMoves=role.role==='admin'||role.function_type==='rmg'||role.role==='hrops';
+  var canExportMoves=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'||role.role==='hrops';
   if(!canExportMoves){showToast('Access denied','error');return;}
   var res=await _sb.from('rmg_movements')
     .select('id,emp_code,emp_name,move_type,from_customer,to_customer,from_demand_id,to_demand_id,'
@@ -10178,12 +10178,12 @@ async function exportRMGMovementsForZingHR(){
 
 function renderRMGDeployView(){
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
-  var canViewDeploy=role.role==='admin'||role.function_type==='rmg'
+  var canViewDeploy=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'
     ||role.role==='hrops'||role.function_type==='hrops'
     ||role.function_type==='hrbp';
   if(!canViewDeploy) return '<div style="padding:60px;text-align:center;color:var(--muted)">Access restricted.</div>';
-  var canEditDeploy=role.role==='admin'||role.function_type==='rmg';
-  var canExportMoves=role.role==='admin'||role.function_type==='rmg'||role.role==='hrops';
+  var canEditDeploy=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg';
+  var canExportMoves=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'||role.role==='hrops';
   var regionLocked=role.function_type==='hrbp'&&role.region&&role.region!=='Pan India';
 
   var data=_rmgEmpData.slice();
