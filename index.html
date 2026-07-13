@@ -577,6 +577,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <div class="sidebar-item active" id="snav-overview" onclick="snavClick('overview',this)">
       <span class="item-icon">📊</span><span class="item-label">Overview</span>
     </div>
+    <button class="sidebar-item" id="snav-opsreview" onclick="snavClick('opsreview',this)" style="display:none">
+      <span class="item-icon">🗓️</span><span class="item-label">Ops Review</span>
+    </button>
 
     <!-- TA Group -->
     <div class="sidebar-group">
@@ -755,6 +758,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <div id="tab-tapipeline" class="tab-content"></div>
   <div id="tab-hiringreport" class="tab-content"></div>
   <div id="tab-rmg" class="tab-content"></div>
+  <div id="tab-opsreview" class="tab-content"></div>
   
   
   
@@ -4683,6 +4687,7 @@ function switchTab(id, btn) {
   }
   else if(id==='tapipeline'){const mc=document.getElementById('tab-tapipeline');if(mc)mc.innerHTML=renderTAPipeline();}
   else if(id==='rmg'){var mc=document.getElementById('tab-rmg');if(mc){ mc.innerHTML=renderRMGShell(); loadRMGTab(); }}
+  else if(id==='opsreview'){var mc=document.getElementById('tab-opsreview');if(mc){ mc.innerHTML=''; loadOpsReview(); }}
   else if(id==='fnf'){const mc=document.getElementById('tab-fnf');if(mc)mc.innerHTML=renderFnF();}
   else if(id==='acct-health'){_ahFilters={region:'All',tier:'All',health:'All'};const mc=document.getElementById('tab-acct-health');if(mc)mc.innerHTML=renderAccountHealth();}
   else if(id==='admin'){const mc=document.getElementById('tab-admin');if(mc)mc.innerHTML=renderAdmin(WEEKS_DATA[currentWeek],currentWeek);}
@@ -10453,6 +10458,125 @@ async function submitRMGBench(empCode,fromCustomer,fromRegion,fromStatus){
   if(m) m.remove();
 }
 
+function renderOpsReviewShell(){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canOpsReview=role.role==='admin'||role.role==='executive';
+  if(!canOpsReview) return '<div style="padding:60px;text-align:center;color:var(--muted)">Access restricted.</div>';
+  var today=new Date();
+  var dayNum=today.getDay();
+  var diff=(dayNum===0)?6:dayNum-1;
+  var weekMon=new Date(today);
+  weekMon.setDate(today.getDate()-diff);
+  var wkLabel=weekMon.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  return '<div style="padding:20px 28px;max-width:1400px" id="opsrev-root">'
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
+    +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Weekly Ops Review</div>'
+    +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;'
+    +'color:var(--text);margin-bottom:20px">Ops Review &#8212; Week of '+esc(wkLabel)+'</div>'
+    +'<div id="opsrev-absent" style="margin-bottom:32px">'
+    +'<div style="color:var(--muted);font-size:12px">Loading absenteeism&#8230;</div></div>'
+    +'<div id="opsrev-visits"></div>'
+    +'<div id="opsrev-ta"></div>'
+    +'</div>';
+}
+
+async function loadOpsReview(){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canOpsReview=role.role==='admin'||role.role==='executive';
+  var mc=document.getElementById('tab-opsreview');
+  if(!canOpsReview){
+    if(mc) mc.innerHTML='<div style="padding:60px;text-align:center;color:var(--muted)">Access restricted.</div>';
+    return;
+  }
+  if(mc) mc.innerHTML=renderOpsReviewShell();
+  await _loadOpsRevAbsent();
+}
+
+async function _loadOpsRevAbsent(){
+  var absEl=document.getElementById('opsrev-absent');
+  if(!absEl) return;
+  var today=new Date();
+  var dayNum=today.getDay();
+  var diff=(dayNum===0)?6:dayNum-1;
+  var weekStart=new Date(today);
+  weekStart.setDate(today.getDate()-diff);
+  weekStart.setHours(0,0,0,0);
+  var todayStr=today.toISOString().slice(0,10);
+  var res=await _sb.from('absent_cases')
+    .select('status,region,manager_name,status_updated_at,next_followup_date,esep_initiated');
+  if(res.error){
+    absEl.innerHTML='<div style="color:var(--red);padding:16px">Failed to load: '+esc(res.error.message)+'</div>';
+    return;
+  }
+  var cases=res.data||[];
+  var isResolved=function(c){return (c.status||'').toLowerCase().indexOf('resolved')>=0;};
+  var pending=cases.filter(function(c){return !isResolved(c);});
+  var resolvedThisWk=cases.filter(function(c){
+    return isResolved(c)&&c.status_updated_at&&new Date(c.status_updated_at)>=weekStart;
+  });
+  var overdue=pending.filter(function(c){
+    return c.next_followup_date&&c.next_followup_date<todayStr;
+  });
+  var absconding=pending.filter(function(c){
+    return (c.status||'').toLowerCase().indexOf('absconding')>=0;
+  });
+  var _ork=function(label,val,col){
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;'
+      +'padding:12px 18px;min-width:130px">'
+      +'<div style="font-size:22px;font-weight:700;color:'+(col||'var(--accent)')+'">'+val+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2);margin-top:2px;text-transform:uppercase;'
+      +'letter-spacing:.6px">'+esc(label)+'</div></div>';
+  };
+  var kpiStrip='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'
+    +_ork('Total Pending',pending.length,'var(--accent)')
+    +_ork('Resolved This Week',resolvedThisWk.length,'var(--green)')
+    +_ork('Overdue Follow-ups',overdue.length,'var(--amber)')
+    +_ork('Absconding (eSep)',absconding.length,'var(--red)')
+    +'</div>';
+  var regions={};
+  pending.forEach(function(c){
+    var r=c.region||'Unknown';
+    if(!regions[r]) regions[r]={p:0,rw:0,od:0};
+    regions[r].p++;
+  });
+  resolvedThisWk.forEach(function(c){
+    var r=c.region||'Unknown';
+    if(!regions[r]) regions[r]={p:0,rw:0,od:0};
+    regions[r].rw++;
+  });
+  overdue.forEach(function(c){
+    var r=c.region||'Unknown';
+    if(!regions[r]) regions[r]={p:0,rw:0,od:0};
+    regions[r].od++;
+  });
+  var sortedR=Object.keys(regions).sort(function(a,b){return regions[b].p-regions[a].p;});
+  var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;'
+    +'text-transform:uppercase;color:var(--muted2)';
+  var thead='<thead><tr style="background:var(--surface3)">'
+    +'<th style="'+thStyle+'">Region</th>'
+    +'<th style="'+thStyle+'">Pending</th>'
+    +'<th style="'+thStyle+'">Resolved This Wk</th>'
+    +'<th style="'+thStyle+'">Overdue</th>'
+    +'</tr></thead>';
+  var tbody='<tbody>'+sortedR.map(function(r){
+    var d=regions[r];
+    var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
+    return '<tr>'
+      +'<td style="'+tdBase+'">'+esc(r)+'</td>'
+      +'<td style="'+tdBase+';font-weight:600;color:var(--accent)">'+d.p+'</td>'
+      +'<td style="'+tdBase+';color:var(--green)">'+d.rw+'</td>'
+      +'<td style="'+tdBase+';color:'+(d.od>0?'var(--amber)':'var(--muted)')+'">'+d.od+'</td>'
+      +'</tr>';
+  }).join('')+'</tbody>';
+  var table='<table style="width:100%;border-collapse:collapse">'+thead+tbody+'</table>';
+  absEl.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
+    +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">'
+    +'HRBP Absenteeism</div>'
+    +kpiStrip
+    +'<div style="background:var(--surface2);border:1px solid var(--border);'
+    +'border-radius:8px;overflow:hidden">'+table+'</div>';
+}
+
 function showToast(msg,type){
   var t=document.createElement('div');
   t.style.cssText='position:fixed;bottom:24px;right:24px;z-index:9999;'
@@ -12272,6 +12396,9 @@ function showSidebarAfterLogin(role) {
     var _showJ = (role==='hrbp'&&_jFn==='hrbp');
     _jEl.style.display = _showJ ? '' : 'none';
   }
+  // Ops Review: admin + executive only
+  var _orNavEl = document.getElementById('snav-opsreview');
+  if(_orNavEl) _orNavEl.style.display=(role==='admin'||role==='executive')?'':'none';
   // RMG Workspace: visible to admin, rmg, hrbp, ta, hrops
   var _rmgNavEl = document.getElementById('snav-rmg');
   if(_rmgNavEl){
