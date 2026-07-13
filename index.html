@@ -9584,6 +9584,9 @@ function _renderRMGGrid(){
   if(!summaryEl||!gridEl) return;
 
   var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canView=role.role==='admin'||role.function_type==='rmg'
+    ||role.function_type==='hrbp'||role.function_type==='ta'
+    ||role.role==='hrops'||role.function_type==='hrops';
   var canEdit=role.role==='admin'||role.function_type==='rmg';
   var isReadOnly=!canEdit&&(role.function_type==='hrbp'
     ||role.function_type==='ta'||role.function_type==='hrops');
@@ -10135,8 +10138,12 @@ function renderRMGDeployView(){
     }).join('')
     +'</div>';
 
+  var _depCustSeen={};
+  var _depCustUniq=(_rmgAccounts||[]).filter(function(a){
+    if(_depCustSeen[a.name]) return false; _depCustSeen[a.name]=1; return true;
+  });
   var custOpts='<option value="All">All Customers</option>'
-    +(_rmgAccounts||[]).map(function(a){
+    +_depCustUniq.map(function(a){
       return '<option value="'+esc(a.name)+'"'+(a.name===_rmgDepCustomer?' selected':'')+'>'+esc(a.name)+'</option>';
     }).join('');
 
@@ -10201,8 +10208,12 @@ function renderRMGDeployView(){
 function openRMGMoveModal(empCode,fromCustomer,fromRegion,empStatus){
   var existing=document.getElementById('rmg-move-modal');
   if(existing) existing.remove();
+  var _moveCustSeen={};
+  var _moveCustUniq=(_rmgAccounts||[]).filter(function(a){
+    if(_moveCustSeen[a.name]) return false; _moveCustSeen[a.name]=1; return true;
+  });
   var custOpts='<option value="">Select customer…</option>'
-    +(_rmgAccounts||[]).map(function(a){
+    +_moveCustUniq.map(function(a){
       return '<option value="'+esc(a.name)+'|'+esc(a.region||'')+'">'+esc(a.name)+(a.region?' ('+a.region+')':'')+'</option>';
     }).join('');
   var m=document.createElement('div');
@@ -10279,8 +10290,12 @@ async function submitRMGMove(empCode,fromCustomer,fromRegion){
 function openRMGBenchModal(empCode,fromCustomer,fromRegion,fromStatus){
   var existing=document.getElementById('rmg-bench-modal');
   if(existing) existing.remove();
+  var _benchCustSeen={};
+  var _benchCustUniq=(_rmgAccounts||[]).filter(function(a){
+    if(_benchCustSeen[a.name]) return false; _benchCustSeen[a.name]=1; return true;
+  });
   var custOpts='<option value="">None / TBD</option>'
-    +(_rmgAccounts||[]).map(function(a){
+    +_benchCustUniq.map(function(a){
       return '<option value="'+esc(a.name)+'">'+esc(a.name)+'</option>';
     }).join('');
   var m=document.createElement('div');
