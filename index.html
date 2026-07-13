@@ -9328,6 +9328,7 @@ var _taRecMap=[], _taRecMapLoaded=false, _taRecMapFilter='unmapped', _taRecruite
 var _rmgData=[], _rmgRegion='All', _rmgStatus='All', _rmgFlag='All';
 var _rmgView='recon';
 var _rmgEmpData=[], _rmgDepRegion='All', _rmgDepCustomer='All', _rmgDepSearch='';
+var _rmgPendingMoves=0;
 var _rmgShowAdd=false, _rmgAccounts=[];
 
 async function loadTARecruiterMap(){
@@ -10102,6 +10103,73 @@ function _renderRMGDeploy(){
   var depv=document.getElementById('rmg-deploy-view');
   if(!depv) return;
   depv.innerHTML=renderRMGDeployView();
+  _rmgLoadPendingCount();
+}
+
+async function _rmgLoadPendingCount(){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canExportMoves=role.role==='admin'||role.function_type==='rmg'||role.role==='hrops';
+  if(!canExportMoves) return;
+  var res=await _sb.from('rmg_movements').select('id',{count:'exact',head:true}).is('exported_at',null);
+  _rmgPendingMoves=(res.count||0);
+  var chip=document.getElementById('rmg-pending-chip');
+  if(chip) chip.textContent=_rmgPendingMoves+' changes pending for ZingHR';
+}
+
+async function exportRMGMovementsForZingHR(){
+  var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+  var canExportMoves=role.role==='admin'||role.function_type==='rmg'||role.role==='hrops';
+  if(!canExportMoves){showToast('Access denied','error');return;}
+  var res=await _sb.from('rmg_movements')
+    .select('id,emp_code,emp_name,move_type,from_customer,to_customer,from_demand_id,to_demand_id,'
+      +'from_status,to_status,from_region,to_region,requested_by,request_ref,reason,'
+      +'effective_date,made_by,made_at,notes')
+    .is('exported_at',null).order('made_at',{ascending:true});
+  if(res.error){showToast('Fetch failed: '+res.error.message,'error');return;}
+  var rows=res.data||[];
+  if(!rows.length){showToast('No new changes to export','error');return;}
+  var n=rows.length;
+  if(!confirm('Download '+n+' change(s) and mark them exported? They won\'t appear in the next export.')) return;
+  var sheet=rows.map(function(r){
+    return {
+      'Emp Code':r.emp_code||'',
+      'Emp Name':r.emp_name||'',
+      'Move Type':r.move_type||'',
+      'From Customer':r.from_customer||'',
+      'To Customer':r.to_customer||'',
+      'From Demand ID':r.from_demand_id||'',
+      'To Demand ID':r.to_demand_id||'',
+      'From Status':r.from_status||'',
+      'To Status':r.to_status||'',
+      'From Region':r.from_region||'',
+      'To Region':r.to_region||'',
+      'Requested By':r.requested_by||'',
+      'Request Ref':r.request_ref||'',
+      'Reason':r.reason||'',
+      'Effective Date':r.effective_date||'',
+      'Logged By':r.made_by||'',
+      'Logged At':r.made_at||'',
+      'Notes':r.notes||''
+    };
+  });
+  var wb=XLSX.utils.book_new();
+  var ws=XLSX.utils.json_to_sheet(sheet);
+  XLSX.utils.book_append_sheet(wb,ws,'RMG Changes');
+  var today=new Date();
+  var yyyy=today.getFullYear();
+  var mm=String(today.getMonth()+1).padStart(2,'0');
+  var dd=String(today.getDate()).padStart(2,'0');
+  XLSX.writeFile(wb,'rmg_changes_for_zinghr_'+yyyy+'-'+mm+'-'+dd+'.xlsx');
+  var ids=rows.map(function(r){return r.id;});
+  var stampRes=await _sb.from('rmg_movements')
+    .update({exported_at:new Date().toISOString(),exported_by:role.display_name||'rmg'})
+    .in('id',ids);
+  if(stampRes.error){showToast('Export file saved but stamp failed: '+stampRes.error.message,'error');return;}
+  showToast(n+' changes exported and marked','success');
+  _rmgPendingMoves=0;
+  var chip=document.getElementById('rmg-pending-chip');
+  if(chip) chip.textContent='0 changes pending for ZingHR';
+  _rmgLoadPendingCount();
 }
 
 function renderRMGDeployView(){
@@ -10111,6 +10179,7 @@ function renderRMGDeployView(){
     ||role.function_type==='hrbp';
   if(!canViewDeploy) return '<div style="padding:60px;text-align:center;color:var(--muted)">Access restricted.</div>';
   var canEditDeploy=role.role==='admin'||role.function_type==='rmg';
+  var canExportMoves=role.role==='admin'||role.function_type==='rmg'||role.role==='hrops';
   var regionLocked=role.function_type==='hrbp'&&role.region&&role.region!=='Pan India';
 
   var data=_rmgEmpData.slice();
@@ -10161,6 +10230,15 @@ function renderRMGDeployView(){
     +'<span style="font-size:11px;color:var(--muted2);background:var(--surface2);'
     +'border:1px solid var(--border);border-radius:12px;padding:2px 10px">'
     +total+' employees</span>'
+    +(canExportMoves
+      ?'<span id="rmg-pending-chip" style="font-size:11px;font-weight:600;'
+        +'background:var(--surface2);border:1px solid var(--amber);border-radius:12px;'
+        +'padding:2px 10px;color:var(--amber)">'
+        +_rmgPendingMoves+' changes pending for ZingHR</span>'
+        +'<button onclick="exportRMGMovementsForZingHR()" style="padding:4px 14px;'
+        +'border-radius:6px;font-size:12px;font-weight:600;border:1px solid var(--accent);'
+        +'background:none;color:var(--accent);cursor:pointer">&#11015; Export for ZingHR</button>'
+      :'')
     +'</div>';
 
   var colW='80px 200px 180px 160px 70px 110px 110px'+(canEditDeploy?' 140px':'');
