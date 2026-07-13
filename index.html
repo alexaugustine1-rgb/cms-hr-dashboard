@@ -9620,6 +9620,11 @@ function _renderRMGGrid(){
         +'font-size:12px;font-weight:600;border:none;background:var(--accent);'
         +'color:var(--bg);cursor:pointer">+ Add Position</button>'
       :'')
+    +(canView
+      ?'<button onclick="exportRMGWorkspaceXlsx()" style="padding:7px 14px;border-radius:6px;'
+        +'font-size:12px;font-weight:600;border:1px solid var(--accent);background:none;'
+        +'color:var(--accent);cursor:pointer">⬇ Excel</button>'
+      :'')
     +'</div>'
     +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
     +'<span style="font-size:11px;color:var(--muted)">Region:</span>'
@@ -9769,6 +9774,55 @@ function _renderRMGGrid(){
     +data.length+' of '+_rmgData.length+' positions'
     +(canEdit?' · Elah ID, Position Type and Backfill Emp are editable'
       :' · Read-only view')+'</div>';
+}
+
+function exportRMGWorkspaceXlsx(){
+  var role=_currentUser||{};
+  var canView=role.role==='admin'||role.function_type==='rmg'
+    ||role.function_type==='hrbp'||role.function_type==='ta'
+    ||role.function_type==='hrops';
+  if(!canView){showToast('Access denied','error');return;}
+  var data=_rmgData.slice();
+  if(_rmgRegion!=='All') data=data.filter(function(r){return r.region===_rmgRegion;});
+  if(_rmgStatus!=='All') data=data.filter(function(r){return _rmgEffStatus(r)===_rmgStatus;});
+  if(_rmgFlag!=='All')   data=data.filter(function(r){return _rmgReconFlag(r).type===_rmgFlag;});
+  if(!data.length){showToast('No rows to export','error');return;}
+  var rows=data.map(function(r){
+    var flag=_rmgReconFlag(r);
+    var effSt=_rmgEffStatus(r);
+    var rm=(typeof _taCandMap!=='undefined'&&_taCandMap)?_taCandMap[String(r.zinghr_req_id||'')]:null;
+    var SABB={'Screening':'Screen','Assessments':'Assess',
+      'Pre Offer Verification':'PreOff','Pre Offer Checklist':'PreOff',
+      'Pre Offer Checklist Rejected':'Reject',
+      'Offer Letter Send to Internal Database':'OfferDB',
+      'Offer Letter Acceptance':'OfferAcc','Offer Letter Rejected':'OfferRej',
+      'Pre Joining Checklist':'PreJoin','Pre Joining Verification':'PreJoin',
+      'Appointment Letter':'Appt'};
+    return {
+      'Req ID':r.zinghr_req_id||'',
+      'Elah ID':r.elah_demand_id||'',
+      'Account':r.account_name||'',
+      'Position':(r.designation||'').replace(/\s+/g,' ').trim(),
+      'Region':r.region||'',
+      'Position Type':r.position_type||'',
+      'Backfill Emp':r.backfill_emp_code||'',
+      'Status':effSt,
+      'Age (d)':r.req_age_days||0,
+      'Flag':flag.label||'',
+      'Pipe':rm?rm.count:0,
+      'Stage':rm?(SABB[rm.stage]||rm.stage||''):'',
+      'Added By':r.updated_by||'',
+      'Added On':r.updated_at?new Date(r.updated_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):''
+    };
+  });
+  var wb=XLSX.utils.book_new();
+  var ws=XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb,ws,'RMG Workspace');
+  var today=new Date();
+  var yyyy=today.getFullYear();
+  var mm=String(today.getMonth()+1).padStart(2,'0');
+  var dd=String(today.getDate()).padStart(2,'0');
+  XLSX.writeFile(wb,'rmg_workspace_'+yyyy+'-'+mm+'-'+dd+'.xlsx');
 }
 
 function _renderRMGAddForm(){
