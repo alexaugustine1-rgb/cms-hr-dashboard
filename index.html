@@ -10503,7 +10503,7 @@ async function _loadOpsRevAbsent(){
   weekStart.setHours(0,0,0,0);
   var todayStr=today.toISOString().slice(0,10);
   var res=await _sb.from('absent_cases')
-    .select('status,region,manager_name,status_updated_at,next_followup_date,esep_initiated');
+    .select('status,region,manager_name,status_updated_at,status_updated_by,next_followup_date,esep_initiated');
   if(res.error){
     absEl.innerHTML='<div style="color:var(--red);padding:16px">Failed to load: '+esc(res.error.message)+'</div>';
     return;
@@ -10533,48 +10533,94 @@ async function _loadOpsRevAbsent(){
     +_ork('Overdue Follow-ups',overdue.length,'var(--amber)')
     +_ork('Absconding (eSep)',absconding.length,'var(--red)')
     +'</div>';
-  var regions={};
-  pending.forEach(function(c){
-    var r=c.region||'Unknown';
-    if(!regions[r]) regions[r]={p:0,rw:0,od:0};
-    regions[r].p++;
-  });
-  resolvedThisWk.forEach(function(c){
-    var r=c.region||'Unknown';
-    if(!regions[r]) regions[r]={p:0,rw:0,od:0};
-    regions[r].rw++;
-  });
-  overdue.forEach(function(c){
-    var r=c.region||'Unknown';
-    if(!regions[r]) regions[r]={p:0,rw:0,od:0};
-    regions[r].od++;
-  });
-  var sortedR=Object.keys(regions).sort(function(a,b){return regions[b].p-regions[a].p;});
   var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;'
     +'text-transform:uppercase;color:var(--muted2)';
-  var thead='<thead><tr style="background:var(--surface3)">'
-    +'<th style="'+thStyle+'">Region</th>'
+  var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
+  var getRegion=function(name){
+    if(!name) return null;
+    var nl=(name||'').toLowerCase();
+    var map=HRBP_REGION_MAP||{};
+    for(var k in map){
+      if(map.hasOwnProperty(k)&&nl.indexOf(k)>=0) return map[k];
+    }
+    return null;
+  };
+  var HRBP_ROWS=[
+    {label:'Abhishek / Rekha / Salma (North)',region:'North'},
+    {label:'Priya / Suhail / Mousumi / Caral (South)',region:'South'},
+    {label:'Pijush / Surajit (East)',region:'East'},
+    {label:'Shambhavi / Somasri (West)',region:'West'},
+    {label:'Neha / Ajith / Deepak (Pan-India)',region:'Pan-India'}
+  ];
+  var byRegion={};
+  HRBP_ROWS.forEach(function(row){byRegion[row.region]={p:0,actioned:0,od:0};});
+  pending.forEach(function(c){
+    var r=c.region||'';
+    if(byRegion[r]) byRegion[r].p++;
+  });
+  overdue.forEach(function(c){
+    var r=c.region||'';
+    if(byRegion[r]) byRegion[r].od++;
+  });
+  cases.forEach(function(c){
+    if(!c.status_updated_by||!c.status_updated_at) return;
+    if(new Date(c.status_updated_at)<weekStart) return;
+    var resolverRegion=getRegion(c.status_updated_by);
+    if(resolverRegion&&byRegion[resolverRegion]){
+      byRegion[resolverRegion].actioned++;
+    }
+  });
+  var sortedRows=HRBP_ROWS.slice().sort(function(a,b){
+    return byRegion[b.region].p-byRegion[a.region].p;
+  });
+  var theadA='<thead><tr style="background:var(--surface3)">'
+    +'<th style="'+thStyle+'">HRBP (Region)</th>'
     +'<th style="'+thStyle+'">Pending</th>'
-    +'<th style="'+thStyle+'">Resolved This Wk</th>'
+    +'<th style="'+thStyle+'">Actioned This Wk</th>'
     +'<th style="'+thStyle+'">Overdue</th>'
     +'</tr></thead>';
-  var tbody='<tbody>'+sortedR.map(function(r){
-    var d=regions[r];
-    var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
+  var tbodyA='<tbody>'+sortedRows.map(function(row){
+    var d=byRegion[row.region];
     return '<tr>'
-      +'<td style="'+tdBase+'">'+esc(r)+'</td>'
+      +'<td style="'+tdBase+'">'+esc(row.label)+'</td>'
       +'<td style="'+tdBase+';font-weight:600;color:var(--accent)">'+d.p+'</td>'
-      +'<td style="'+tdBase+';color:var(--green)">'+d.rw+'</td>'
+      +'<td style="'+tdBase+';color:var(--green)">'+d.actioned+'</td>'
       +'<td style="'+tdBase+';color:'+(d.od>0?'var(--amber)':'var(--muted)')+'">'+d.od+'</td>'
       +'</tr>';
   }).join('')+'</tbody>';
-  var table='<table style="width:100%;border-collapse:collapse">'+thead+tbody+'</table>';
+  var tableA='<table style="width:100%;border-collapse:collapse">'+theadA+tbodyA+'</table>';
+  var bktUncontacted=0,bktODNR=0,bktAbsconding=0,bktOther=0;
+  pending.forEach(function(c){
+    var st=(c.status||'').toLowerCase();
+    if(st==='uncontacted') bktUncontacted++;
+    else if(st==='od not regularised') bktODNR++;
+    else if(st.indexOf('absconding')>=0) bktAbsconding++;
+    else bktOther++;
+  });
+  var theadB='<thead><tr style="background:var(--surface3)">'
+    +'<th style="'+thStyle+'">Uncontacted</th>'
+    +'<th style="'+thStyle+'">OD Not Regularised</th>'
+    +'<th style="'+thStyle+'">Absconding</th>'
+    +'<th style="'+thStyle+'">Other</th>'
+    +'</tr></thead>';
+  var tbodyB='<tbody><tr>'
+    +'<td style="'+tdBase+';font-weight:600">'+bktUncontacted+'</td>'
+    +'<td style="'+tdBase+';font-weight:600">'+bktODNR+'</td>'
+    +'<td style="'+tdBase+';font-weight:600;color:var(--red)">'+bktAbsconding+'</td>'
+    +'<td style="'+tdBase+';font-weight:600">'+bktOther+'</td>'
+    +'</tr></tbody>';
+  var tableB='<table style="width:100%;border-collapse:collapse">'+theadB+tbodyB+'</table>';
+  var cardStyle='background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px';
+  var subHead=function(t){
+    return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;'
+      +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';
+  };
   absEl.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
     +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">'
     +'HRBP Absenteeism</div>'
     +kpiStrip
-    +'<div style="background:var(--surface2);border:1px solid var(--border);'
-    +'border-radius:8px;overflow:hidden">'+table+'</div>';
+    +'<div style="'+cardStyle+'">'+subHead('A. By HRBP')+tableA+'</div>'
+    +'<div style="'+cardStyle+'">'+subHead('B. Pending by Status Bucket')+tableB+'</div>';
 }
 
 function showToast(msg,type){
