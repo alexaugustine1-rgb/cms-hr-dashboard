@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.19.0 | **Last updated:** 13 Jul 2026 — Account Health deployment% + revised health score live (budget HC now consumed). Remaining: Elah parser, inline owner/WFH columns (#26); owners need assigning.
+**Version:** 3.19.1 | **Last updated:** 13 Jul 2026 — Account Health deployment% + revised score live (+ blank-tab runtime fix). Remaining: Elah parser, inline owner/WFH columns (#26); owners need assigning.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -15,6 +15,7 @@
 - **CUSTOMER_LIST cache now carries budget + billing (fixes audit gap):** sbBoot load + updateAcct re-sync fetch contracted_hc,billing_type and push `budget`/`billing` onto each CUSTOMER_LIST entry (previously dropped — per-account billing_type now available in the cache).
 - **Deployment% on Account Health cards:** deployPct = activeHC/budget (activeHC from _acctHC; budget=contracted_hc). Shown with sub `activeHC / budget`, green≥90 / amber 70-89 (or >110 'over') / red<70. T&M gets a purple T&M badge; MS/AMC show billing faintly + deployment is informational.
 - **REVISED health score (Alex-directed): FnF REMOVED from score (shown as info only), open-critical-reqs weighted UP.** Weights via quality-fraction × weight: **T&M (with budget):** Deployment 25 + TA/critical-reqs 25 + Absent 20 + Attrition 20 + Visit 10. **MS/AMC or T&M-no-budget:** TA 30 + Absent 25 + Attrition 25 + Visit 20. deployF tiers: ≥95→1, ≥85→.7, ≥70→.35, else 0. Thresholds unchanged (≥80 HEALTHY / ≥55 AT RISK / else CRITICAL). Old score was Absent25/FnF25/Visit20/Attr20/TA10. **budget_hc (150/152 filled) is now a live, scored signal — the master pays off.**
+- **Blank-tab bug fixed (8d06a08):** the deploy change renamed `hcCol`→`dpCol` but left a stale `hcCol` reference in the `segs` array (~line 8039) → runtime ReferenceError inside `cards.map` → Account Health rendered blank. node --check passed (valid syntax). **RECURRING LESSON (3rd time today after RMG canView/_currentUser): node --check ≠ runtime. After any RMG/Account-Health/shared-render edit, OPEN THE TAB in the browser before calling it done. Renames are the classic trap — grep for the OLD name after renaming.**
 
 ### 13 Jul 2026 — Roster-driven HRBP validation + inline owner/WFH columns (1896433; #26 pending)
 - **Accounts-upload validation roster-driven (1896433):** `handleCustomerAccountsUpload` no longer hardcodes the 6 HRBP names — fetches `user_profiles` (active, role='hrbp', function_type='hrbp') into `VALID_HRBP_SET` (lowercase display_name), blank always allowed, fetch-fail falls back to blank-only + console.warn. **Alex caught that I'd hardcoded the roster in a prompt — hold the line: NO hardcoded HRBP/TA/Ops names; always source from user_profiles.**
