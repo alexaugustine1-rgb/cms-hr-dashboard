@@ -7258,6 +7258,11 @@ async function renderAccountsTab(mc) {
   if (mc) mc.innerHTML = '<div style="padding:24px 28px">'
     + '<div style="font-family:DM Mono,monospace;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:14px">Manage Customer Accounts</div>'
     + '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Changes save immediately. Drives Journey Plan and HRBP visit dropdown.</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">'
+    + '<button onclick="exportCustomerAccountsTemplate()" style="padding:5px 13px;border:1px solid var(--accent);border-radius:5px;background:transparent;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer">&#11015; Download Template</button>'
+    + '<button onclick="document.getElementById(\'acct-upload-input\').click()" style="padding:5px 13px;border:1px solid var(--green);border-radius:5px;background:transparent;color:var(--green);font-size:11px;font-weight:600;cursor:pointer">&#11014; Upload Accounts</button>'
+    + '<input type="file" id="acct-upload-input" accept=".xlsx,.xls" style="display:none" onchange="if(this.files[0])handleCustomerAccountsUpload(this.files[0]);this.value=\'\'">'
+    + '</div>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' + filterBtns + '</div>'
     + tbl + '</div>';
 }
@@ -7290,6 +7295,139 @@ async function updateAcct(el) {
   }
 }
 
+
+var _acctUploadPending = null;
+
+async function exportCustomerAccountsTemplate() {
+  var res = await _sb.from('customer_accounts')
+    .select('id,name,region,tier,billing_type,contracted_hc,elah_name,hrbp_owner,active,headcount')
+    .order('region').order('name');
+  if (res.error) { showToast('Export failed: ' + res.error.message, 'error'); return; }
+  var rows = res.data || [];
+  var hdrs = ['account_id','name','region','tier','billing_type','budget_hc','elah_name','hrbp_owner','active','headcount_readonly'];
+  var data = [hdrs].concat(rows.map(function(r) {
+    return [
+      r.id, r.name||'', r.region||'', r.tier||'', r.billing_type||'',
+      r.contracted_hc!=null?r.contracted_hc:'', r.elah_name||'', r.hrbp_owner||'',
+      r.active, r.headcount||0
+    ];
+  }));
+  var ws = XLSX.utils.aoa_to_sheet(data);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Accounts');
+  XLSX.writeFile(wb, 'customer_accounts_template_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+
+async function handleCustomerAccountsUpload(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = async function(ev) {
+    var wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array'});
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    var existingRes = await _sb.from('customer_accounts').select('id');
+    var existingIds = {};
+    (existingRes.data||[]).forEach(function(r){ existingIds[r.id]=true; });
+    var VALID_REGION = ['North','South','East','West'];
+    var VALID_HRBP = ['','Abhishek Singh','Surajit Sen','Priya Paul','Prapti Patel','Shambhavi Prathamesh Joshi','Somasri Sukumar Samanta'];
+    var VALID_BILLING = ['T&M','MS','AMC'];
+    var inserts = [], updates = [], invalids = [];
+    rows.forEach(function(row, i) {
+      var rn = i + 2;
+      var aid = String(row['account_id']||'').trim();
+      var isUpdate = !!(aid && existingIds[aid]);
+      var isInsert = !aid;
+      if (!isUpdate && !isInsert) { invalids.push({row:rn,reasons:'account_id "'+aid+'" not found in database'}); return; }
+      var errs = [];
+      var nm      = String(row['name']||'').trim();
+      var region  = String(row['region']||'').trim();
+      var tier    = String(row['tier']||'').trim();
+      var billing = String(row['billing_type']||'').trim();
+      var hrbp    = String(row['hrbp_owner']||'').trim();
+      var elah    = String(row['elah_name']||'').trim();
+      var bhcRaw  = row['budget_hc'];
+      var activeRaw = row['active'];
+      if (isInsert && !nm) errs.push('name required for new account');
+      if (VALID_REGION.indexOf(region) < 0) errs.push('invalid region "'+region+'"');
+      if (VALID_HRBP.indexOf(hrbp) < 0) errs.push('invalid hrbp_owner "'+hrbp+'"');
+      if (billing && VALID_BILLING.indexOf(billing) < 0) errs.push('invalid billing_type "'+billing+'"');
+      if (isInsert && !billing) errs.push('billing_type required for new account');
+      if (bhcRaw !== '' && bhcRaw !== null && bhcRaw !== undefined) {
+        var hcNum = Number(bhcRaw);
+        if (isNaN(hcNum) || hcNum < 0) errs.push('budget_hc must be a non-negative number');
+      }
+      if (errs.length) { invalids.push({row:rn,reasons:errs.join('; ')}); return; }
+      var now = new Date().toISOString();
+      var by = (_sbRole && _sbRole.display_name) || 'admin';
+      var activeVal = (activeRaw===true||activeRaw===1||String(activeRaw).toUpperCase()==='TRUE'||String(activeRaw)==='1');
+      var patch = {region:region, active:activeVal, updated_by:by, updated_at:now};
+      if (nm) patch.name = nm;
+      if (tier) patch.tier = tier;
+      if (billing) patch.billing_type = billing;
+      if (bhcRaw !== '' && bhcRaw !== null && bhcRaw !== undefined) patch.contracted_hc = Number(bhcRaw);
+      patch.elah_name = elah || null;
+      patch.hrbp_owner = hrbp || null;
+      if (isUpdate) { patch._rid = aid; updates.push(patch); }
+      else inserts.push(patch);
+    });
+    _acctUploadPending = {inserts:inserts, updates:updates};
+    var invHtml = invalids.length
+      ? '<div style="margin-top:10px;max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px">'
+        + invalids.map(function(v){return '<div style="font-size:11px;color:var(--red);padding:2px 0">Row '+v.row+': '+esc(v.reasons)+'</div>';}).join('')
+        + '</div>'
+      : '';
+    var applyN = inserts.length + updates.length;
+    var applyBtnStyle = applyN
+      ? 'padding:7px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer'
+      : 'padding:7px 16px;border:none;border-radius:6px;background:var(--surface3);color:var(--muted);font-weight:600;cursor:not-allowed';
+    var html = '<div id="acct-upload-modal" style="position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center">'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:28px;min-width:380px;max-width:560px;max-height:82vh;overflow-y:auto">'
+      + '<div style="font-weight:700;font-size:14px;margin-bottom:10px">Confirm Account Upload</div>'
+      + '<div style="font-size:12px">'
+      + '<span style="color:var(--green);font-weight:600">'+inserts.length+' new</span>'
+      + ' &nbsp;|&nbsp; <span style="color:var(--accent);font-weight:600">'+updates.length+' updated</span>'
+      + ' &nbsp;|&nbsp; <span style="color:'+(invalids.length?'var(--red)':'var(--muted)')+';font-weight:600">'+invalids.length+' invalid</span>'
+      + '</div>'
+      + invHtml
+      + '<div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">'
+      + '<button onclick="document.getElementById(\'acct-upload-modal\').remove()" style="padding:7px 16px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer">Cancel</button>'
+      + (applyN ? '<button onclick="_applyAccountsUpload()" style="'+applyBtnStyle+'">Apply ('+applyN+' changes)</button>' : '<button disabled style="'+applyBtnStyle+'">Nothing to apply</button>')
+      + '</div></div></div>';
+    var old = document.getElementById('acct-upload-modal');
+    if (old) old.remove();
+    document.body.insertAdjacentHTML('beforeend', html);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function _applyAccountsUpload() {
+  var modal = document.getElementById('acct-upload-modal');
+  if (modal) modal.remove();
+  if (!_acctUploadPending) return;
+  var inserts = _acctUploadPending.inserts.slice();
+  var updates = _acctUploadPending.updates.slice();
+  _acctUploadPending = null;
+  var nAdded = 0, nUpdated = 0, firstErr = '';
+  for (var i = 0; i < inserts.length; i++) {
+    var ins = Object.assign({}, inserts[i]);
+    ins.id = crypto.randomUUID();
+    var ir = await _sb.from('customer_accounts').insert(ins);
+    if (ir.error) { if (!firstErr) firstErr = 'Insert "' + (ins.name||'?') + '": ' + ir.error.message; }
+    else nAdded++;
+  }
+  for (var j = 0; j < updates.length; j++) {
+    var upd = Object.assign({}, updates[j]);
+    var uid = upd._rid;
+    delete upd._rid;
+    var ur = await _sb.from('customer_accounts').update(upd).eq('id', uid);
+    if (ur.error) { if (!firstErr) firstErr = 'Update ' + uid + ': ' + ur.error.message; }
+    else nUpdated++;
+  }
+  if (firstErr) showToast(firstErr, 'error');
+  else showToast('Accounts: ' + nAdded + ' added, ' + nUpdated + ' updated');
+  var mc = document.getElementById('tab-accounts');
+  if (mc) renderAccountsTab(mc);
+}
 
 // ── ACCOUNT HC LOADER ─────────────────────────────────────────────────────
 async function loadAcctHC() {
