@@ -10648,6 +10648,7 @@ async function loadOpsReview(){
   await _loadOpsRevSubmissions();
   await _loadOpsRevAbsent();
   await _loadOpsRevVisits();
+  await _loadOpsRevTA();
 }
 
 async function _loadOpsRevSubmissions(){
@@ -10973,6 +10974,96 @@ async function _loadOpsRevVisits(){
     +'<div style="'+cardStyle+'">'+subHead('By HRBP - visits')+tableT+'</div>'
     +'<div style="'+cardStyle+'">'+subHead('Critical site issues')
     +'<div style="padding:12px">'+issuesList+'</div></div>';
+}
+
+async function _loadOpsRevTA(){
+  var el=document.getElementById('opsrev-ta');
+  if(!el) return;
+  el.innerHTML='<div style="padding:16px;color:var(--muted)">Loading TA data…</div>';
+  var today=new Date();
+  var dayNum=today.getDay();
+  var diff=(dayNum===0)?6:dayNum-1;
+  var monFallback=new Date(today);
+  monFallback.setDate(today.getDate()-diff);
+  monFallback.setHours(0,0,0,0);
+  var todayStr=today.toISOString().slice(0,10);
+  var _pFromStr=_ovFrom||monFallback.toISOString().slice(0,10);
+  var _pToStr=_ovTo||todayStr;
+  var _fmtD=function(s){if(!s)return'';var p=s.split('-');return p[2]+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1],10)-1];};
+  var periodLabel=(_ovFrom&&_ovTo)?(_fmtD(_ovFrom)+' - '+_fmtD(_ovTo)):'This Week';
+  var openCounts=_taBuildRecCounts(TA_ACTIVE_REQS);
+  var totalOpen=0,totalCrit=0;
+  Object.keys(openCounts).forEach(function(k){totalOpen+=openCounts[k].active;totalCrit+=openCounts[k].critical;});
+  var rClosed=await _sb.from('req_tracker').select('primary_recruiter,filled_date').eq('status','Closed').gte('filled_date',_pFromStr).lte('filled_date',_pToStr);
+  var closedRows=(!rClosed.error&&rClosed.data)||[];
+  var closedMap={};
+  var totalClosed=0;
+  closedRows.forEach(function(r){
+    var nm=(r.primary_recruiter||'').replace(/\s+/g,' ').trim();
+    if(!nm) return;
+    var k=nm.toLowerCase().split(' ')[0];
+    if(!closedMap[k]) closedMap[k]={name:nm,count:0};
+    closedMap[k].count++;
+    totalClosed++;
+  });
+  var fnfPending=(typeof FNF_DATA!=='undefined'&&FNF_DATA||[]).filter(function(r){
+    var st=String(r.status||'').toLowerCase();
+    return !r.paid&&!st.includes('paid')&&!st.includes('settled');
+  });
+  var fnfOverdue=fnfPending.filter(function(r){
+    if(!r.payment_date) return false;
+    var d=new Date(r.payment_date);
+    return !isNaN(d)&&d<today;
+  });
+  var _ork=function(label,val,col,sub){
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;min-width:130px">'
+      +'<div style="font-size:22px;font-weight:700;color:'+(col||'var(--accent)')+'">'+val+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2);margin-top:2px;text-transform:uppercase;letter-spacing:.6px">'+esc(label)+'</div>'
+      +(sub?'<div style="font-size:10px;color:var(--red);margin-top:2px">'+esc(sub)+'</div>':'')
+      +'</div>';
+  };
+  var fnfSub=fnfOverdue.length?fnfOverdue.length+' overdue':'';
+  var kpiStrip='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'
+    +_ork('Open Reqs',totalOpen,'var(--accent)')
+    +_ork('Critical >45d',totalCrit,'var(--red)')
+    +_ork('Closed (period)',totalClosed,'var(--green)')
+    +_ork('FnF Pending',fnfPending.length,'var(--amber)',fnfSub)
+    +'</div>';
+  var allKeys={};
+  Object.keys(openCounts).forEach(function(k){allKeys[k]=1;});
+  Object.keys(closedMap).forEach(function(k){allKeys[k]=1;});
+  var rows=Object.keys(allKeys).map(function(k){
+    var oc=openCounts[k]||{name:(closedMap[k]?closedMap[k].name:k),active:0,critical:0,plat_gold:0};
+    var cc=closedMap[k]||{count:0};
+    return {name:oc.name||cc.name||k,open:oc.active,crit:oc.critical,closed:cc.count,pg:oc.plat_gold};
+  });
+  rows.sort(function(a,b){if(b.crit!==a.crit)return b.crit-a.crit;return b.open-a.open;});
+  var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)';
+  var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
+  var theadT='<thead><tr style="background:var(--surface3)">'
+    +'<th style="'+thStyle+'">Recruiter</th>'
+    +'<th style="'+thStyle+'">Open</th>'
+    +'<th style="'+thStyle+'">Critical</th>'
+    +'<th style="'+thStyle+'">Closed (period)</th>'
+    +'<th style="'+thStyle+'">Plat / Gold</th>'
+    +'</tr></thead>';
+  var tbodyT='<tbody>'+(rows.length?rows.map(function(row){
+    return '<tr>'
+      +'<td style="'+tdBase+';font-weight:600">'+esc(row.name)+'</td>'
+      +'<td style="'+tdBase+'">'+row.open+'</td>'
+      +'<td style="'+tdBase+';color:'+(row.crit>0?'var(--red)':'var(--muted)')+'">'+row.crit+'</td>'
+      +'<td style="'+tdBase+';color:var(--green)">'+row.closed+'</td>'
+      +'<td style="'+tdBase+';color:'+(row.pg>0?'#a78bfa':'var(--muted)')+'">'+row.pg+'</td>'
+      +'</tr>';
+  }).join(''):'<tr><td colspan="5" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')
+  +'</tbody>';
+  var tableT='<table style="width:100%;border-collapse:collapse">'+theadT+tbodyT+'</table>';
+  var cardStyle='background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px';
+  var subHead=function(t){return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';};
+  el.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:2px">TA Performance</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Open load as of upload &middot; Closed: '+esc(periodLabel)+'</div>'
+    +kpiStrip
+    +'<div style="'+cardStyle+'">'+subHead('By recruiter')+tableT+'</div>';
 }
 
 function showToast(msg,type){
