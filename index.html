@@ -10668,8 +10668,23 @@ async function _loadOpsRevVisits(){
   var plans=r1.data||[];
   var visits=r2.data||[];
   var erCases=r3.data||[];
-  var planned=plans.filter(function(v){return v.status==='Planned';});
+  var VISIT_HRBPS=[
+    {name:'Abhishek Singh',first:'abhishek',region:'North'},
+    {name:'Surajit Sen',first:'surajit',region:'East'},
+    {name:'Priya Paul',first:'priya',region:'South'},
+    {name:'Shambhavi Joshi',first:'shambhavi',region:'West'},
+    {name:'Somasri Samanta',first:'somasri',region:'West'}
+  ];
+  var matchHrbp=function(rawName){
+    var nl=(rawName||'').toLowerCase();
+    for(var i=0;i<VISIT_HRBPS.length;i++){
+      if(nl.indexOf(VISIT_HRBPS[i].first)>=0) return VISIT_HRBPS[i];
+    }
+    return null;
+  };
+  var planned=plans.filter(function(v){return v.status==='Planned'&&matchHrbp(v.hrbp_name);});
   var doneInPeriod=visits.filter(function(v){
+    if(!matchHrbp(v.hrbp_name)) return false;
     var ds=(v.visit_date||'').slice(0,10);
     return ds&&ds>=_pFromStr&&ds<=_pToStr;
   });
@@ -10677,9 +10692,9 @@ async function _loadOpsRevVisits(){
     var ds=(v.planned_date||'').slice(0,10);
     return ds&&ds<todayStr;
   });
-  var openER=erCases.filter(function(c){return c.status==='Open';});
+  var openER=erCases.filter(function(c){return c.status==='Open'&&matchHrbp(c.hrbp_name);});
   var slaBreached=openER.filter(function(c){return !!c.sla_breached;});
-  var flagged=visits.filter(function(v){return !!v.issues_flagged;});
+  var flagged=visits.filter(function(v){return !!v.issues_flagged&&matchHrbp(v.hrbp_name);});
   flagged.sort(function(a,b){return (b.visit_date||'').localeCompare(a.visit_date||'');});
   var _ork=function(label,val,col,sub){
     return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;'
@@ -10700,16 +10715,13 @@ async function _loadOpsRevVisits(){
   var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;'
     +'text-transform:uppercase;color:var(--muted2)';
   var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
-  var hrbpMap={};
-  var addHrbp=function(name,region){
-    if(!name) return;
-    if(!hrbpMap[name]) hrbpMap[name]={region:region||'',planned:0,done:0,overdue:0,openER:0};
-  };
-  planned.forEach(function(v){addHrbp(v.hrbp_name,v.region);hrbpMap[v.hrbp_name].planned++;});
-  doneInPeriod.forEach(function(v){addHrbp(v.hrbp_name,v.region);hrbpMap[v.hrbp_name].done++;});
-  overduePlans.forEach(function(v){addHrbp(v.hrbp_name,v.region);hrbpMap[v.hrbp_name].overdue++;});
-  openER.forEach(function(c){addHrbp(c.hrbp_name,c.region);hrbpMap[c.hrbp_name].openER++;});
-  var hrbpRows=Object.keys(hrbpMap).map(function(n){return {name:n,d:hrbpMap[n]};});
+  var hrbpStats={};
+  VISIT_HRBPS.forEach(function(h){hrbpStats[h.first]={name:h.name,region:h.region,planned:0,done:0,overdue:0,openER:0};});
+  planned.forEach(function(v){var h=matchHrbp(v.hrbp_name);if(h)hrbpStats[h.first].planned++;});
+  doneInPeriod.forEach(function(v){var h=matchHrbp(v.hrbp_name);if(h)hrbpStats[h.first].done++;});
+  overduePlans.forEach(function(v){var h=matchHrbp(v.hrbp_name);if(h)hrbpStats[h.first].overdue++;});
+  openER.forEach(function(c){var h=matchHrbp(c.hrbp_name);if(h)hrbpStats[h.first].openER++;});
+  var hrbpRows=VISIT_HRBPS.map(function(h){return {name:h.name,d:hrbpStats[h.first]};});
   hrbpRows.sort(function(a,b){
     if(b.d.overdue!==a.d.overdue) return b.d.overdue-a.d.overdue;
     return b.d.planned-a.d.planned;
