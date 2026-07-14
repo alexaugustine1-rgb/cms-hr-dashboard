@@ -10170,6 +10170,8 @@ function _rmgKpi(label,val,col){
 }
 
 function _rmgReconFlag(r){
+  if(r.elah_demand_id&&r.elah_demand_id.trim().toLowerCase()==='internal')
+    return{type:'GREEN',label:'Internal',col:'#34d399',bg:'rgba(52,211,153,.15)'};
   if(!r.elah_demand_id||r.elah_demand_id.trim()===''||r.in_elah===false)
     return{type:'RED',label:'No Elah line',col:'var(--red)',bg:'rgba(248,113,113,.15)'};
   if(r.position_type&&r.position_type.indexOf('Backfill')!==-1
