@@ -7822,29 +7822,8 @@ function renderAccountHealth() {
   var cards = accounts.map(function(acct){
     var n = acct.n;
 
-    // 1. Active HC (from super employee master cache — all emp types)
-    // Try region-specific composite key first, fall back to flat name match
-    var activeHC = 0;
-    if (_acctHC) {
-      var _acctReg = (acct.r||'').toUpperCase();
-      var _nUp = n.toUpperCase().trim();
-      // Try composite key: exact account+region match
-      if (_acctReg) {
-        Object.keys(_acctHC).forEach(function(k){
-          if (k.indexOf('|||') < 0) return; // skip flat keys
-          var parts = k.split('|||');
-          if (parts[1] === _acctReg && nameMatch(parts[0], _nUp))
-            activeHC += (_acctHC[k]||0);
-        });
-      }
-      // Fallback: flat name match if no region hit
-      if (activeHC === 0) {
-        Object.keys(_acctHC).forEach(function(k){
-          if (k.indexOf('|||') >= 0) return; // skip composite keys
-          if (nameMatch(k, n)) activeHC += (_acctHC[k]||0);
-        });
-      }
-    }
+    // 1. Active HC — synced from employee_master via customer_accounts.headcount
+    var activeHC = acct.hc || 0;
 
     // 2. Absent
     var absent = (_absentCases||[]).filter(function(c){
@@ -14376,6 +14355,7 @@ async function processEmployeeMaster(wb) {
         _emInserted += _emSlice.length;
       }
       log('✓ employee_master: '+_emInserted+' active employees persisted','ok');
+      try { await _sb.rpc('sync_headcount_from_employee_master'); log('✓ customer_accounts headcount synced','ok'); } catch(e){ console.warn('hc sync failed', e); }
 
       // ── Compute MTD joiners from NewJoinee rows ──────────────────────────
       var _nowRef2 = new Date();
