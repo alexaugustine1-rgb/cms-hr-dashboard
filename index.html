@@ -7354,8 +7354,14 @@ async function handleCustomerAccountsUpload(file) {
     var existingIds = {};
     (existingRes.data||[]).forEach(function(r){ existingIds[r.id]=true; });
     var VALID_REGION = ['North','South','East','West'];
-    var VALID_HRBP = ['','Abhishek Singh','Surajit Sen','Priya Paul','Prapti Patel','Shambhavi Prathamesh Joshi','Somasri Sukumar Samanta'];
     var VALID_BILLING = ['T&M','MS','AMC'];
+    var VALID_HRBP_SET = {'':true};
+    var hrbpRosterRes = await _sb.from('user_profiles').select('display_name').eq('active',true).eq('role','hrbp').eq('function_type','hrbp');
+    if (hrbpRosterRes.error || !hrbpRosterRes.data || !hrbpRosterRes.data.length) {
+      console.warn('[upload] hrbp roster fetch failed or empty; blanks only allowed');
+    } else {
+      hrbpRosterRes.data.forEach(function(u){ var n=(u.display_name||'').trim(); if(n) VALID_HRBP_SET[n.toLowerCase()]=true; });
+    }
     var inserts = [], updates = [], invalids = [];
     rows.forEach(function(row, i) {
       var rn = i + 2;
@@ -7375,7 +7381,7 @@ async function handleCustomerAccountsUpload(file) {
       var wfhApprRaw = row['wfh_approved'];
       if (isInsert && !nm) errs.push('name required for new account');
       if (VALID_REGION.indexOf(region) < 0) errs.push('invalid region "'+region+'"');
-      if (VALID_HRBP.indexOf(hrbp) < 0) errs.push('invalid hrbp_owner "'+hrbp+'"');
+      if (!VALID_HRBP_SET[hrbp.toLowerCase()]) errs.push('hrbp_owner not a current HRBP');
       if (billing && VALID_BILLING.indexOf(billing) < 0) errs.push('invalid billing_type "'+billing+'"');
       if (isInsert && !billing) errs.push('billing_type required for new account');
       if (bhcRaw !== '' && bhcRaw !== null && bhcRaw !== undefined) {
