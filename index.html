@@ -9249,6 +9249,8 @@ function _setOvPreset(preset, customFrom, customTo) {
   }
   _emWeekJoiners = null; _emMTDJoiners = null;
   loadEMJoinerCounts();
+  var _ort=document.getElementById('tab-opsreview');
+  if(_ort&&_ort.style.display!=='none') loadOpsReview();
 }
 
 async function loadTAClosedMTD() {
@@ -10498,10 +10500,14 @@ async function _loadOpsRevAbsent(){
   var today=new Date();
   var dayNum=today.getDay();
   var diff=(dayNum===0)?6:dayNum-1;
-  var weekStart=new Date(today);
-  weekStart.setDate(today.getDate()-diff);
-  weekStart.setHours(0,0,0,0);
+  var monFallback=new Date(today);
+  monFallback.setDate(today.getDate()-diff);
+  monFallback.setHours(0,0,0,0);
+  var _pStart=_ovFrom?new Date(_ovFrom+'T00:00:00'):monFallback;
+  var _pEnd=_ovTo?new Date(_ovTo+'T23:59:59'):today;
   var todayStr=today.toISOString().slice(0,10);
+  var _fmtD=function(s){if(!s)return'';var p=s.split('-');return p[2]+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1],10)-1];};
+  var periodLabel=(_ovFrom&&_ovTo)?(_fmtD(_ovFrom)+' - '+_fmtD(_ovTo)):'This Week';
   var res=await _sb.from('absent_cases')
     .select('status,region,manager_name,status_updated_at,status_updated_by,next_followup_date,esep_initiated');
   if(res.error){
@@ -10511,8 +10517,10 @@ async function _loadOpsRevAbsent(){
   var cases=res.data||[];
   var isResolved=function(c){return (c.status||'').toLowerCase().indexOf('resolved')>=0;};
   var pending=cases.filter(function(c){return !isResolved(c);});
-  var resolvedThisWk=cases.filter(function(c){
-    return isResolved(c)&&c.status_updated_at&&new Date(c.status_updated_at)>=weekStart;
+  var resolvedPeriod=cases.filter(function(c){
+    if(!isResolved(c)||!c.status_updated_at) return false;
+    var d=new Date(c.status_updated_at);
+    return d>=_pStart&&d<=_pEnd;
   });
   var overdue=pending.filter(function(c){
     return c.next_followup_date&&c.next_followup_date<todayStr;
@@ -10529,66 +10537,75 @@ async function _loadOpsRevAbsent(){
   };
   var kpiStrip='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'
     +_ork('Total Pending',pending.length,'var(--accent)')
-    +_ork('Resolved This Week',resolvedThisWk.length,'var(--green)')
+    +_ork('Resolved (period)',resolvedPeriod.length,'var(--green)')
     +_ork('Overdue Follow-ups',overdue.length,'var(--amber)')
     +_ork('Absconding (eSep)',absconding.length,'var(--red)')
     +'</div>';
   var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;'
     +'text-transform:uppercase;color:var(--muted2)';
   var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
-  var getRegion=function(name){
-    if(!name) return null;
-    var nl=(name||'').toLowerCase();
-    var map=HRBP_REGION_MAP||{};
-    for(var k in map){
-      if(map.hasOwnProperty(k)&&nl.indexOf(k)>=0) return map[k];
-    }
-    return null;
-  };
-  var HRBP_ROWS=[
-    {label:'Abhishek / Rekha / Salma (North)',region:'North'},
-    {label:'Priya / Suhail / Mousumi / Caral (South)',region:'South'},
-    {label:'Pijush / Surajit (East)',region:'East'},
-    {label:'Shambhavi / Somasri (West)',region:'West'},
-    {label:'Neha / Ajith / Deepak (Pan-India)',region:'Pan-India'}
+  var OPSREV_HRBPS=[
+    {name:'Abhishek Singh',first:'abhishek',region:'North'},
+    {name:'Surajit Sen',first:'surajit',region:'East'},
+    {name:'Priya Paul',first:'priya',region:'South'},
+    {name:'Shambhavi Joshi',first:'shambhavi',region:'West'},
+    {name:'Somasri Samanta',first:'somasri',region:'West'}
   ];
-  var byRegion={};
-  HRBP_ROWS.forEach(function(row){byRegion[row.region]={p:0,actioned:0,od:0};});
-  pending.forEach(function(c){
-    var r=c.region||'';
-    if(byRegion[r]) byRegion[r].p++;
-  });
-  overdue.forEach(function(c){
-    var r=c.region||'';
-    if(byRegion[r]) byRegion[r].od++;
-  });
+  var hrbpStats={};
+  OPSREV_HRBPS.forEach(function(h){hrbpStats[h.first]={actioned:0,resolved:0};});
   cases.forEach(function(c){
     if(!c.status_updated_by||!c.status_updated_at) return;
-    if(new Date(c.status_updated_at)<weekStart) return;
-    var resolverRegion=getRegion(c.status_updated_by);
-    if(resolverRegion&&byRegion[resolverRegion]){
-      byRegion[resolverRegion].actioned++;
-    }
-  });
-  var sortedRows=HRBP_ROWS.slice().sort(function(a,b){
-    return byRegion[b.region].p-byRegion[a.region].p;
+    var d=new Date(c.status_updated_at);
+    if(d<_pStart||d>_pEnd) return;
+    var by=(c.status_updated_by||'').toLowerCase();
+    OPSREV_HRBPS.forEach(function(h){
+      if(by.indexOf(h.first)>=0){
+        hrbpStats[h.first].actioned++;
+        if(isResolved(c)) hrbpStats[h.first].resolved++;
+      }
+    });
   });
   var theadA='<thead><tr style="background:var(--surface3)">'
-    +'<th style="'+thStyle+'">HRBP (Region)</th>'
-    +'<th style="'+thStyle+'">Pending</th>'
-    +'<th style="'+thStyle+'">Actioned This Wk</th>'
-    +'<th style="'+thStyle+'">Overdue</th>'
+    +'<th style="'+thStyle+'">HRBP</th>'
+    +'<th style="'+thStyle+'">Region</th>'
+    +'<th style="'+thStyle+'">Actioned</th>'
+    +'<th style="'+thStyle+'">Resolved</th>'
     +'</tr></thead>';
-  var tbodyA='<tbody>'+sortedRows.map(function(row){
-    var d=byRegion[row.region];
+  var tbodyA='<tbody>'+OPSREV_HRBPS.map(function(h){
+    var s=hrbpStats[h.first];
     return '<tr>'
-      +'<td style="'+tdBase+'">'+esc(row.label)+'</td>'
-      +'<td style="'+tdBase+';font-weight:600;color:var(--accent)">'+d.p+'</td>'
-      +'<td style="'+tdBase+';color:var(--green)">'+d.actioned+'</td>'
-      +'<td style="'+tdBase+';color:'+(d.od>0?'var(--amber)':'var(--muted)')+'">'+d.od+'</td>'
+      +'<td style="'+tdBase+';font-weight:600">'+esc(h.name)+'</td>'
+      +'<td style="'+tdBase+';color:var(--muted)">'+esc(h.region)+'</td>'
+      +'<td style="'+tdBase+';color:var(--accent)">'+s.actioned+'</td>'
+      +'<td style="'+tdBase+';color:var(--green)">'+s.resolved+'</td>'
       +'</tr>';
   }).join('')+'</tbody>';
   var tableA='<table style="width:100%;border-collapse:collapse">'+theadA+tbodyA+'</table>';
+  var BACKLOG_REGIONS=['North','South','East','West'];
+  var byReg={};
+  BACKLOG_REGIONS.forEach(function(r){byReg[r]={p:0,od:0};});
+  pending.forEach(function(c){
+    var r=c.region||'';
+    if(byReg[r]){byReg[r].p++;}
+  });
+  overdue.forEach(function(c){
+    var r=c.region||'';
+    if(byReg[r]){byReg[r].od++;}
+  });
+  var theadB='<thead><tr style="background:var(--surface3)">'
+    +'<th style="'+thStyle+'">Region</th>'
+    +'<th style="'+thStyle+'">Pending</th>'
+    +'<th style="'+thStyle+'">Overdue</th>'
+    +'</tr></thead>';
+  var tbodyB='<tbody>'+BACKLOG_REGIONS.map(function(r){
+    var d=byReg[r];
+    return '<tr>'
+      +'<td style="'+tdBase+'">'+esc(r)+'</td>'
+      +'<td style="'+tdBase+';font-weight:600;color:var(--accent)">'+d.p+'</td>'
+      +'<td style="'+tdBase+';color:'+(d.od>0?'var(--amber)':'var(--muted)')+'">'+d.od+'</td>'
+      +'</tr>';
+  }).join('')+'</tbody>';
+  var tableB='<table style="width:100%;border-collapse:collapse">'+theadB+tbodyB+'</table>';
   var bktUncontacted=0,bktODNR=0,bktAbsconding=0,bktOther=0;
   pending.forEach(function(c){
     var st=(c.status||'').toLowerCase();
@@ -10597,30 +10614,32 @@ async function _loadOpsRevAbsent(){
     else if(st.indexOf('absconding')>=0) bktAbsconding++;
     else bktOther++;
   });
-  var theadB='<thead><tr style="background:var(--surface3)">'
+  var theadC='<thead><tr style="background:var(--surface3)">'
     +'<th style="'+thStyle+'">Uncontacted</th>'
     +'<th style="'+thStyle+'">OD Not Regularised</th>'
     +'<th style="'+thStyle+'">Absconding</th>'
     +'<th style="'+thStyle+'">Other</th>'
     +'</tr></thead>';
-  var tbodyB='<tbody><tr>'
+  var tbodyC='<tbody><tr>'
     +'<td style="'+tdBase+';font-weight:600">'+bktUncontacted+'</td>'
     +'<td style="'+tdBase+';font-weight:600">'+bktODNR+'</td>'
     +'<td style="'+tdBase+';font-weight:600;color:var(--red)">'+bktAbsconding+'</td>'
     +'<td style="'+tdBase+';font-weight:600">'+bktOther+'</td>'
     +'</tr></tbody>';
-  var tableB='<table style="width:100%;border-collapse:collapse">'+theadB+tbodyB+'</table>';
+  var tableC='<table style="width:100%;border-collapse:collapse">'+theadC+tbodyC+'</table>';
   var cardStyle='background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px';
   var subHead=function(t){
     return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;'
       +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';
   };
   absEl.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
-    +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">'
+    +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:2px">'
     +'HRBP Absenteeism</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+esc(periodLabel)+'</div>'
     +kpiStrip
-    +'<div style="'+cardStyle+'">'+subHead('A. By HRBP')+tableA+'</div>'
-    +'<div style="'+cardStyle+'">'+subHead('B. Pending by Status Bucket')+tableB+'</div>';
+    +'<div style="'+cardStyle+'">'+subHead('A. By HRBP — activity this period')+tableA+'</div>'
+    +'<div style="'+cardStyle+'">'+subHead('B. Pending backlog by region')+tableB+'</div>'
+    +'<div style="'+cardStyle+'">'+subHead('C. Pending by status bucket')+tableC+'</div>';
 }
 
 function showToast(msg,type){
