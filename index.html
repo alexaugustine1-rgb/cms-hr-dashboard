@@ -7809,10 +7809,11 @@ function renderAccountHealth() {
   function fmtCr(n){ return n>=10000000?'₹'+(n/10000000).toFixed(1)+'Cr':n>=100000?'₹'+(n/100000).toFixed(1)+'L':n>0?'₹'+Math.round(n).toLocaleString('en-IN'):'—'; }
 
   // ── Build last-visit map ──
-  var lastVisitMap = {}; // UPPER_ACCOUNT_NAME → ISO date string
+  var lastVisitMap = {};   // acctKey|||REGION -> latest ISO date
   (_hrbpSVCache||[]).forEach(function(sv){
     var k=acctKey(sv.account_name); if(!k)return;
-    if(!lastVisitMap[k]||sv.visit_date>lastVisitMap[k]) lastVisitMap[k]=sv.visit_date;
+    var kr=k+'|||'+String(sv.region||'').toUpperCase();
+    if(!lastVisitMap[kr]||sv.visit_date>lastVisitMap[kr]) lastVisitMap[kr]=sv.visit_date;
   });
 
   // ── Build FnF escalation set (emp_codes) ──
@@ -7847,7 +7848,12 @@ function renderAccountHealth() {
     // 4. Last visit
     // Site visit data has no region field — shows pan-account last visit date
     var lastVisitDate = null;
-    Object.keys(lastVisitMap).forEach(function(k){ if(nameMatch(k,n)&&(!lastVisitDate||lastVisitMap[k]>lastVisitDate)) lastVisitDate=lastVisitMap[k]; });
+    var _accReg = String(acct.r||'').toUpperCase();
+    Object.keys(lastVisitMap).forEach(function(k){
+      var parts=k.split('|||'); if(parts.length<2 || parts[1]!==_accReg) return;
+      if(!nameMatch(parts[0],n)) return;
+      if(!lastVisitDate||lastVisitMap[k]>lastVisitDate) lastVisitDate=lastVisitMap[k];
+    });
     var daysSinceVisit = lastVisitDate ? Math.round((today-new Date(lastVisitDate))/86400000) : null;
 
     // 5. Attrition (exits with lwd in last 90 days — computed live from lwd date)
