@@ -10613,6 +10613,8 @@ function renderOpsReviewShell(){
     +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Weekly Ops Review</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;'
     +'color:var(--text);margin-bottom:20px">Ops Review &#8212; Week of '+esc(wkLabel)+'</div>'
+    +'<div id="opsrev-submissions" style="margin-bottom:32px">'
+    +'<div style="color:var(--muted);font-size:12px">Loading submissions&#8230;</div></div>'
     +'<div id="opsrev-absent" style="margin-bottom:32px">'
     +'<div style="color:var(--muted);font-size:12px">Loading absenteeism&#8230;</div></div>'
     +'<div id="opsrev-visits"></div>'
@@ -10629,8 +10631,69 @@ async function loadOpsReview(){
     return;
   }
   if(mc) mc.innerHTML=renderOpsReviewShell();
+  await _loadOpsRevSubmissions();
   await _loadOpsRevAbsent();
   await _loadOpsRevVisits();
+}
+
+async function _loadOpsRevSubmissions(){
+  var el=document.getElementById('opsrev-submissions');
+  if(!el) return;
+  var rWk=await _sb.from('weekly_reports').select('week_key,label').order('week_num',{ascending:false}).limit(1);
+  if(rWk.error||!rWk.data||!rWk.data.length){
+    el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:8px 0">No week defined.</div>';
+    return;
+  }
+  var wk=rWk.data[0];
+  var rProf=await _sb.from('user_profiles').select('display_name,email').eq('active',true).eq('role','hrbp').eq('function_type','hrbp');
+  var rSubs=await _sb.from('weekly_submissions').select('submitter_name,submitter_email,submitted_at').eq('week_key',wk.week_key).eq('function_type','hrbp');
+  if(rProf.error||rSubs.error){
+    var em=(rProf.error||rSubs.error).message;
+    el.innerHTML='<div style="color:var(--red);font-size:12px;padding:8px 0">Error: '+esc(em)+'</div>';
+    return;
+  }
+  var fieldHRBPs=rProf.data||[];
+  var subs=rSubs.data||[];
+  var subByEmail={};
+  subs.forEach(function(s){if(s.submitter_email)subByEmail[s.submitter_email.toLowerCase()]=s;});
+  var subByName={};
+  subs.forEach(function(s){if(s.submitter_name)subByName[s.submitter_name.toLowerCase()]=s;});
+  var rows=fieldHRBPs.map(function(h){
+    var match=subByEmail[(h.email||'').toLowerCase()]
+      ||subByName[(h.display_name||'').toLowerCase()]
+      ||null;
+    return {name:h.display_name,submitted:!!match,at:match?match.submitted_at:null};
+  });
+  rows.sort(function(a,b){if(a.submitted!==b.submitted)return a.submitted?1:-1;return(a.name||'').localeCompare(b.name||'');});
+  var submitted=rows.filter(function(r){return r.submitted;}).length;
+  var total=rows.length;
+  var chipCol=submitted===total?'var(--green)':'var(--amber)';
+  var _fmtAt=function(s){
+    if(!s) return '';
+    var d=new Date(s);
+    return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+  };
+  var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)';
+  var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
+  var thead='<thead><tr style="background:var(--surface3)">'
+    +'<th style="'+thStyle+'">HRBP</th>'
+    +'<th style="'+thStyle+'">Status</th>'
+    +'</tr></thead>';
+  var tbody='<tbody>'+rows.map(function(r){
+    var statusCell=r.submitted
+      ?'<td style="'+tdBase+';color:var(--green);font-weight:600">&#10003; '+esc(_fmtAt(r.at))+'</td>'
+      :'<td style="'+tdBase+';color:var(--amber);font-weight:600">Pending</td>';
+    return '<tr><td style="'+tdBase+';font-weight:600">'+esc(r.name)+'</td>'+statusCell+'</tr>';
+  }).join('')+'</tbody>';
+  var table='<table style="width:100%;border-collapse:collapse">'+thead+tbody+'</table>';
+  el.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
+    +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:6px">'
+    +'HRBP Weekly Submission &mdash; '+esc(wk.label||wk.week_key)+' ('+esc(wk.week_key)+')</div>'
+    +'<div style="margin-bottom:14px">'
+    +'<span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;'
+    +'background:'+chipCol+';color:#fff">'+submitted+' of '+total+' submitted</span></div>'
+    +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
+    +table+'</div>';
 }
 
 async function _loadOpsRevAbsent(){
