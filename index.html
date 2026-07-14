@@ -863,6 +863,9 @@ const _SB_URL='https://mzyrcrkwgbqgwajkjdnp.supabase.co';
 const _SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16eXJjcmt3Z2JxZ3dhamtqZG5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MjM0MzgsImV4cCI6MjA4OTI5OTQzOH0.lXmA5LoBQrWHMSMAaJtn3cwEpDDbMt2EvzyEy5mykbc';
 const _sb=supabase.createClient(_SB_URL,_SB_KEY);
 let _sbUser=null,_sbRole=null;
+function _myRegions(){var r=(typeof _sbRole!=='undefined'&&_sbRole)||{};if(r.oversight_regions&&String(r.oversight_regions).trim())return String(r.oversight_regions).split(',').map(function(x){return x.trim();}).filter(Boolean);if(r.region&&r.region!=='Pan India')return[r.region];return null;}
+function _regionInScope(reg){var m=_myRegions();return!m||m.indexOf(reg)>=0;}
+function _isMultiRegion(){var m=_myRegions();return!!(m&&m.length>1);}
 var _cwData = null;
 var _acctHC = null;   // per-account active HC from super employee master {UPPER_NAME: count}
 var _ahFilters = {region:'All', tier:'All', health:'All'};
@@ -4060,7 +4063,7 @@ function renderAbsenteeism(el) {
   if (!el) el = document.getElementById('tab-absenteeism');
   if (!el) return;
   var _absft=typeof _sbRole!=='undefined'&&_sbRole?(_sbRole.function_type||''):'';
-  if(typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India'&&_absft!=='hrops'&&_absft!=='payroll'&&typeof _absentFilter!=='undefined'){_absentFilter.region=_sbRole.region;}
+  if(typeof _sbRole!=='undefined'&&_sbRole&&_sbRole.region&&_sbRole.region!=='Pan India'&&_absft!=='hrops'&&_absft!=='payroll'&&typeof _absentFilter!=='undefined'&&!_isMultiRegion()){_absentFilter.region=_sbRole.region;}
 
   // Use Supabase data if loaded, else show loading
   if (!_absentLoaded) {
@@ -4075,6 +4078,7 @@ function renderAbsenteeism(el) {
 
   let data = _absentCases.slice();
   if (_absentFilter.region !== 'All') data = data.filter(r => r.region === _absentFilter.region);
+  else if (_isMultiRegion()) data = data.filter(function(r){return _regionInScope(r.region);});
   if (_absentFilter.tier !== 'All') data = data.filter(r => r.account_tier === _absentFilter.tier);
   if (_absentFilter.status !== 'All') data = data.filter(r => r.status === _absentFilter.status);
 
@@ -4097,7 +4101,9 @@ function renderAbsenteeism(el) {
   function fbtn(v, active, key, val) {
     return `<button onclick="_absentFilter.${key}='${val}';renderAbsenteeism()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:${active?'700':'500'};border:1px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'none'};color:${active?'var(--bg)':'var(--muted)'};cursor:pointer">${v}</button>`;
   }
-  const rf = ['All','North','South','East','West'].map(v=>fbtn(v,_absentFilter.region===v,'region',v)).join('');
+  var _rfOpts = _isMultiRegion() ? ['All'].concat(_myRegions()) : ['All','North','South','East','West'];
+  var _rfLbls = _isMultiRegion() ? {'All':'All my regions'} : {};
+  const rf = _rfOpts.map(function(v){return fbtn(_rfLbls[v]||v,_absentFilter.region===v,'region',v);}).join('');
   const tf = ['All','Platinum','Gold','Regular'].map(v=>fbtn(v,_absentFilter.tier===v,'tier',v)).join('');
   const sf = ['All','Uncontacted','Under Investigation','Warning Letter Issued','Absconding — eSep Initiated','Absconding — eSep Not Raised','Absconding — eSep Rejected','Resignation — HR Chain Pending'].map(v=>fbtn(v,_absentFilter.status===v,'status',v)).join('');
 
