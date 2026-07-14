@@ -7884,9 +7884,14 @@ function renderAccountHealth() {
     // Annualise: 90-day exit count → annual rate (thresholds are annual: 3%/8%/15%)
     var attrRate = activeHC > 0 ? Math.round((exits / activeHC) * (365 / 90) * 1000) / 10 : 0;
 
-    // 6. TA open reqs
-    var taReqs = (TA_ACTIVE_REQS||[]).filter(function(r){ return nameMatch(r.account||r.customer||'',n); });
+    // 6. TA open reqs (region-aware)
+    var taReqs = (TA_ACTIVE_REQS||[]).filter(function(r){
+      if (!nameMatch(r.account||r.customer||'',n)) return false;
+      if (acct.r && r.region && r.region !== acct.r) return false;
+      return true;
+    });
     var taCrit = taReqs.filter(function(r){ return (r.tat||0)>45; });
+    var openPos = taReqs.length;
 
     // ── Health Score ──
     var sAbsent = absent.length===0?25:absentCrit.length===0?15:absentCrit.length<=2?6:0;
@@ -7895,7 +7900,10 @@ function renderAccountHealth() {
     var sVisit  = daysSinceVisit===null?0:daysSinceVisit<=14?20:daysSinceVisit<=30?12:daysSinceVisit<=45?5:0;
     var sAttr   = attrRate<=3?20:attrRate<=8?12:attrRate<=15?5:0;
     var sTA     = taCrit.length===0?10:taCrit.length===1?6:2;
-    var budget  = acct.budget||0;
+    var realBudget = (acct.budget && acct.budget>0) ? acct.budget : null;
+    var budget, budgetBasis;
+    if(realBudget){ budget=realBudget; budgetBasis='contract'; }
+    else { budget=activeHC+openPos; budgetBasis='demand'; }
     var isTM    = acct.billing==='T&M';
     var deployPct = budget>0 ? Math.round(activeHC/budget*100) : null;
     var deployF = deployPct===null?null:deployPct>=95?1:deployPct>=85?0.7:deployPct>=70?0.35:0;
@@ -7911,7 +7919,7 @@ function renderAccountHealth() {
     var tCol    = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Regular:'var(--muted2)'}[acct.t]||'var(--muted2)';
 
     return {acct:acct,score:score,health:health,hCol:hCol,tCol:tCol,
-            activeHC:activeHC,budget:budget,deployPct:deployPct,isTM:isTM,
+            activeHC:activeHC,budget:budget,budgetBasis:budgetBasis,deployPct:deployPct,isTM:isTM,
             absent:absent,absentCrit:absentCrit,esepUnverif:esepUnverif,
             fnfPending:fnfPending,fnfCrit:fnfCrit,fnfAmt:fnfAmt,fnfEsc:fnfEsc,
             daysSinceVisit:daysSinceVisit,lastVisitDate:lastVisitDate,
@@ -7996,10 +8004,11 @@ function renderAccountHealth() {
 
     // Deployment signal
     var dpVal = c.deployPct!==null ? c.deployPct+'%' : '—';
+    var dpBasisTag = c.budgetBasis==='contract' ? 'vs contract' : 'vs demand (deployed+open)';
     var dpSub = c.deployPct!==null
-      ? c.activeHC+' / '+c.budget+' budget'+(c.deployPct>110?' (over)':'')
-      : (c.budget===0?'No budget · '+c.activeHC+' active':'—');
-    var dpCol = c.deployPct===null?'var(--muted2)':c.deployPct>110?'var(--amber)':c.deployPct>=90?'var(--green)':c.deployPct>=70?'var(--amber)':'var(--red)';
+      ? c.activeHC+' / '+c.budget+' · '+dpBasisTag
+      : 'No data';
+    var dpCol = c.deployPct===null?'var(--muted2)':c.deployPct>=90?'var(--green)':c.deployPct>=70?'var(--amber)':'var(--red)';
 
     // Absent signal
     var abVal  = c.absent.length;
