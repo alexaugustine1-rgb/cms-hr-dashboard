@@ -7762,13 +7762,13 @@ async function doChangePassword() {
 
 // ── ACCOUNT HEALTH CARDS ──────────────────────────────────────────────────
 function renderAccountHealth() {
-  var myRegion = (_sbRole && _sbRole.region && _sbRole.region !== 'Pan India' && _sbRole.region !== 'All') ? _sbRole.region : null;
+  var myRegion = (!_isMultiRegion() && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India' && _sbRole.region !== 'All') ? _sbRole.region : null;
   var today = new Date();
 
   // Filter accounts by HRBP region; sort Platinum > Gold > Silver > Regular, then by HC desc
   var TIER_ORDER = {Platinum:0,Gold:1,Silver:2,Regular:3};
   var accounts = (CUSTOMER_LIST||[])
-    .filter(function(c){ return !myRegion || c.r === myRegion; })
+    .filter(function(c){ return myRegion ? c.r === myRegion : _regionInScope(c.r); })
     .slice()
     .sort(function(a,b){ return (TIER_ORDER[a.t]||3)-(TIER_ORDER[b.t]||3) || b.hc-a.hc; });
 
@@ -8424,7 +8424,7 @@ function _filterBtn(label,active,onclick){
 var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
 function renderResignation(){
   // Hard-enforce region for non-Pan India users regardless of filter state
-  if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India') {
+  if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India' && !_isMultiRegion()) {
     _resRegion = _sbRole.region;
   }
   var S=CMS_SUMMARY;
@@ -8460,6 +8460,7 @@ function renderResignation(){
   function applyFilters(arr) {
     var out = arr.slice();
     if(_resRegion!=='All') out=out.filter(function(r){return r.region===_resRegion;});
+    else if(_isMultiRegion()) out=out.filter(function(r){return _regionInScope(r.region);});
     if(_resTier!=='All')   out=out.filter(function(r){return r.tier===_resTier;});
     if(_resReq==='No Req') out=out.filter(function(r){return!r.req_id;});
     if(_resReq==='Req Raised') out=out.filter(function(r){return!!r.req_id;});
@@ -8480,7 +8481,9 @@ function renderResignation(){
     return a.days_to_lwd-b.days_to_lwd;
   });
   var platGoldNoReq=CMS_RES_DATA.filter(function(r){return['Platinum','Gold'].includes(r.tier)&&!r.req_id;});
-  var rf=['All','North','South','East','West'].map(function(v){return _filterBtn(v,_resRegion===v,"_resRegion='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
+  var _resRfOpts=_isMultiRegion()?['All'].concat(_myRegions()):['All','North','South','East','West'];
+  var _resRfLbls=_isMultiRegion()?{'All':'All my regions'}:{};
+  var rf=_resRfOpts.map(function(v){return _filterBtn(_resRfLbls[v]||v,_resRegion===v,"_resRegion='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
   var tf=['All','Platinum','Gold','Silver','Regular'].map(function(v){return _filterBtn(v,_resTier===v,"_resTier='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
   var qf=['All','No Req','Req Raised'].map(function(v){return _filterBtn(v,_resReq===v,"_resReq='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
   var r1f=['All','Pending','Approved'].map(function(v){return _filterBtn(v,_resR1===v,"_resR1='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
@@ -8568,7 +8571,7 @@ function renderResignation(){
 // ── OD INTELLIGENCE ───────────────────────────────────────────────────────
 var _odRegion='All',_odTier='All',_odAuto='All',_odView='OD';
 function renderOD(){
-  if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India'){
+  if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India' && !_isMultiRegion()){
     _odRegion = _sbRole.region;
   }
   // Load monthly structure — falls back to legacy flat data
@@ -8589,6 +8592,7 @@ function renderOD(){
 
   // Region filter
   if(_odRegion!=='All') empArr=empArr.filter(r=>r.region===_odRegion);
+  else if(_isMultiRegion()) empArr=empArr.filter(function(r){return _regionInScope(r.region);});
 
   // View-specific filter
   const viewArr = isWFH ? empArr.filter(r=>r.wfh_days>0) : empArr.filter(r=>r.od_days>0);
@@ -8702,7 +8706,9 @@ function renderOD(){
   ).join('');
 
   // ── Region filter
-  var rf=['All','North','South','East','West'].map(function(v){return _filterBtn(v,_odRegion===v,"_odRegion='"+v+"';document.getElementById('tab-od').innerHTML=renderOD()");}).join('');
+  var _odRfOpts=_isMultiRegion()?['All'].concat(_myRegions()):['All','North','South','East','West'];
+  var _odRfLbls=_isMultiRegion()?{'All':'All my regions'}:{};
+  var rf=_odRfOpts.map(function(v){return _filterBtn(_odRfLbls[v]||v,_odRegion===v,"_odRegion='"+v+"';document.getElementById('tab-od').innerHTML=renderOD()");}).join('');
 
   // ── Employee table rows
   const colLabel = isWFH ? 'WFH' : 'OD';
