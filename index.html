@@ -10492,6 +10492,7 @@ async function loadOpsReview(){
   }
   if(mc) mc.innerHTML=renderOpsReviewShell();
   await _loadOpsRevAbsent();
+  await _loadOpsRevVisits();
 }
 
 async function _loadOpsRevAbsent(){
@@ -10640,6 +10641,122 @@ async function _loadOpsRevAbsent(){
     +'<div style="'+cardStyle+'">'+subHead('A. By HRBP — activity this period')+tableA+'</div>'
     +'<div style="'+cardStyle+'">'+subHead('B. Pending backlog by region')+tableB+'</div>'
     +'<div style="'+cardStyle+'">'+subHead('C. Pending by status bucket')+tableC+'</div>';
+}
+
+async function _loadOpsRevVisits(){
+  var el=document.getElementById('opsrev-visits');
+  if(!el) return;
+  var today=new Date();
+  var dayNum=today.getDay();
+  var diff=(dayNum===0)?6:dayNum-1;
+  var monFallback=new Date(today);
+  monFallback.setDate(today.getDate()-diff);
+  monFallback.setHours(0,0,0,0);
+  var _pStart=_ovFrom?new Date(_ovFrom+'T00:00:00'):monFallback;
+  var _pEnd=_ovTo?new Date(_ovTo+'T23:59:59'):today;
+  var todayStr=today.toISOString().slice(0,10);
+  var _fmtD=function(s){if(!s)return'';var p=s.split('-');return p[2]+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1],10)-1];};
+  var periodLabel=(_ovFrom&&_ovTo)?(_fmtD(_ovFrom)+' - '+_fmtD(_ovTo)):'This Week';
+  var r1=await _sb.from('hrbp_visit_plans').select('hrbp_name,region,status,planned_date,account_name');
+  var r2=await _sb.from('hrbp_site_visits').select('hrbp_name,region,visit_date,account_name,issues_flagged,issue_details');
+  var r3=await _sb.from('hrbp_er_cases').select('hrbp_name,region,status,sla_breached,employee_name,case_type');
+  if(r1.error||r2.error||r3.error){
+    var emsg=(r1.error||r2.error||r3.error).message;
+    el.innerHTML='<div style="color:var(--red);padding:16px">Failed to load visits: '+esc(emsg)+'</div>';
+    return;
+  }
+  var plans=r1.data||[];
+  var visits=r2.data||[];
+  var erCases=r3.data||[];
+  var planned=plans.filter(function(v){return v.status==='Planned';});
+  var doneInPeriod=visits.filter(function(v){
+    if(!v.visit_date) return false;
+    var d=new Date(v.visit_date);
+    return d>=_pStart&&d<=_pEnd;
+  });
+  var overduePlans=planned.filter(function(v){return v.planned_date&&v.planned_date<todayStr;});
+  var openER=erCases.filter(function(c){return c.status==='Open';});
+  var slaBreached=openER.filter(function(c){return !!c.sla_breached;});
+  var flagged=visits.filter(function(v){return !!v.issues_flagged;});
+  flagged.sort(function(a,b){return (b.visit_date||'').localeCompare(a.visit_date||'');});
+  var _ork=function(label,val,col,sub){
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;'
+      +'padding:12px 18px;min-width:130px">'
+      +'<div style="font-size:22px;font-weight:700;color:'+(col||'var(--accent)')+'">'+val+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2);margin-top:2px;text-transform:uppercase;'
+      +'letter-spacing:.6px">'+esc(label)+'</div>'
+      +(sub?'<div style="font-size:10px;color:var(--red);margin-top:2px">'+esc(sub)+'</div>':'')
+      +'</div>';
+  };
+  var erSub=slaBreached.length?slaBreached.length+' SLA-breached':'';
+  var kpiStrip='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'
+    +_ork('Planned',planned.length,'var(--accent)')
+    +_ork('Done (period)',doneInPeriod.length,'var(--green)')
+    +_ork('Overdue',overduePlans.length,'var(--amber)')
+    +_ork('Open ER Cases',openER.length,'var(--red)',erSub)
+    +'</div>';
+  var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;'
+    +'text-transform:uppercase;color:var(--muted2)';
+  var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
+  var hrbpMap={};
+  var addHrbp=function(name,region){
+    if(!name) return;
+    if(!hrbpMap[name]) hrbpMap[name]={region:region||'',planned:0,done:0,overdue:0,openER:0};
+  };
+  planned.forEach(function(v){addHrbp(v.hrbp_name,v.region);hrbpMap[v.hrbp_name].planned++;});
+  doneInPeriod.forEach(function(v){addHrbp(v.hrbp_name,v.region);hrbpMap[v.hrbp_name].done++;});
+  overduePlans.forEach(function(v){addHrbp(v.hrbp_name,v.region);hrbpMap[v.hrbp_name].overdue++;});
+  openER.forEach(function(c){addHrbp(c.hrbp_name,c.region);hrbpMap[c.hrbp_name].openER++;});
+  var hrbpRows=Object.keys(hrbpMap).map(function(n){return {name:n,d:hrbpMap[n]};});
+  hrbpRows.sort(function(a,b){
+    if(b.d.overdue!==a.d.overdue) return b.d.overdue-a.d.overdue;
+    return b.d.planned-a.d.planned;
+  });
+  var theadT='<thead><tr style="background:var(--surface3)">'
+    +'<th style="'+thStyle+'">HRBP</th>'
+    +'<th style="'+thStyle+'">Region</th>'
+    +'<th style="'+thStyle+'">Planned</th>'
+    +'<th style="'+thStyle+'">Done (period)</th>'
+    +'<th style="'+thStyle+'">Overdue</th>'
+    +'<th style="'+thStyle+'">Open ER</th>'
+    +'</tr></thead>';
+  var tbodyT='<tbody>'+(hrbpRows.length?hrbpRows.map(function(row){
+    var d=row.d;
+    return '<tr>'
+      +'<td style="'+tdBase+';font-weight:600">'+esc(row.name)+'</td>'
+      +'<td style="'+tdBase+';color:var(--muted)">'+esc(d.region)+'</td>'
+      +'<td style="'+tdBase+'">'+d.planned+'</td>'
+      +'<td style="'+tdBase+';color:var(--green)">'+d.done+'</td>'
+      +'<td style="'+tdBase+';color:'+(d.overdue>0?'var(--amber)':'var(--muted)')+'">'+d.overdue+'</td>'
+      +'<td style="'+tdBase+';color:'+(d.openER>0?'var(--red)':'var(--muted)')+'">'+d.openER+'</td>'
+      +'</tr>';
+  }).join(''):'<tr><td colspan="6" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')
+  +'</tbody>';
+  var tableT='<table style="width:100%;border-collapse:collapse">'+theadT+tbodyT+'</table>';
+  var flaggedCapped=flagged.slice(0,15);
+  var issuesList=flaggedCapped.length
+    ?'<ul style="margin:0;padding:0 0 0 18px;list-style:disc">'+flaggedCapped.map(function(v){
+        return '<li style="padding:6px 0;font-size:12px;border-bottom:1px solid var(--border)">'
+          +'<strong>'+esc(v.account_name||'Unknown')+'</strong>'
+          +' <span style="color:var(--muted)">('+esc(v.region||'')+')</span>'
+          +' &mdash; '+esc(v.hrbp_name||'')
+          +(v.issue_details?'<br><span style="color:var(--muted2);font-size:11px">'+esc(v.issue_details)+'</span>':'')
+          +'</li>';
+      }).join('')+'</ul>'
+    :'<div style="color:var(--muted);font-size:12px;padding:12px">No open site issues flagged.</div>';
+  var cardStyle='background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px';
+  var subHead=function(t){
+    return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;'
+      +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';
+  };
+  el.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
+    +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:2px">'
+    +'HRBP Visits &amp; ER Cases</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+esc(periodLabel)+'</div>'
+    +kpiStrip
+    +'<div style="'+cardStyle+'">'+subHead('By HRBP - visits')+tableT+'</div>'
+    +'<div style="'+cardStyle+'">'+subHead('Critical site issues')
+    +'<div style="padding:12px">'+issuesList+'</div></div>';
 }
 
 function showToast(msg,type){
