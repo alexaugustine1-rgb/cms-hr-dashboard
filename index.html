@@ -10864,6 +10864,7 @@ async function _loadOpsRevAbsent(){
 async function _loadOpsRevVisits(){
   var el=document.getElementById('opsrev-visits');
   if(!el) return;
+  el.innerHTML='<div style="padding:16px;color:var(--muted)">Loading visits…</div>';
   var today=new Date();
   var dayNum=today.getDay();
   var diff=(dayNum===0)?6:dayNum-1;
@@ -10875,52 +10876,34 @@ async function _loadOpsRevVisits(){
   var _pToStr=_ovTo||todayStr;
   var _fmtD=function(s){if(!s)return'';var p=s.split('-');return p[2]+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1],10)-1];};
   var periodLabel=(_ovFrom&&_ovTo)?(_fmtD(_ovFrom)+' - '+_fmtD(_ovTo)):'This Week';
+  var r0=await _sb.from('user_profiles').select('display_name,region').eq('active',true).eq('role','hrbp').eq('function_type','hrbp');
   var r1=await _sb.from('hrbp_visit_plans').select('hrbp_name,region,status,planned_date,account_name');
   var r2=await _sb.from('hrbp_site_visits').select('hrbp_name,region,visit_date,account_name,issues_flagged,issue_details');
-  var r3=await _sb.from('hrbp_er_cases').select('hrbp_name,region,status,sla_breached,employee_name,case_type');
-  if(r1.error||r2.error||r3.error){
-    var emsg=(r1.error||r2.error||r3.error).message;
+  var r3=await _sb.from('hrbp_er_cases').select('hrbp_name,region,status,sla_breached');
+  if(r0.error||r1.error||r2.error||r3.error){
+    var emsg=(r0.error||r1.error||r2.error||r3.error).message;
     el.innerHTML='<div style="color:var(--red);padding:16px">Failed to load visits: '+esc(emsg)+'</div>';
     return;
   }
+  var fieldHRBPs=r0.data||[];
   var plans=r1.data||[];
   var visits=r2.data||[];
   var erCases=r3.data||[];
-  var VISIT_HRBPS=[
-    {name:'Abhishek Singh',first:'abhishek',region:'North'},
-    {name:'Surajit Sen',first:'surajit',region:'East'},
-    {name:'Priya Paul',first:'priya',region:'South'},
-    {name:'Shambhavi Joshi',first:'shambhavi',region:'West'},
-    {name:'Somasri Samanta',first:'somasri',region:'West'},
-    {name:'Prapti Patel',first:'prapti',region:'West'}
-  ];
-  var matchHrbp=function(rawName){
-    var nl=(rawName||'').toLowerCase();
-    for(var i=0;i<VISIT_HRBPS.length;i++){
-      if(nl.indexOf(VISIT_HRBPS[i].first)>=0) return VISIT_HRBPS[i];
-    }
-    return null;
-  };
-  var planned=plans.filter(function(v){return v.status==='Planned'&&matchHrbp(v.hrbp_name);});
-  var doneInPeriod=visits.filter(function(v){
-    if(!matchHrbp(v.hrbp_name)) return false;
-    var ds=(v.visit_date||'').slice(0,10);
-    return ds&&ds>=_pFromStr&&ds<=_pToStr;
-  });
-  var overduePlans=planned.filter(function(v){
-    var ds=(v.planned_date||'').slice(0,10);
-    return ds&&ds<todayStr;
-  });
-  var openER=erCases.filter(function(c){return c.status==='Open'&&matchHrbp(c.hrbp_name);});
+  var normN=function(s){return String(s||'').trim().toLowerCase();};
+  var hrbpByName={};
+  fieldHRBPs.forEach(function(h){hrbpByName[normN(h.display_name)]=h;});
+  var matchHRBP=function(rawName){return hrbpByName[normN(rawName)]||null;};
+  var planned=plans.filter(function(v){return v.status==='Planned';});
+  var doneInPeriod=visits.filter(function(v){var ds=(v.visit_date||'').slice(0,10);return ds&&ds>=_pFromStr&&ds<=_pToStr;});
+  var overduePlans=planned.filter(function(v){var ds=(v.planned_date||'').slice(0,10);return ds&&ds<todayStr;});
+  var openER=erCases.filter(function(c){return c.status==='Open';});
   var slaBreached=openER.filter(function(c){return !!c.sla_breached;});
-  var flagged=visits.filter(function(v){return !!v.issues_flagged&&matchHrbp(v.hrbp_name);});
+  var flagged=visits.filter(function(v){return !!v.issues_flagged;});
   flagged.sort(function(a,b){return (b.visit_date||'').localeCompare(a.visit_date||'');});
   var _ork=function(label,val,col,sub){
-    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;'
-      +'padding:12px 18px;min-width:130px">'
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;min-width:130px">'
       +'<div style="font-size:22px;font-weight:700;color:'+(col||'var(--accent)')+'">'+val+'</div>'
-      +'<div style="font-size:10px;color:var(--muted2);margin-top:2px;text-transform:uppercase;'
-      +'letter-spacing:.6px">'+esc(label)+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2);margin-top:2px;text-transform:uppercase;letter-spacing:.6px">'+esc(label)+'</div>'
       +(sub?'<div style="font-size:10px;color:var(--red);margin-top:2px">'+esc(sub)+'</div>':'')
       +'</div>';
   };
@@ -10931,20 +10914,23 @@ async function _loadOpsRevVisits(){
     +_ork('Overdue',overduePlans.length,'var(--amber)')
     +_ork('Open ER Cases',openER.length,'var(--red)',erSub)
     +'</div>';
-  var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;'
-    +'text-transform:uppercase;color:var(--muted2)';
-  var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
   var hrbpStats={};
-  VISIT_HRBPS.forEach(function(h){hrbpStats[h.first]={name:h.name,region:h.region,planned:0,done:0,overdue:0,openER:0};});
-  planned.forEach(function(v){var h=matchHrbp(v.hrbp_name);if(h)hrbpStats[h.first].planned++;});
-  doneInPeriod.forEach(function(v){var h=matchHrbp(v.hrbp_name);if(h)hrbpStats[h.first].done++;});
-  overduePlans.forEach(function(v){var h=matchHrbp(v.hrbp_name);if(h)hrbpStats[h.first].overdue++;});
-  openER.forEach(function(c){var h=matchHrbp(c.hrbp_name);if(h)hrbpStats[h.first].openER++;});
-  var hrbpRows=VISIT_HRBPS.map(function(h){return {name:h.name,d:hrbpStats[h.first]};});
-  hrbpRows.sort(function(a,b){
-    if(b.d.overdue!==a.d.overdue) return b.d.overdue-a.d.overdue;
-    return b.d.planned-a.d.planned;
-  });
+  fieldHRBPs.forEach(function(h){hrbpStats[normN(h.display_name)]={name:h.display_name,region:h.region||'',planned:0,done:0,overdue:0,openER:0};});
+  planned.forEach(function(v){var h=matchHRBP(v.hrbp_name);if(h)hrbpStats[normN(h.display_name)].planned++;});
+  doneInPeriod.forEach(function(v){var h=matchHRBP(v.hrbp_name);if(h)hrbpStats[normN(h.display_name)].done++;});
+  overduePlans.forEach(function(v){var h=matchHRBP(v.hrbp_name);if(h)hrbpStats[normN(h.display_name)].overdue++;});
+  openER.forEach(function(c){var h=matchHRBP(c.hrbp_name);if(h)hrbpStats[normN(h.display_name)].openER++;});
+  var unAssigned={planned:0,done:0,overdue:0,openER:0};
+  var hasUnassigned=false;
+  planned.forEach(function(v){if(!matchHRBP(v.hrbp_name)){unAssigned.planned++;hasUnassigned=true;}});
+  doneInPeriod.forEach(function(v){if(!matchHRBP(v.hrbp_name)){unAssigned.done++;hasUnassigned=true;}});
+  overduePlans.forEach(function(v){if(!matchHRBP(v.hrbp_name)){unAssigned.overdue++;hasUnassigned=true;}});
+  openER.forEach(function(c){if(!matchHRBP(c.hrbp_name)){unAssigned.openER++;hasUnassigned=true;}});
+  var hrbpRows=fieldHRBPs.map(function(h){return {name:h.display_name,d:hrbpStats[normN(h.display_name)]};});
+  hrbpRows.sort(function(a,b){if(b.d.overdue!==a.d.overdue)return b.d.overdue-a.d.overdue;return b.d.planned-a.d.planned;});
+  if(hasUnassigned) hrbpRows.push({name:'Unassigned / Other',d:{region:'--',planned:unAssigned.planned,done:unAssigned.done,overdue:unAssigned.overdue,openER:unAssigned.openER}});
+  var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)';
+  var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
   var theadT='<thead><tr style="background:var(--surface3)">'
     +'<th style="'+thStyle+'">HRBP</th>'
     +'<th style="'+thStyle+'">Region</th>'
@@ -10979,12 +10965,9 @@ async function _loadOpsRevVisits(){
     :'<div style="color:var(--muted);font-size:12px;padding:12px">No open site issues flagged.</div>';
   var cardStyle='background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px';
   var subHead=function(t){
-    return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;'
-      +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';
+    return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';
   };
-  el.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
-    +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:2px">'
-    +'HRBP Visits &amp; ER Cases</div>'
+  el.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:2px">HRBP Visits &amp; ER Cases</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+esc(periodLabel)+'</div>'
     +kpiStrip
     +'<div style="'+cardStyle+'">'+subHead('By HRBP - visits')+tableT+'</div>'
