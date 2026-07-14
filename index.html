@@ -5449,7 +5449,7 @@ function renderJoinersTab(el) {
   // Auto-scope region for HRBP role
   var _autoRegion = 'All';
   if (typeof _sbRole !== 'undefined' && _sbRole) {
-    if (_sbRole.role === 'hrbp' && _sbRole.region && _sbRole.region !== 'Pan India') {
+    if (_sbRole.role === 'hrbp' && _sbRole.region && _sbRole.region !== 'Pan India' && !_isMultiRegion()) {
       _autoRegion = _sbRole.region;
       if (_pjRegion === 'All') _pjRegion = _autoRegion;
     }
@@ -5469,7 +5469,8 @@ function renderJoinersTab(el) {
 
   // Filter base by region (auto-scoped for HRBP)
   var base = _pjData.filter(function(r){
-    return _pjRegion==='All' || r.region===_pjRegion;
+    if (_pjRegion !== 'All') return r.region === _pjRegion;
+    return _regionInScope(r.region);
   });
 
   // ── Joining pipeline: Offer Accepted + Induction Scheduled with future DOJ ─
@@ -5543,10 +5544,11 @@ function renderJoinersTab(el) {
   }
 
   // ── Region filter ─────────────────────────────────────────────────────────
-  var regions = ['All','North','South','East','West'];
-  var rf = regions.map(function(v){
+  var _pjRfOpts = _isMultiRegion() ? ['All'].concat(_myRegions()) : ['All','North','South','East','West'];
+  var _pjRfLbls = _isMultiRegion() ? {'All':'All my regions'} : {};
+  var rf = _pjRfOpts.map(function(v){
     var active = _pjRegion===v;
-    return '<button onclick="_pjRegion=\''+v+'\';renderJoinersTab()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(active?700:500)+';border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'rgba(96,165,250,.15)':'none')+';color:'+(active?'var(--accent)':'var(--muted)')+';cursor:pointer">'+v+'</button>';
+    return '<button onclick="_pjRegion=\''+v+'\';renderJoinersTab()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(active?700:500)+';border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'rgba(96,165,250,.15)':'none')+';color:'+(active?'var(--accent)':'var(--muted)')+';cursor:pointer">'+(_pjRfLbls[v]||v)+'</button>';
   }).join('');
 
   // ── Build output ──────────────────────────────────────────────────────────
@@ -11030,8 +11032,10 @@ var _visitEntries=[];
 function filterVisitDropdown(val){
   var dd=document.getElementById('visitDropdown');
   if(!dd)return;
-  var userRegion=(_sbRole&&_sbRole.region)||'';
-  var pool=getCustsByRegion(userRegion);
+  var _mr=_myRegions();
+  var pool;
+  if(_mr&&_mr.length){pool=[];_mr.forEach(function(rg){pool=pool.concat(getCustsByRegion(rg));});}
+  else{pool=getCustsByRegion((_sbRole&&_sbRole.region)||'');}
   // Always prepend CMS IT Office as a pinned internal option
   var _internalOpts=[{n:'CMS IT Office',t:'Internal',r:'Pan India'}];
   var vl=(val||'').toLowerCase();
