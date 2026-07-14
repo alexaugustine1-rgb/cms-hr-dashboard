@@ -10633,6 +10633,7 @@ function renderOpsReviewShell(){
     +'<div style="color:var(--muted);font-size:12px">Loading absenteeism&#8230;</div></div>'
     +'<div id="opsrev-visits"></div>'
     +'<div id="opsrev-ta"></div>'
+    +'<div id="opsrev-atecontract"></div>'
     +'</div>';
 }
 
@@ -10649,6 +10650,7 @@ async function loadOpsReview(){
   await _loadOpsRevAbsent();
   await _loadOpsRevVisits();
   await _loadOpsRevTA();
+  await _loadOpsRevAteContract();
 }
 
 async function _loadOpsRevSubmissions(){
@@ -11064,6 +11066,123 @@ async function _loadOpsRevTA(){
     +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Open load as of upload &middot; Closed: '+esc(periodLabel)+'</div>'
     +kpiStrip
     +'<div style="'+cardStyle+'">'+subHead('By recruiter')+tableT+'</div>';
+}
+
+async function _loadOpsRevAteContract(){
+  var el=document.getElementById('opsrev-atecontract');
+  if(!el) return;
+  el.innerHTML='<div style="padding:16px;color:var(--muted)">Loading ATE &amp; Contract data&#8230;</div>';
+  var today=new Date();
+  var todayStr=today.toISOString().slice(0,10);
+  var rAte=await _sb.from('ate_tracker').select('emp_name,account,region,status,training_end_date');
+  var rCon=await _sb.from('contract_workforce').select('name,customer,region,past_superann,lwd_crossed,ftc_18m_risk,no_end_date,superann_date,dol');
+  var rProfiles=await _sb.from('user_profiles').select('display_name,region,role,function_type').eq('active',true);
+  var rAccts=await _sb.from('customer_accounts').select('name,hrbp_owner,region');
+  if(rAte.error||rCon.error){
+    var _emsg=(rAte.error||rCon.error).message;
+    el.innerHTML='<div style="color:var(--red);padding:16px">Failed to load: '+esc(_emsg)+'</div>';
+    return;
+  }
+  var ateRows=rAte.data||[];
+  var conRows=rCon.data||[];
+  var profiles=rProfiles.data||[];
+  var accts=rAccts.data||[];
+  var fieldHRBPs=profiles.filter(function(p){return p.role==='hrbp'&&p.function_type==='hrbp';});
+  var normCust=function(s){return String(s||'').trim().toUpperCase().replace(/\s+/g,' ');};
+  var ACCT_OWNER={};
+  accts.forEach(function(a){if(a.hrbp_owner)ACCT_OWNER[normCust(a.name)]=a.hrbp_owner;});
+  var hrbpNames={};
+  fieldHRBPs.forEach(function(h){hrbpNames[h.display_name]=true;});
+  var regionSoleHRBP={};
+  ['North','South','East','West'].forEach(function(r){
+    var inR=fieldHRBPs.filter(function(h){return h.region===r;});
+    if(inR.length===1) regionSoleHRBP[r]=inR[0].display_name;
+  });
+  var ownerOf=function(acctName,region){
+    var o=ACCT_OWNER[normCust(acctName)];
+    if(o&&hrbpNames[o]) return o;
+    if(regionSoleHRBP[region]) return regionSoleHRBP[region];
+    return null;
+  };
+  var ateOverdue=ateRows.filter(function(r){return r.status==='Active'&&r.training_end_date&&r.training_end_date.slice(0,10)<todayStr;});
+  var conOverdue=conRows.filter(function(r){return r.past_superann===true||r.lwd_crossed===true||r.ftc_18m_risk===true;});
+  var pastSuperann=conRows.filter(function(r){return r.past_superann===true;});
+  var noEndDate=conRows.filter(function(r){return r.no_end_date===true;});
+  var _ork=function(label,val,col,sub){
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;min-width:130px">'
+      +'<div style="font-size:22px;font-weight:700;color:'+(col||'var(--accent)')+'">'+val+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2);margin-top:2px;text-transform:uppercase;letter-spacing:.6px">'+esc(label)+'</div>'
+      +(sub?'<div style="font-size:10px;color:var(--amber);margin-top:2px">'+esc(sub)+'</div>':'')
+      +'</div>';
+  };
+  var kpiStrip='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'
+    +_ork('ATE Overdue',ateOverdue.length,'var(--red)')
+    +_ork('Contract Overdue',conOverdue.length,'var(--amber)')
+    +_ork('Past Superann',pastSuperann.length,'#f97316')
+    +_ork('No End Date',noEndDate.length,'var(--muted)','data gap')
+    +'</div>';
+  var hStats={};
+  fieldHRBPs.forEach(function(h){hStats[h.display_name]={region:h.region,ate:0,con:0};});
+  hStats['Unassigned']={region:'--',ate:0,con:0};
+  ateOverdue.forEach(function(r){var o=ownerOf(r.account,r.region)||'Unassigned';if(!hStats[o])hStats[o]={region:'--',ate:0,con:0};hStats[o].ate++;});
+  conOverdue.forEach(function(r){var o=ownerOf(r.customer,r.region)||'Unassigned';if(!hStats[o])hStats[o]={region:'--',ate:0,con:0};hStats[o].con++;});
+  var hrbpRows=Object.keys(hStats).map(function(name){return {name:name,d:hStats[name]};});
+  hrbpRows.sort(function(a,b){return (b.d.ate+b.d.con)-(a.d.ate+a.d.con);});
+  var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)';
+  var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
+  var theadT='<thead><tr style="background:var(--surface3)">'
+    +'<th style="'+thStyle+'">HRBP</th><th style="'+thStyle+'">Region</th>'
+    +'<th style="'+thStyle+'">ATE Overdue</th><th style="'+thStyle+'">Contract Overdue</th>'
+    +'</tr></thead>';
+  var tbodyT='<tbody>'+(hrbpRows.length?hrbpRows.map(function(row){
+    var d=row.d;
+    return '<tr>'
+      +'<td style="'+tdBase+';font-weight:600">'+esc(row.name)+'</td>'
+      +'<td style="'+tdBase+';color:var(--muted)">'+esc(d.region)+'</td>'
+      +'<td style="'+tdBase+';color:'+(d.ate>0?'var(--red)':'var(--muted)')+'">'+d.ate+'</td>'
+      +'<td style="'+tdBase+';color:'+(d.con>0?'var(--amber)':'var(--muted)')+'">'+d.con+'</td>'
+      +'</tr>';
+  }).join(''):'<tr><td colspan="4" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')+'</tbody>';
+  var tableT='<table style="width:100%;border-collapse:collapse">'+theadT+tbodyT+'</table>';
+  var critList=[];
+  ateOverdue.forEach(function(r){
+    var ds=r.training_end_date?r.training_end_date.slice(0,10):'';
+    var daysOver=ds?Math.floor((today-new Date(ds+'T00:00:00'))/86400000):0;
+    critList.push({name:r.emp_name||'',type:'ATE',acct:r.account||'',region:r.region||'',daysOver:daysOver,detail:ds?'Ended '+ds:''});
+  });
+  conOverdue.forEach(function(r){
+    var flags=[];
+    if(r.past_superann) flags.push('Past Superann');
+    if(r.lwd_crossed) flags.push('LWD Crossed');
+    if(r.ftc_18m_risk) flags.push('18m Risk');
+    var ds=r.superann_date?r.superann_date.slice(0,10):(r.dol?r.dol.slice(0,10):'');
+    var daysOver=ds?Math.floor((today-new Date(ds+'T00:00:00'))/86400000):0;
+    critList.push({name:r.name||'',type:'Contract',acct:r.customer||'',region:r.region||'',daysOver:daysOver,detail:flags.join(', ')});
+  });
+  critList.sort(function(a,b){return b.daysOver-a.daysOver;});
+  critList=critList.slice(0,15);
+  var issuesList=critList.length
+    ?'<ul style="margin:0;padding:0 0 0 18px;list-style:disc">'+critList.map(function(v){
+        return '<li style="padding:6px 0;font-size:12px;border-bottom:1px solid var(--border)">'
+          +'<strong>'+esc(v.name)+'</strong>'
+          +' <span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(96,165,250,.12);color:var(--accent);font-weight:600">'+esc(v.type)+'</span>'
+          +' &mdash; '+esc(v.acct)+(v.region?' <span style="color:var(--muted)">('+esc(v.region)+')</span>':'')
+          +(v.daysOver>0?' <span style="color:var(--red);font-size:11px">'+v.daysOver+'d past</span>':'')
+          +(v.detail?'<br><span style="color:var(--muted2);font-size:11px">'+esc(v.detail)+'</span>':'')
+          +'</li>';
+      }).join('')+'</ul>'
+    :'<div style="color:var(--muted);font-size:12px;padding:12px">No critical cases.</div>';
+  var noEndNote=noEndDate.length
+    ?'<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 14px;margin-top:12px;font-size:11px;color:var(--amber)">&#9888; <strong>'+noEndDate.length+' contract records</strong> have no end date &#8212; needs data update.</div>'
+    :'';
+  var cardStyle='background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px';
+  var subHead=function(t){return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';};
+  el.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:2px">ATE &amp; Contract Expiry</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Point-in-time &middot; Overdue as of today</div>'
+    +kpiStrip
+    +'<div style="'+cardStyle+'">'+subHead('By HRBP - expiry')+tableT+'</div>'
+    +'<div style="'+cardStyle+'">'+subHead('Critical cases')+'<div style="padding:12px">'+issuesList+'</div></div>'
+    +noEndNote;
 }
 
 function showToast(msg,type){
