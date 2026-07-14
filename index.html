@@ -10652,9 +10652,9 @@ async function _loadOpsRevVisits(){
   var monFallback=new Date(today);
   monFallback.setDate(today.getDate()-diff);
   monFallback.setHours(0,0,0,0);
-  var _pStart=_ovFrom?new Date(_ovFrom+'T00:00:00'):monFallback;
-  var _pEnd=_ovTo?new Date(_ovTo+'T23:59:59'):today;
   var todayStr=today.toISOString().slice(0,10);
+  var _pFromStr=_ovFrom||monFallback.toISOString().slice(0,10);
+  var _pToStr=_ovTo||todayStr;
   var _fmtD=function(s){if(!s)return'';var p=s.split('-');return p[2]+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1],10)-1];};
   var periodLabel=(_ovFrom&&_ovTo)?(_fmtD(_ovFrom)+' - '+_fmtD(_ovTo)):'This Week';
   var r1=await _sb.from('hrbp_visit_plans').select('hrbp_name,region,status,planned_date,account_name');
@@ -10670,11 +10670,13 @@ async function _loadOpsRevVisits(){
   var erCases=r3.data||[];
   var planned=plans.filter(function(v){return v.status==='Planned';});
   var doneInPeriod=visits.filter(function(v){
-    if(!v.visit_date) return false;
-    var d=new Date(v.visit_date);
-    return d>=_pStart&&d<=_pEnd;
+    var ds=(v.visit_date||'').slice(0,10);
+    return ds&&ds>=_pFromStr&&ds<=_pToStr;
   });
-  var overduePlans=planned.filter(function(v){return v.planned_date&&v.planned_date<todayStr;});
+  var overduePlans=planned.filter(function(v){
+    var ds=(v.planned_date||'').slice(0,10);
+    return ds&&ds<todayStr;
+  });
   var openER=erCases.filter(function(c){return c.status==='Open';});
   var slaBreached=openER.filter(function(c){return !!c.sla_breached;});
   var flagged=visits.filter(function(v){return !!v.issues_flagged;});
