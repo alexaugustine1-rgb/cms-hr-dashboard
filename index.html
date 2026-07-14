@@ -7311,11 +7311,11 @@ async function updateAcct(el) {
   patch[field] = value;
   var res = await _sb.from('customer_accounts').update(patch).eq('id', id);
   if (res.error) { alert('Save failed: ' + res.error.message); return; }
-  var fresh = await _sb.from('customer_accounts').select('name,region,tier,active,headcount').eq('active', true).order('headcount', {ascending: false});
+  var fresh = await _sb.from('customer_accounts').select('name,region,tier,active,headcount,contracted_hc,billing_type').eq('active', true).order('headcount', {ascending: false});
   if (fresh.data) {
     CUSTOMER_LIST.length = 0;
     fresh.data.forEach(function(c) {
-      CUSTOMER_LIST.push({n: c.name, r: c.region, t: c.tier, a: true, hc: c.headcount || 0});
+      CUSTOMER_LIST.push({n: c.name, r: c.region, t: c.tier, a: true, hc: c.headcount || 0, budget: c.contracted_hc||0, billing: c.billing_type||''});
     });
   }
 }
@@ -7888,21 +7888,30 @@ function renderAccountHealth() {
     var taReqs = (TA_ACTIVE_REQS||[]).filter(function(r){ return nameMatch(r.account||r.customer||'',n); });
     var taCrit = taReqs.filter(function(r){ return (r.tat||0)>45; });
 
-    // ── Health Score (100 pts — HC is informational only, not scored) ──
-    // Absent: 25 | FnF: 25 | Visit: 20 | Attrition: 20 | TA: 10
+    // ── Health Score ──
     var sAbsent = absent.length===0?25:absentCrit.length===0?15:absentCrit.length<=2?6:0;
     var sFnf    = fnfPending.length===0?25:fnfCrit.length===0?15:fnfCrit.length===1?6:2;
     if(fnfEsc.length>0) sFnf=Math.max(0,sFnf-5);
     var sVisit  = daysSinceVisit===null?0:daysSinceVisit<=14?20:daysSinceVisit<=30?12:daysSinceVisit<=45?5:0;
     var sAttr   = attrRate<=3?20:attrRate<=8?12:attrRate<=15?5:0;
     var sTA     = taCrit.length===0?10:taCrit.length===1?6:2;
-    var score   = sAbsent+sFnf+sVisit+sAttr+sTA;
+    var budget  = acct.budget||0;
+    var isTM    = acct.billing==='T&M';
+    var deployPct = budget>0 ? Math.round(activeHC/budget*100) : null;
+    var deployF = deployPct===null?null:deployPct>=95?1:deployPct>=85?0.7:deployPct>=70?0.35:0;
+    var absF=sAbsent/25, visF=sVisit/20, attF=sAttr/20, taF=sTA/10;
+    var score;
+    if(isTM && deployF!==null){
+      score = Math.round(deployF*25 + taF*25 + absF*20 + attF*20 + visF*10);
+    } else {
+      score = Math.round(taF*30 + absF*25 + attF*25 + visF*20);
+    }
     var health  = score>=80?'HEALTHY':score>=55?'AT RISK':'CRITICAL';
     var hCol    = score>=80?'var(--green)':score>=55?'var(--amber)':'var(--red)';
     var tCol    = {Platinum:'#a78bfa',Gold:'#f59e0b',Silver:'#94a3b8',Regular:'var(--muted2)'}[acct.t]||'var(--muted2)';
 
     return {acct:acct,score:score,health:health,hCol:hCol,tCol:tCol,
-            activeHC:activeHC,
+            activeHC:activeHC,budget:budget,deployPct:deployPct,isTM:isTM,
             absent:absent,absentCrit:absentCrit,esepUnverif:esepUnverif,
             fnfPending:fnfPending,fnfCrit:fnfCrit,fnfAmt:fnfAmt,fnfEsc:fnfEsc,
             daysSinceVisit:daysSinceVisit,lastVisitDate:lastVisitDate,
@@ -7985,10 +7994,12 @@ function renderAccountHealth() {
   var cardHTML = fCards.map(function(c){
     var a=c.acct;
 
-    // HC signal — active count from super employee master
-    var hcVal  = c.activeHC > 0 ? c.activeHC : '—';
-    var hcSub  = c.activeHC > 0 ? 'active employees' : 'Upload emp master';
-    var hcCol  = c.activeHC > 0 ? 'var(--text)' : 'var(--muted2)';
+    // Deployment signal
+    var dpVal = c.deployPct!==null ? c.deployPct+'%' : '—';
+    var dpSub = c.deployPct!==null
+      ? c.activeHC+' / '+c.budget+' budget'+(c.deployPct>110?' (over)':'')
+      : (c.budget===0?'No budget · '+c.activeHC+' active':'—');
+    var dpCol = c.deployPct===null?'var(--muted2)':c.deployPct>110?'var(--amber)':c.deployPct>=90?'var(--green)':c.deployPct>=70?'var(--amber)':'var(--red)';
 
     // Absent signal
     var abVal  = c.absent.length;
@@ -8041,6 +8052,7 @@ function renderAccountHealth() {
           +'<div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">'
             +'<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:10px;background:'+c.tCol+'20;color:'+c.tCol+'">'+esc(a.t)+'</span>'
             +'<span style="font-size:10px;color:var(--muted)">'+esc(a.r)+'</span>'
+            +(c.isTM?'<span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:10px;background:rgba(99,102,241,.15);color:#818cf8">T&amp;M</span>':a.billing?'<span style="font-size:8px;color:var(--muted2);padding:1px 5px">'+esc(a.billing)+'</span>':'')
           +'</div>'
         +'</div>'
         +'<div style="text-align:right;flex-shrink:0">'
@@ -8050,9 +8062,9 @@ function renderAccountHealth() {
       +'</div>'
       // Signals grid (2x3)
       +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px">'
-        +sig('Active HC',hcVal,hcSub,hcCol)
+        +sig('Deployment',dpVal,dpSub,dpCol)
         +sig('Long Absent',abVal,abSub,abCol)
-        +sig('FnF Pending',fnfVal,fnfSub,fnfCol)
+        +sig('FnF (info)',fnfVal,fnfSub,fnfCol)
         +sig('Last Site Visit',vsVal,vsSub,vsCol)
         +sig('Attrition 90d',atVal,atSub,atCol)
         +sig('Open TA Reqs',taVal,taSub,taCol)
@@ -8080,7 +8092,7 @@ function renderAccountHealth() {
     // Score key
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;margin-bottom:20px;font-size:10px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;align-items:center">'
       +'<span>🟢 <b>Healthy</b> 80–100</span><span>🟡 <b>At Risk</b> 55–79</span><span>🔴 <b>Critical</b> &lt;55</span>'
-      +'<span style="margin-left:auto;font-family:DM_Mono,monospace">Absent 25 · FnF 25 · Visit 20 · Attrition 20 · TA 10</span>'
+      +'<span style="margin-left:auto;font-family:DM_Mono,monospace">T&amp;M: Deploy 25 · TA 25 · Absent 20 · Attr 20 · Visit 10 &nbsp;|&nbsp; Other: TA 30 · Absent 25 · Attr 25 · Visit 20</span>'
     +'</div>'
     +(fCards.length===0 ? '<div style="padding:48px;text-align:center;color:var(--muted)">No accounts match the selected filters.</div>' : '')
     // Cards grid
@@ -13217,11 +13229,11 @@ async function sbBoot(user){
   _sbRole=profile||{role:'viewer',region:null};
   // Load customer_accounts from Supabase — live tier data
   try {
-    const {data:ca} = await _sb.from('customer_accounts').select('name,region,tier,active,headcount').eq('active',true).order('headcount',{ascending:false});
+    const {data:ca} = await _sb.from('customer_accounts').select('name,region,tier,active,headcount,contracted_hc,billing_type').eq('active',true).order('headcount',{ascending:false});
     if (ca && ca.length) {
       CUSTOMER_LIST.length = 0;
       ca.forEach(function(c){
-        CUSTOMER_LIST.push({n:c.name, r:c.region, t:c.tier, a:true, hc:c.headcount||0});
+        CUSTOMER_LIST.push({n:c.name, r:c.region, t:c.tier, a:true, hc:c.headcount||0, budget:c.contracted_hc||0, billing:c.billing_type||''});
       });
     }
   } catch(e) { console.warn('[customer_accounts]', e.message); }
