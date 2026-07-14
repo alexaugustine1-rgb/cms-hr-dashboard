@@ -8036,7 +8036,7 @@ function renderAccountHealth() {
 
     // Score bar segments
     var segs=[
-      {s:c.activeHC>0?80:10,col:hcCol,lbl:'HC'},
+      {s:c.deployPct!==null?(c.deployPct>=90?100:c.deployPct>=70?60:20):10,col:dpCol,lbl:'Deploy'},
       {s:c.absent.length===0?100:c.absentCrit.length>0?20:60,col:abCol,lbl:'Abs'},
       {s:c.fnfPending.length===0?100:c.fnfCrit.length>0?20:60,col:fnfCol,lbl:'FnF'},
       {s:c.daysSinceVisit===null?0:Math.max(0,100-c.daysSinceVisit*2),col:vsCol,lbl:'Visit'},
