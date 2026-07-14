@@ -10642,24 +10642,47 @@ async function _loadOpsRevAbsent(){
   var monFallback=new Date(today);
   monFallback.setDate(today.getDate()-diff);
   monFallback.setHours(0,0,0,0);
-  var _pStart=_ovFrom?new Date(_ovFrom+'T00:00:00'):monFallback;
-  var _pEnd=_ovTo?new Date(_ovTo+'T23:59:59'):today;
+  var _pFromStr=_ovFrom||monFallback.toISOString().slice(0,10);
+  var _pToStr=_ovTo||today.toISOString().slice(0,10);
   var todayStr=today.toISOString().slice(0,10);
   var _fmtD=function(s){if(!s)return'';var p=s.split('-');return p[2]+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1],10)-1];};
   var periodLabel=(_ovFrom&&_ovTo)?(_fmtD(_ovFrom)+' - '+_fmtD(_ovTo)):'This Week';
-  var res=await _sb.from('absent_cases')
-    .select('status,region,manager_name,status_updated_at,status_updated_by,next_followup_date,esep_initiated');
-  if(res.error){
-    absEl.innerHTML='<div style="color:var(--red);padding:16px">Failed to load: '+esc(res.error.message)+'</div>';
+  var rCases=await _sb.from('absent_cases')
+    .select('status,region,customer,status_updated_at,status_updated_by,next_followup_date,esep_initiated');
+  var rProfiles=await _sb.from('user_profiles')
+    .select('display_name,email,region,role,function_type').eq('active',true);
+  var rAccts=await _sb.from('customer_accounts').select('name,hrbp_owner,region');
+  if(rCases.error){
+    absEl.innerHTML='<div style="color:var(--red);padding:16px">Failed to load: '+esc(rCases.error.message)+'</div>';
     return;
   }
-  var cases=res.data||[];
+  var cases=rCases.data||[];
+  var profiles=rProfiles.data||[];
+  var accts=rAccts.data||[];
+  var fieldHRBPs=profiles.filter(function(p){return p.role==='hrbp'&&p.function_type==='hrbp';});
+  var normCust=function(s){return String(s||'').trim().toUpperCase().replace(/\s+/g,' ');};
+  var ACCT_OWNER={};
+  accts.forEach(function(a){if(a.hrbp_owner)ACCT_OWNER[normCust(a.name)]=a.hrbp_owner;});
+  var noOwnerCount=accts.filter(function(a){return !a.hrbp_owner;}).length;
+  var hrbpNames={};
+  fieldHRBPs.forEach(function(h){hrbpNames[h.display_name]=true;});
+  var regionSoleHRBP={};
+  ['North','South','East','West'].forEach(function(r){
+    var inR=fieldHRBPs.filter(function(h){return h.region===r;});
+    if(inR.length===1) regionSoleHRBP[r]=inR[0].display_name;
+  });
+  var ownerOf=function(c){
+    var o=ACCT_OWNER[normCust(c.customer)];
+    if(o&&hrbpNames[o]) return o;
+    if(regionSoleHRBP[c.region]) return regionSoleHRBP[c.region];
+    return null;
+  };
   var isResolved=function(c){return (c.status||'').toLowerCase().indexOf('resolved')>=0;};
   var pending=cases.filter(function(c){return !isResolved(c);});
   var resolvedPeriod=cases.filter(function(c){
     if(!isResolved(c)||!c.status_updated_at) return false;
-    var d=new Date(c.status_updated_at);
-    return d>=_pStart&&d<=_pEnd;
+    var ds=c.status_updated_at.slice(0,10);
+    return ds>=_pFromStr&&ds<=_pToStr;
   });
   var overdue=pending.filter(function(c){
     return c.next_followup_date&&c.next_followup_date<todayStr;
@@ -10667,6 +10690,32 @@ async function _loadOpsRevAbsent(){
   var absconding=pending.filter(function(c){
     return (c.status||'').toLowerCase().indexOf('absconding')>=0;
   });
+  var hStats={};
+  fieldHRBPs.forEach(function(h){hStats[h.display_name]={region:h.region,email:h.email,pending:0,overdue:0,actioned:0,resolved:0};});
+  pending.forEach(function(c){
+    var o=ownerOf(c);
+    if(o&&hStats[o]) hStats[o].pending++;
+  });
+  overdue.forEach(function(c){
+    var o=ownerOf(c);
+    if(o&&hStats[o]) hStats[o].overdue++;
+  });
+  cases.forEach(function(c){
+    if(!c.status_updated_by||!c.status_updated_at) return;
+    var ds=c.status_updated_at.slice(0,10);
+    if(ds<_pFromStr||ds>_pToStr) return;
+    var byEmail=(c.status_updated_by||'').toLowerCase();
+    fieldHRBPs.forEach(function(h){
+      if((h.email||'').toLowerCase()===byEmail){
+        hStats[h.display_name].actioned++;
+        if(isResolved(c)) hStats[h.display_name].resolved++;
+      }
+    });
+  });
+  var unassignedPending=pending.filter(function(c){return ownerOf(c)===null;});
+  var unassignedCusts={};
+  unassignedPending.forEach(function(c){unassignedCusts[normCust(c.customer)]=true;});
+  var unassignedCustCount=Object.keys(unassignedCusts).length;
   var _ork=function(label,val,col){
     return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;'
       +'padding:12px 18px;min-width:130px">'
@@ -10683,103 +10732,56 @@ async function _loadOpsRevAbsent(){
   var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;'
     +'text-transform:uppercase;color:var(--muted2)';
   var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
-  var OPSREV_HRBPS=[
-    {name:'Abhishek Singh',first:'abhishek',region:'North'},
-    {name:'Surajit Sen',first:'surajit',region:'East'},
-    {name:'Priya Paul',first:'priya',region:'South'},
-    {name:'Shambhavi Joshi',first:'shambhavi',region:'West'},
-    {name:'Somasri Samanta',first:'somasri',region:'West'},
-    {name:'Prapti Patel',first:'prapti',region:'West'}
-  ];
-  var hrbpStats={};
-  OPSREV_HRBPS.forEach(function(h){hrbpStats[h.first]={actioned:0,resolved:0};});
-  cases.forEach(function(c){
-    if(!c.status_updated_by||!c.status_updated_at) return;
-    var d=new Date(c.status_updated_at);
-    if(d<_pStart||d>_pEnd) return;
-    var by=(c.status_updated_by||'').toLowerCase();
-    OPSREV_HRBPS.forEach(function(h){
-      if(by.indexOf(h.first)>=0){
-        hrbpStats[h.first].actioned++;
-        if(isResolved(c)) hrbpStats[h.first].resolved++;
-      }
-    });
+  var sortedHRBPs=fieldHRBPs.slice().sort(function(a,b){
+    var ap=hStats[a.display_name].pending,bp=hStats[b.display_name].pending;
+    return bp-ap;
   });
-  var theadA='<thead><tr style="background:var(--surface3)">'
+  var thead='<thead><tr style="background:var(--surface3)">'
     +'<th style="'+thStyle+'">HRBP</th>'
     +'<th style="'+thStyle+'">Region</th>'
+    +'<th style="'+thStyle+'">Pending</th>'
     +'<th style="'+thStyle+'">Actioned</th>'
     +'<th style="'+thStyle+'">Resolved</th>'
-    +'</tr></thead>';
-  var tbodyA='<tbody>'+OPSREV_HRBPS.map(function(h){
-    var s=hrbpStats[h.first];
-    return '<tr>'
-      +'<td style="'+tdBase+';font-weight:600">'+esc(h.name)+'</td>'
-      +'<td style="'+tdBase+';color:var(--muted)">'+esc(h.region)+'</td>'
-      +'<td style="'+tdBase+';color:var(--accent)">'+s.actioned+'</td>'
-      +'<td style="'+tdBase+';color:var(--green)">'+s.resolved+'</td>'
-      +'</tr>';
-  }).join('')+'</tbody>';
-  var tableA='<table style="width:100%;border-collapse:collapse">'+theadA+tbodyA+'</table>';
-  var BACKLOG_REGIONS=['North','South','East','West'];
-  var byReg={};
-  BACKLOG_REGIONS.forEach(function(r){byReg[r]={p:0,od:0};});
-  pending.forEach(function(c){
-    var r=c.region||'';
-    if(byReg[r]){byReg[r].p++;}
-  });
-  overdue.forEach(function(c){
-    var r=c.region||'';
-    if(byReg[r]){byReg[r].od++;}
-  });
-  var theadB='<thead><tr style="background:var(--surface3)">'
-    +'<th style="'+thStyle+'">Region</th>'
-    +'<th style="'+thStyle+'">Pending</th>'
     +'<th style="'+thStyle+'">Overdue</th>'
     +'</tr></thead>';
-  var tbodyB='<tbody>'+BACKLOG_REGIONS.map(function(r){
-    var d=byReg[r];
+  var hrbpRows=sortedHRBPs.map(function(h){
+    var s=hStats[h.display_name];
     return '<tr>'
-      +'<td style="'+tdBase+'">'+esc(r)+'</td>'
-      +'<td style="'+tdBase+';font-weight:600;color:var(--accent)">'+d.p+'</td>'
-      +'<td style="'+tdBase+';color:'+(d.od>0?'var(--amber)':'var(--muted)')+'">'+d.od+'</td>'
+      +'<td style="'+tdBase+';font-weight:600">'+esc(h.display_name)+'</td>'
+      +'<td style="'+tdBase+';color:var(--muted)">'+esc(h.region||'')+'</td>'
+      +'<td style="'+tdBase+';font-weight:600;color:var(--accent)">'+s.pending+'</td>'
+      +'<td style="'+tdBase+';color:var(--muted2)">'+s.actioned+'</td>'
+      +'<td style="'+tdBase+';color:var(--green)">'+s.resolved+'</td>'
+      +'<td style="'+tdBase+';color:'+(s.overdue>0?'var(--amber)':'var(--muted)')+'">'+s.overdue+'</td>'
       +'</tr>';
-  }).join('')+'</tbody>';
-  var tableB='<table style="width:100%;border-collapse:collapse">'+theadB+tbodyB+'</table>';
-  var bktUncontacted=0,bktODNR=0,bktAbsconding=0,bktOther=0;
-  pending.forEach(function(c){
-    var st=(c.status||'').toLowerCase();
-    if(st==='uncontacted') bktUncontacted++;
-    else if(st==='od not regularised') bktODNR++;
-    else if(st.indexOf('absconding')>=0) bktAbsconding++;
-    else bktOther++;
-  });
-  var theadC='<thead><tr style="background:var(--surface3)">'
-    +'<th style="'+thStyle+'">Uncontacted</th>'
-    +'<th style="'+thStyle+'">OD Not Regularised</th>'
-    +'<th style="'+thStyle+'">Absconding</th>'
-    +'<th style="'+thStyle+'">Other</th>'
-    +'</tr></thead>';
-  var tbodyC='<tbody><tr>'
-    +'<td style="'+tdBase+';font-weight:600">'+bktUncontacted+'</td>'
-    +'<td style="'+tdBase+';font-weight:600">'+bktODNR+'</td>'
-    +'<td style="'+tdBase+';font-weight:600;color:var(--red)">'+bktAbsconding+'</td>'
-    +'<td style="'+tdBase+';font-weight:600">'+bktOther+'</td>'
-    +'</tr></tbody>';
-  var tableC='<table style="width:100%;border-collapse:collapse">'+theadC+tbodyC+'</table>';
+  }).join('');
+  var unassignedRow=unassignedPending.length
+    ?'<tr style="background:rgba(251,191,36,.06)">'
+      +'<td style="'+tdBase+';color:var(--amber);font-style:italic" colspan="2">Unassigned (needs owner)</td>'
+      +'<td style="'+tdBase+';font-weight:600;color:var(--amber)">'+unassignedPending.length+'</td>'
+      +'<td style="'+tdBase+';color:var(--muted)">-</td>'
+      +'<td style="'+tdBase+';color:var(--muted)">-</td>'
+      +'<td style="'+tdBase+';color:var(--muted)">-</td>'
+      +'</tr>'
+    :'';
+  var tbody='<tbody>'+hrbpRows+unassignedRow+'</tbody>';
+  var table='<table style="width:100%;border-collapse:collapse">'+thead+tbody+'</table>';
   var cardStyle='background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px';
-  var subHead=function(t){
-    return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;'
-      +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';
-  };
+  var amberNote=noOwnerCount>0
+    ?'<div style="margin-top:10px;padding:8px 12px;border-radius:6px;background:rgba(251,191,36,.1);'
+      +'border:1px solid rgba(251,191,36,.3);font-size:11px;color:var(--amber)">'
+      +noOwnerCount+' account(s) have no HRBP owner yet — assign in Manage Customer Accounts</div>'
+    :'';
   absEl.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
     +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:2px">'
     +'HRBP Absenteeism</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+esc(periodLabel)+'</div>'
     +kpiStrip
-    +'<div style="'+cardStyle+'">'+subHead('A. By HRBP — activity this period')+tableA+'</div>'
-    +'<div style="'+cardStyle+'">'+subHead('B. Pending backlog by region')+tableB+'</div>'
-    +'<div style="'+cardStyle+'">'+subHead('C. Pending by status bucket')+tableC+'</div>';
+    +'<div style="'+cardStyle+'">'
+    +'<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;'
+    +'letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">HRBP Absenteeism &mdash; this period</div>'
+    +table+'</div>'
+    +amberNote;
 }
 
 async function _loadOpsRevVisits(){
