@@ -866,6 +866,15 @@ let _sbUser=null,_sbRole=null;
 function _myRegions(){var r=(typeof _sbRole!=='undefined'&&_sbRole)||{};if(r.oversight_regions&&String(r.oversight_regions).trim())return String(r.oversight_regions).split(',').map(function(x){return x.trim();}).filter(Boolean);if(r.region&&r.region!=='Pan India')return[r.region];return null;}
 function _regionInScope(reg){var m=_myRegions();return!m||m.indexOf(reg)>=0;}
 function _isMultiRegion(){var m=_myRegions();return!!(m&&m.length>1);}
+var _wfhApprovedSet=new Set();
+var _odHideApproved=true;
+async function _loadWfhApprovedSet(){
+  var res=await _sb.from('customer_accounts').select('name').eq('wfh_approved',true);
+  if(!res.error&&res.data){
+    _wfhApprovedSet.clear();
+    res.data.forEach(function(r){_wfhApprovedSet.add(String(r.name||'').trim().toUpperCase().replace(/\s+/g,' '));});
+  }
+}
 var _cwData = null;
 var _acctHC = null;   // per-account active HC from super employee master {UPPER_NAME: count}
 var _ahFilters = {region:'All', tier:'All', health:'All'};
@@ -7308,16 +7317,16 @@ var _acctUploadPending = null;
 
 async function exportCustomerAccountsTemplate() {
   var res = await _sb.from('customer_accounts')
-    .select('id,name,region,tier,billing_type,contracted_hc,elah_name,hrbp_owner,active,headcount')
+    .select('id,name,region,tier,billing_type,contracted_hc,elah_name,hrbp_owner,active,headcount,wfh_approved')
     .order('region').order('name');
   if (res.error) { showToast('Export failed: ' + res.error.message, 'error'); return; }
   var rows = res.data || [];
-  var hdrs = ['account_id','name','region','tier','billing_type','budget_hc','elah_name','hrbp_owner','active','headcount_readonly'];
+  var hdrs = ['account_id','name','region','tier','billing_type','budget_hc','elah_name','hrbp_owner','active','headcount_readonly','wfh_approved'];
   var data = [hdrs].concat(rows.map(function(r) {
     return [
       r.id, r.name||'', r.region||'', r.tier||'', r.billing_type||'',
       r.contracted_hc!=null?r.contracted_hc:'', r.elah_name||'', r.hrbp_owner||'',
-      r.active, r.headcount||0
+      r.active, r.headcount||0, r.wfh_approved===true
     ];
   }));
   var ws = XLSX.utils.aoa_to_sheet(data);
@@ -7355,6 +7364,7 @@ async function handleCustomerAccountsUpload(file) {
       var elah    = String(row['elah_name']||'').trim();
       var bhcRaw  = row['budget_hc'];
       var activeRaw = row['active'];
+      var wfhApprRaw = row['wfh_approved'];
       if (isInsert && !nm) errs.push('name required for new account');
       if (VALID_REGION.indexOf(region) < 0) errs.push('invalid region "'+region+'"');
       if (VALID_HRBP.indexOf(hrbp) < 0) errs.push('invalid hrbp_owner "'+hrbp+'"');
@@ -7375,6 +7385,7 @@ async function handleCustomerAccountsUpload(file) {
       if (bhcRaw !== '' && bhcRaw !== null && bhcRaw !== undefined) patch.contracted_hc = Number(bhcRaw);
       patch.elah_name = elah || null;
       patch.hrbp_owner = hrbp || null;
+      patch.wfh_approved = (wfhApprRaw===true||wfhApprRaw===1||String(wfhApprRaw).trim().toLowerCase()==='true'||String(wfhApprRaw).trim()==='1'||String(wfhApprRaw).trim().toLowerCase()==='yes');
       if (isUpdate) { patch._rid = aid; updates.push(patch); }
       else inserts.push(patch);
     });
@@ -8598,6 +8609,15 @@ function renderOD(){
 
   // View-specific filter
   const viewArr = isWFH ? empArr.filter(r=>r.wfh_days>0) : empArr.filter(r=>r.od_days>0);
+  var _normCA=function(s){return String(s||'').trim().toUpperCase().replace(/\s+/g,' ');};
+  var _wfhHiddenCount=0;
+  var displayArr=viewArr;
+  if(isWFH&&_odHideApproved&&_wfhApprovedSet.size>0){
+    displayArr=viewArr.filter(function(r){
+      if(_wfhApprovedSet.has(_normCA(r.customer))){_wfhHiddenCount++;return false;}
+      return true;
+    });
+  }
 
   // Working days for threshold
   const workDays = summary.working_days || 22;
@@ -8714,7 +8734,7 @@ function renderOD(){
 
   // ── Employee table rows
   const colLabel = isWFH ? 'WFH' : 'OD';
-  const rows = viewArr.map(r => {
+  const rows = displayArr.map(r => {
     const days    = isWFH ? r.wfh_days : r.od_days;
     const records = isWFH ? r.wfh_records : r.od_records;
     const thresh  = isWFH ? 10 : workDays;
@@ -8779,6 +8799,10 @@ function renderOD(){
     // Region filter
     +'<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'
     +'<span style="font-size:11px;color:var(--muted)">Region:</span>'+rf+'</div>'
+    +(isWFH?'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+      +'<button onclick="_odHideApproved=!_odHideApproved;document.getElementById(\'tab-od\').innerHTML=renderOD()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid '+(_odHideApproved?'var(--green)':'var(--border)')+';background:'+(_odHideApproved?'rgba(52,211,153,.12)':'none')+';color:'+(_odHideApproved?'var(--green)':'var(--muted)')+'">'+(_odHideApproved?'&#10003; ':'')+'Hide WFH-approved accounts</button>'
+      +(_wfhHiddenCount>0?'<span style="font-size:11px;color:var(--muted2)">'+_wfhHiddenCount+' row'+(+_wfhHiddenCount===1?'':'s')+' hidden (account WFH approved)</span>':'')
+      +'</div>':'')
     // Table
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
     +'<div style="display:grid;grid-template-columns:180px 1fr 100px 100px 60px 60px 80px 140px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
@@ -8786,7 +8810,7 @@ function renderOD(){
       '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>'
     ).join('')+'</div>'
     +(rows||'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>')+'</div>'
-    +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+viewArr.length+' employees &middot; '+colLabel+' view &middot; '+selMonth+'</div>'
+    +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+(isWFH?displayArr.length:viewArr.length)+' employees &middot; '+colLabel+' view &middot; '+selMonth+'</div>'
     +'</div>';
 }
 
@@ -13187,6 +13211,7 @@ async function sbBoot(user){
       });
     }
   } catch(e) { console.warn('[customer_accounts]', e.message); }
+  _loadWfhApprovedSet();
 
   // Load TEAM_MEMBERS from user_profiles — replaces hardcoded array
   try {
