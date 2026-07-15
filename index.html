@@ -2624,8 +2624,8 @@ function renderHRBP(w, pw) {
   const _hcH = (typeof _hrbpSVHRBP !== 'undefined') ? _hrbpSVHRBP : 'All';
 
   // All site visits — apply region + HRBP filters
-  const _vtypeCol = {'Connect':'var(--accent)','Town Hall':'#34d399','R&R':'#f59e0b','Induction':'#a78bfa','Other':'var(--muted2)'};
-  const _vtypeIcon = {'Connect':'🤝','Town Hall':'🏛','R&R':'🏆','Induction':'📋','Other':'📌'};
+  const _vtypeCol = {'Connect':'var(--accent)','Town Hall':'#34d399','R&R':'#f59e0b','Induction':'#a78bfa','Internal Meeting':'var(--muted)','Training':'#60a5fa','Other':'var(--muted2)'};
+  const _vtypeIcon = {'Connect':'🤝','Town Hall':'🏛','R&R':'🏆','Induction':'📋','Internal Meeting':'🏢','Training':'🎓','Other':'📌'};
   const _tierCol2  = {'Platinum':'#a78bfa','Gold':'#f59e0b','Silver':'#94a3b8','Regular':'var(--muted2)','Internal':'#34d399'};
   const _svAll = (typeof _hrbpSVCache !== 'undefined') ? _hrbpSVCache : [];
   var _svFiltered = _svAll;
@@ -6547,7 +6547,9 @@ if(t==='hrbp'){
       +'<div style="flex:0 0 auto"><label style="font-size:10px;color:var(--muted2);display:block;margin-bottom:3px">Type</label>'
       +'<select id="visitTypeInput" onchange="toggleRRFields(this.value)" style="padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:12px;min-width:130px">'
       +'<option value="Connect">Employee Connect</option><option value="Town Hall">Town Hall</option>'
-      +'<option value="R&R">R&R</option><option value="Induction">Induction</option><option value="Other">Other</option>'
+      +'<option value="R&R">R&R</option><option value="Induction">Induction</option>'
+      +'<option value="Internal Meeting">Internal Meeting</option><option value="Training">Training</option>'
+      +'<option value="Other">Other</option>'
       +'</select></div>'
       +'</div>'
       +'<div style="margin-bottom:10px">'
@@ -10954,15 +10956,18 @@ async function _loadOpsRevVisits(){
   var erCases=r3.data||[];
   var normN=function(s){return String(s||'').trim().toLowerCase();};
   var normAcct=function(s){return String(s||'').toUpperCase().trim().replace(/\s+/g,' ');};
+  var isInternal=function(v){return normAcct(v.account_name||'')==='CMS IT OFFICE';};
   var hrbpByName={};
   fieldHRBPs.forEach(function(h){hrbpByName[normN(h.display_name)]=h;});
   var matchHRBP=function(rawName){return hrbpByName[normN(rawName)]||null;};
   // All plans with status=Planned; duePlans = those with planned_date <= today
   var statusPlanned=allPlans.filter(function(p){return p.status==='Planned';});
   var duePlans=statusPlanned.filter(function(p){var ds=(p.planned_date||'').slice(0,10);return ds&&ds<=todayStr;});
-  // Period visits
-  var periodVisits=visits.filter(function(v){var ds=(v.visit_date||'').slice(0,10);return ds&&ds>=_pFromStr&&ds<=_pToStr;});
-  // Build lookup: hrbp_name_norm + '|' + normAcct -> true, for all period visits
+  // Period visits — split customer vs internal
+  var periodVisitsAll=visits.filter(function(v){var ds=(v.visit_date||'').slice(0,10);return ds&&ds>=_pFromStr&&ds<=_pToStr;});
+  var periodVisits=periodVisitsAll.filter(function(v){return !isInternal(v);});
+  var periodInternal=periodVisitsAll.filter(function(v){return isInternal(v);});
+  // Build lookup: hrbp_name_norm + '|' + normAcct -> visits[], for customer-only period visits
   var visitLookup={};
   periodVisits.forEach(function(v){
     var k=normN(v.hrbp_name)+'|'+normAcct(v.account_name);
@@ -10975,10 +10980,10 @@ async function _loadOpsRevVisits(){
     var k=normN(p.hrbp_name)+'|'+normAcct(p.account_name);
     planLookup[k]=true;
   });
-  // Per-HRBP stats
+  // Per-HRBP stats (customer visits only for plan/completed/overdue/adhoc)
   var hrbpStats={};
   fieldHRBPs.forEach(function(h){
-    hrbpStats[normN(h.display_name)]={name:h.display_name,region:h.region||'',planned:0,completed:0,overdue:0,adhoc:0,openER:0};
+    hrbpStats[normN(h.display_name)]={name:h.display_name,region:h.region||'',planned:0,completed:0,overdue:0,adhoc:0,internal:0,openER:0};
   });
   duePlans.forEach(function(p){
     var h=matchHRBP(p.hrbp_name);
@@ -10993,7 +10998,7 @@ async function _loadOpsRevVisits(){
       if(ds&&ds<todayStr) hrbpStats[sk].overdue++;
     }
   });
-  // Ad-hoc = period visits whose (hrbp+account) has no matching plan
+  // Ad-hoc = customer period visits whose (hrbp+account) has no matching plan
   periodVisits.forEach(function(v){
     var h=matchHRBP(v.hrbp_name);
     if(!h) return;
@@ -11001,14 +11006,20 @@ async function _loadOpsRevVisits(){
     var pk=normN(v.hrbp_name)+'|'+normAcct(v.account_name);
     if(!planLookup[pk]) hrbpStats[sk].adhoc++;
   });
+  // Internal activity count per HRBP
+  periodInternal.forEach(function(v){
+    var h=matchHRBP(v.hrbp_name);
+    if(!h) return;
+    hrbpStats[normN(h.display_name)].internal++;
+  });
   var openER=erCases.filter(function(c){return c.status==='Open';});
   var slaBreached=openER.filter(function(c){return !!c.sla_breached;});
   openER.forEach(function(c){var h=matchHRBP(c.hrbp_name);if(h)hrbpStats[normN(h.display_name)].openER++;});
   // Overall KPI totals
-  var totPlanned=0,totCompleted=0,totOverdue=0,totAdhoc=0;
+  var totPlanned=0,totCompleted=0,totOverdue=0,totAdhoc=0,totInternal=0;
   Object.keys(hrbpStats).forEach(function(k){
     var s=hrbpStats[k];
-    totPlanned+=s.planned; totCompleted+=s.completed; totOverdue+=s.overdue; totAdhoc+=s.adhoc;
+    totPlanned+=s.planned; totCompleted+=s.completed; totOverdue+=s.overdue; totAdhoc+=s.adhoc; totInternal+=s.internal;
   });
   var overallAdh=totPlanned>0?Math.round(totCompleted/totPlanned*100):(totCompleted||totAdhoc?100:null);
   var overallAdhStr=overallAdh===null?'--':overallAdh+'%';
@@ -11025,13 +11036,14 @@ async function _loadOpsRevVisits(){
     +_ork('Completed',totCompleted,'var(--green)')
     +_ork('Overdue',totOverdue,'var(--amber)')
     +_ork('Ad-hoc',totAdhoc,'var(--accent)')
+    +_ork('Internal Activity',totInternal,'var(--muted)')
     +_ork('Open ER Cases',openER.length,'var(--red)',erSub)
     +'</div>';
   // HRBP table
   var hrbpRows=fieldHRBPs.map(function(h){
     var s=hrbpStats[normN(h.display_name)];
     var adh=s.planned>0?Math.round(s.completed/s.planned*100):(s.completed||s.adhoc?100:null);
-    return {name:h.display_name,region:h.region||'',planned:s.planned,completed:s.completed,overdue:s.overdue,adhoc:s.adhoc,openER:s.openER,adh:adh};
+    return {name:h.display_name,region:h.region||'',planned:s.planned,completed:s.completed,overdue:s.overdue,adhoc:s.adhoc,internal:s.internal,openER:s.openER,adh:adh};
   });
   hrbpRows.sort(function(a,b){
     if(b.overdue!==a.overdue) return b.overdue-a.overdue;
@@ -11048,6 +11060,7 @@ async function _loadOpsRevVisits(){
     +'<th style="'+thStyle+'">Completed</th>'
     +'<th style="'+thStyle+'">Overdue</th>'
     +'<th style="'+thStyle+'">Ad-hoc</th>'
+    +'<th style="'+thStyle+'">Internal</th>'
     +'<th style="'+thStyle+'">Adherence %</th>'
     +'</tr></thead>';
   var tfootStyle='padding:8px 12px;border-top:2px solid var(--border);font-size:12px;font-weight:700;background:var(--surface3)';
@@ -11063,9 +11076,10 @@ async function _loadOpsRevVisits(){
       +'<td style="'+tdBase+';color:var(--green)">'+row.completed+'</td>'
       +'<td style="'+tdBase+';color:'+(row.overdue>0?'var(--amber)':'var(--muted)')+'">'+row.overdue+'</td>'
       +'<td style="'+tdBase+';color:var(--accent)">'+row.adhoc+'</td>'
+      +'<td style="'+tdBase+';color:var(--muted)">'+row.internal+'</td>'
       +'<td style="'+tdBase+';font-weight:600;color:'+adhCol+'">'+adhStr+'</td>'
       +'</tr>';
-  }).join(''):'<tr><td colspan="7" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')
+  }).join(''):'<tr><td colspan="8" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')
   +'</tbody>'
   +'<tfoot><tr>'
   +'<td style="'+tfootStyle+'">Total</td>'
@@ -11074,10 +11088,11 @@ async function _loadOpsRevVisits(){
   +'<td style="'+tfootStyle+';color:var(--green)">'+totCompleted+'</td>'
   +'<td style="'+tfootStyle+';color:'+(totOverdue>0?'var(--amber)':'var(--muted)')+'">'+totOverdue+'</td>'
   +'<td style="'+tfootStyle+';color:var(--accent)">'+totAdhoc+'</td>'
+  +'<td style="'+tfootStyle+';color:var(--muted)">'+totInternal+'</td>'
   +'<td style="'+tfootStyle+';color:'+tfootAdhCol+'">'+tfootAdhStr+'</td>'
   +'</tr></tfoot>';
   var tableT='<table style="width:100%;border-collapse:collapse">'+theadT+tbodyT+'</table>';
-  // Ad-hoc visits mini-list
+  // Ad-hoc visits mini-list (customer only — internal excluded)
   var adhocVisits=periodVisits.filter(function(v){
     var pk=normN(v.hrbp_name)+'|'+normAcct(v.account_name);
     return !planLookup[pk];
