@@ -11452,6 +11452,9 @@ var _visitEntries=[];
 function filterVisitDropdown(val){
   var dd=document.getElementById('visitDropdown');
   if(!dd)return;
+  // Clear any stale selection whenever the user edits the input
+  var _selEl=document.getElementById('visitAccountSelected');
+  if(_selEl) _selEl.value='';
   var _mr=_myRegions();
   var pool;
   if(_mr&&_mr.length){pool=[];_mr.forEach(function(rg){pool=pool.concat(getCustsByRegion(rg));});}
@@ -11501,8 +11504,13 @@ function addVisitEntry(){
   var typeSel=document.getElementById('visitTypeInput');
   var dateInp=document.getElementById('visitDateInput');
   var regionInp=document.getElementById('visitRegionInput');
-  var account=accSel?accSel.value:(accInp?accInp.value:'');
-  if(!account){alert('Please select an account from the dropdown');return;}
+  var selectedVal=accSel?accSel.value.trim():'';
+  var typedVal=accInp?accInp.value.trim():'';
+  if(!selectedVal||selectedVal!==typedVal){
+    if(typeof showToast==='function') showToast('Pick an account from the list','error');
+    return;
+  }
+  var account=selectedVal;
   if(!dateInp||!dateInp.value){alert('Visit date is required');return;}
   var entry={account:account,tier:tierSel?tierSel.value:'Regular',
     date:dateInp.value,
