@@ -12141,6 +12141,8 @@ async function processCandidate(wb) {
           if (typeof showToast==='function') showToast('✓ '+_tcInserted+' candidate rows written · '+_tcInterviewCnt+' at Interview · '+_tcSkipped+' skipped (no ApplicationID)','success',4000);
         }
         log('✓ ta_candidates: '+_tcInserted+' rows written, '+_tcSkipped+' skipped ('+_tcBatch+')','ok');
+        try { await _sb.rpc('sync_filled_date_from_candidates'); log('✓ req_tracker filled_date synced from candidates','ok'); }
+        catch(e){ console.warn('filled_date sync failed', e); }
 
       // ── Sync Appointment Letter / Pre Joining candidates → prospective_joiners ─
       // Stages that represent confirmed joiners or imminent joiners
@@ -12321,7 +12323,6 @@ async function processReqTAT(wb) {
       tat: age, balance: String(row[hIdx('Balance')]||'1'),
       created: String(row[hIdx('Requisition Creation Date')]||'').substring(0,15),
       zinghr_status: status,
-      filled_date: status!=='Approved' ? _tatParseIso(String(row[hIdx('ECode Creation Date')]||'').trim()) : null,
     };
     rec.status = (status==='Approved') ? 'Open' : 'Closed';
     allRows.push(rec);
@@ -12439,7 +12440,6 @@ async function processReqTAT(wb) {
         status:          r.status,
         zinghr_status:   r.zinghr_status,
         closed_tat:      r.closed_tat||0,
-        filled_date:     r.filled_date||null,
         upload_batch:    'tat_'+_rtNow.substring(0,10),
         uploaded_at:     _rtNow,
         critical:        ['Platinum','Gold'].includes(r.tier)||false,
