@@ -10963,6 +10963,14 @@ async function _loadOpsRevVisits(){
   var slaBreached=openER.filter(function(c){return !!c.sla_breached;});
   var flagged=visits.filter(function(v){return !!v.issues_flagged;});
   flagged.sort(function(a,b){return (b.visit_date||'').localeCompare(a.visit_date||'');});
+  // Per-HRBP adjusted overdue = max(0, past-planned - done-in-period)
+  var _hDoneN={},_hPastN={};
+  doneInPeriod.forEach(function(v){var h=matchHRBP(v.hrbp_name);if(h){var k=normN(h.display_name);_hDoneN[k]=(_hDoneN[k]||0)+1;}});
+  overduePlans.forEach(function(v){var h=matchHRBP(v.hrbp_name);if(h){var k=normN(h.display_name);_hPastN[k]=(_hPastN[k]||0)+1;}});
+  var _unDone=0,_unPast=0;
+  doneInPeriod.forEach(function(v){if(!matchHRBP(v.hrbp_name))_unDone++;});
+  overduePlans.forEach(function(v){if(!matchHRBP(v.hrbp_name))_unPast++;});
+  var adjustedTotalOverdue=Object.keys(_hPastN).reduce(function(s,k){return s+Math.max(0,(_hPastN[k]||0)-(_hDoneN[k]||0));},0)+Math.max(0,_unPast-_unDone);
   var _ork=function(label,val,col,sub){
     return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;min-width:130px">'
       +'<div style="font-size:22px;font-weight:700;color:'+(col||'var(--accent)')+'">'+val+'</div>'
@@ -10974,7 +10982,7 @@ async function _loadOpsRevVisits(){
   var kpiStrip='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'
     +_ork('Planned',planned.length,'var(--accent)')
     +_ork('Done (period)',doneInPeriod.length,'var(--green)')
-    +_ork('Overdue',overduePlans.length,'var(--amber)')
+    +_ork('Overdue',adjustedTotalOverdue,'var(--amber)')
     +_ork('Open ER Cases',openER.length,'var(--red)',erSub)
     +'</div>';
   var hrbpStats={};
@@ -10989,6 +10997,9 @@ async function _loadOpsRevVisits(){
   doneInPeriod.forEach(function(v){if(!matchHRBP(v.hrbp_name)){unAssigned.done++;hasUnassigned=true;}});
   overduePlans.forEach(function(v){if(!matchHRBP(v.hrbp_name)){unAssigned.overdue++;hasUnassigned=true;}});
   openER.forEach(function(c){if(!matchHRBP(c.hrbp_name)){unAssigned.openER++;hasUnassigned=true;}});
+  // Credit done visits against past-planned per HRBP
+  Object.keys(hrbpStats).forEach(function(k){var s=hrbpStats[k];s.overdue=Math.max(0,s.overdue-s.done);});
+  unAssigned.overdue=Math.max(0,unAssigned.overdue-unAssigned.done);
   var hrbpRows=fieldHRBPs.map(function(h){return {name:h.display_name,d:hrbpStats[normN(h.display_name)]};});
   hrbpRows.sort(function(a,b){if(b.d.overdue!==a.d.overdue)return b.d.overdue-a.d.overdue;return b.d.planned-a.d.planned;});
   if(hasUnassigned) hrbpRows.push({name:'Unassigned / Other',d:{region:'--',planned:unAssigned.planned,done:unAssigned.done,overdue:unAssigned.overdue,openER:unAssigned.openER}});
@@ -11068,15 +11079,6 @@ async function _loadOpsRevTA(){
     closedMap[k].count++;
     totalClosed++;
   });
-  var fnfPending=(typeof FNF_DATA!=='undefined'&&FNF_DATA||[]).filter(function(r){
-    var st=String(r.status||'').toLowerCase();
-    return !r.paid&&!st.includes('paid')&&!st.includes('settled');
-  });
-  var fnfOverdue=fnfPending.filter(function(r){
-    if(!r.payment_date) return false;
-    var d=new Date(r.payment_date);
-    return !isNaN(d)&&d<today;
-  });
   var _ork=function(label,val,col,sub){
     return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;min-width:130px">'
       +'<div style="font-size:22px;font-weight:700;color:'+(col||'var(--accent)')+'">'+val+'</div>'
@@ -11084,12 +11086,10 @@ async function _loadOpsRevTA(){
       +(sub?'<div style="font-size:10px;color:var(--red);margin-top:2px">'+esc(sub)+'</div>':'')
       +'</div>';
   };
-  var fnfSub=fnfOverdue.length?fnfOverdue.length+' overdue':'';
   var kpiStrip='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'
     +_ork('Open Reqs',totalOpen,'var(--accent)')
     +_ork('Critical >45d',totalCrit,'var(--red)')
     +_ork('Closed (period)',totalClosed,'var(--green)')
-    +_ork('FnF Pending',fnfPending.length,'var(--amber)',fnfSub)
     +'</div>';
   var allKeys={};
   Object.keys(openCounts).forEach(function(k){allKeys[k]=1;});
@@ -11256,21 +11256,17 @@ function _loadOpsRevFnf(){
     var st=String(r.status||'').toLowerCase();
     return !r.paid&&!st.includes('paid')&&!st.includes('settled');
   });
-  var overdue=pending.filter(function(r){
-    if(!r.payment_date) return false;
-    var d=new Date(r.payment_date);
-    return !isNaN(d)&&d<today;
-  });
+  var AGED_BANDS={'1year&above':true,'180-365days':true};
+  var aged=pending.filter(function(r){return AGED_BANDS[r.band];});
   var highValue=pending.filter(function(r){return (parseFloat(r.net_salary)||0)>=100000;});
   var priority=pending.filter(function(r){
-    if(r.payment_date){var d=new Date(r.payment_date);if(!isNaN(d)&&d<today)return true;}
-    return (parseFloat(r.net_salary)||0)>=100000;
+    return AGED_BANDS[r.band]||(parseFloat(r.net_salary)||0)>=100000;
   });
   priority.sort(function(a,b){
-    var aOd=a.payment_date&&!isNaN(new Date(a.payment_date))&&new Date(a.payment_date)<today;
-    var bOd=b.payment_date&&!isNaN(new Date(b.payment_date))&&new Date(b.payment_date)<today;
-    if(bOd&&!aOd) return 1;
-    if(aOd&&!bOd) return -1;
+    var aAg=!!AGED_BANDS[a.band];
+    var bAg=!!AGED_BANDS[b.band];
+    if(bAg&&!aAg) return 1;
+    if(aAg&&!bAg) return -1;
     return (parseFloat(b.net_salary)||0)-(parseFloat(a.net_salary)||0);
   });
   var capped=priority.slice(0,20);
@@ -11282,7 +11278,7 @@ function _loadOpsRevFnf(){
   };
   var kpiStrip='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'
     +_ork('FnF Pending',pending.length,'var(--accent)')
-    +_ork('Overdue',overdue.length,'var(--red)')
+    +_ork('Aged >180d',aged.length,'var(--red)')
     +_ork('High-Value',highValue.length,'var(--amber)')
     +'</div>';
   var fmtSal=function(v){var n=parseFloat(v)||0;return n>=100000?'&#8377;'+(n/100000).toFixed(1)+'L':n>0?'&#8377;'+Math.round(n).toLocaleString('en-IN'):'&#8212;';};
@@ -11292,20 +11288,20 @@ function _loadOpsRevFnf(){
     +'<th style="'+thStyle+'">Name</th>'
     +'<th style="'+thStyle+'">Region</th>'
     +'<th style="'+thStyle+'">Net Salary</th>'
-    +'<th style="'+thStyle+'">Payment Date</th>'
+    +'<th style="'+thStyle+'">Band</th>'
     +'<th style="'+thStyle+'">Flag</th>'
     +'</tr></thead>';
   var tbodyT='<tbody>'+(capped.length?capped.map(function(r){
-    var isOd=r.payment_date&&!isNaN(new Date(r.payment_date))&&new Date(r.payment_date)<today;
+    var isAg=!!AGED_BANDS[r.band];
     var isHV=(parseFloat(r.net_salary)||0)>=100000;
     var flags=[];
-    if(isOd) flags.push('<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(248,113,113,.15);color:var(--red);font-weight:600">Overdue</span>');
+    if(isAg) flags.push('<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(248,113,113,.15);color:var(--red);font-weight:600">Aged</span>');
     if(isHV) flags.push('<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(251,191,36,.15);color:var(--amber);font-weight:600">High-Value</span>');
     return '<tr>'
       +'<td style="'+tdBase+';font-weight:600">'+esc(r.name||r.emp_name||'')+'</td>'
       +'<td style="'+tdBase+';color:var(--muted)">'+esc(r.region||'')+'</td>'
       +'<td style="'+tdBase+'">'+fmtSal(r.net_salary)+'</td>'
-      +'<td style="'+tdBase+';color:var(--muted2)">'+esc(r.payment_date||'&#8212;')+'</td>'
+      +'<td style="'+tdBase+';color:var(--muted2)">'+esc(r.band||'&#8212;')+'</td>'
       +'<td style="'+tdBase+'">'+flags.join(' ')+'</td>'
       +'</tr>';
   }).join(''):'<tr><td colspan="5" style="'+tdBase+';color:var(--muted);text-align:center">No priority FnF cases.</td></tr>')
@@ -11315,7 +11311,7 @@ function _loadOpsRevFnf(){
   var subHead=function(t){return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';};
   var noDataNote=!fnfAll.length?'<div style="background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:var(--amber)">&#9888; No FnF data loaded &#8212; upload a FnF Settlement Report to see cases.</div>':'';
   el.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:2px">FnF Priority</div>'
-    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">From uploaded FnF Settlement Report &middot; Overdue or net &ge; &#8377;1L</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">From uploaded FnF Settlement Report &middot; Aged &gt;180d or net &ge; &#8377;1L</div>'
     +noDataNote
     +kpiStrip
     +'<div style="'+cardStyle+'">'+subHead('Priority FnF cases')+tableT+'</div>';
