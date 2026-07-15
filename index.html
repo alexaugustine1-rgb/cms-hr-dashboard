@@ -10927,7 +10927,7 @@ async function _loadOpsRevAbsent(){
 async function _loadOpsRevVisits(){
   var el=document.getElementById('opsrev-visits');
   if(!el) return;
-  el.innerHTML='<div style="padding:16px;color:var(--muted)">Loading visits…</div>';
+  el.innerHTML='<div style="padding:16px;color:var(--muted)">Loading visits...</div>';
   var today=new Date();
   var dayNum=today.getDay();
   var diff=(dayNum===0)?6:dayNum-1;
@@ -10949,28 +10949,69 @@ async function _loadOpsRevVisits(){
     return;
   }
   var fieldHRBPs=r0.data||[];
-  var plans=r1.data||[];
+  var allPlans=r1.data||[];
   var visits=r2.data||[];
   var erCases=r3.data||[];
   var normN=function(s){return String(s||'').trim().toLowerCase();};
+  var normAcct=function(s){return String(s||'').toUpperCase().trim().replace(/\s+/g,' ');};
   var hrbpByName={};
   fieldHRBPs.forEach(function(h){hrbpByName[normN(h.display_name)]=h;});
   var matchHRBP=function(rawName){return hrbpByName[normN(rawName)]||null;};
-  var planned=plans.filter(function(v){return v.status==='Planned';});
-  var doneInPeriod=visits.filter(function(v){var ds=(v.visit_date||'').slice(0,10);return ds&&ds>=_pFromStr&&ds<=_pToStr;});
-  var overduePlans=planned.filter(function(v){var ds=(v.planned_date||'').slice(0,10);return ds&&ds<todayStr;});
+  // All plans with status=Planned; duePlans = those with planned_date <= today
+  var statusPlanned=allPlans.filter(function(p){return p.status==='Planned';});
+  var duePlans=statusPlanned.filter(function(p){var ds=(p.planned_date||'').slice(0,10);return ds&&ds<=todayStr;});
+  // Period visits
+  var periodVisits=visits.filter(function(v){var ds=(v.visit_date||'').slice(0,10);return ds&&ds>=_pFromStr&&ds<=_pToStr;});
+  // Build lookup: hrbp_name_norm + '|' + normAcct -> true, for all period visits
+  var visitLookup={};
+  periodVisits.forEach(function(v){
+    var k=normN(v.hrbp_name)+'|'+normAcct(v.account_name);
+    if(!visitLookup[k]) visitLookup[k]=[];
+    visitLookup[k].push(v);
+  });
+  // Build lookup: all plan account keys per hrbp (for ad-hoc detection)
+  var planLookup={};
+  statusPlanned.forEach(function(p){
+    var k=normN(p.hrbp_name)+'|'+normAcct(p.account_name);
+    planLookup[k]=true;
+  });
+  // Per-HRBP stats
+  var hrbpStats={};
+  fieldHRBPs.forEach(function(h){
+    hrbpStats[normN(h.display_name)]={name:h.display_name,region:h.region||'',planned:0,completed:0,overdue:0,adhoc:0,openER:0};
+  });
+  duePlans.forEach(function(p){
+    var h=matchHRBP(p.hrbp_name);
+    if(!h) return;
+    var sk=normN(h.display_name);
+    var vk=normN(p.hrbp_name)+'|'+normAcct(p.account_name);
+    hrbpStats[sk].planned++;
+    if(visitLookup[vk]){
+      hrbpStats[sk].completed++;
+    } else {
+      var ds=(p.planned_date||'').slice(0,10);
+      if(ds&&ds<todayStr) hrbpStats[sk].overdue++;
+    }
+  });
+  // Ad-hoc = period visits whose (hrbp+account) has no matching plan
+  periodVisits.forEach(function(v){
+    var h=matchHRBP(v.hrbp_name);
+    if(!h) return;
+    var sk=normN(h.display_name);
+    var pk=normN(v.hrbp_name)+'|'+normAcct(v.account_name);
+    if(!planLookup[pk]) hrbpStats[sk].adhoc++;
+  });
   var openER=erCases.filter(function(c){return c.status==='Open';});
   var slaBreached=openER.filter(function(c){return !!c.sla_breached;});
-  var flagged=visits.filter(function(v){return !!v.issues_flagged;});
-  flagged.sort(function(a,b){return (b.visit_date||'').localeCompare(a.visit_date||'');});
-  // Per-HRBP adjusted overdue = max(0, past-planned - done-in-period)
-  var _hDoneN={},_hPastN={};
-  doneInPeriod.forEach(function(v){var h=matchHRBP(v.hrbp_name);if(h){var k=normN(h.display_name);_hDoneN[k]=(_hDoneN[k]||0)+1;}});
-  overduePlans.forEach(function(v){var h=matchHRBP(v.hrbp_name);if(h){var k=normN(h.display_name);_hPastN[k]=(_hPastN[k]||0)+1;}});
-  var _unDone=0,_unPast=0;
-  doneInPeriod.forEach(function(v){if(!matchHRBP(v.hrbp_name))_unDone++;});
-  overduePlans.forEach(function(v){if(!matchHRBP(v.hrbp_name))_unPast++;});
-  var adjustedTotalOverdue=Object.keys(_hPastN).reduce(function(s,k){return s+Math.max(0,(_hPastN[k]||0)-(_hDoneN[k]||0));},0)+Math.max(0,_unPast-_unDone);
+  openER.forEach(function(c){var h=matchHRBP(c.hrbp_name);if(h)hrbpStats[normN(h.display_name)].openER++;});
+  // Overall KPI totals
+  var totPlanned=0,totCompleted=0,totOverdue=0,totAdhoc=0;
+  Object.keys(hrbpStats).forEach(function(k){
+    var s=hrbpStats[k];
+    totPlanned+=s.planned; totCompleted+=s.completed; totOverdue+=s.overdue; totAdhoc+=s.adhoc;
+  });
+  var overallAdh=totPlanned>0?Math.round(totCompleted/totPlanned*100):(totCompleted||totAdhoc?100:null);
+  var overallAdhStr=overallAdh===null?'--':overallAdh+'%';
   var _ork=function(label,val,col,sub){
     return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;min-width:130px">'
       +'<div style="font-size:22px;font-weight:700;color:'+(col||'var(--accent)')+'">'+val+'</div>'
@@ -10980,52 +11021,73 @@ async function _loadOpsRevVisits(){
   };
   var erSub=slaBreached.length?slaBreached.length+' SLA-breached':'';
   var kpiStrip='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'
-    +_ork('Planned',planned.length,'var(--accent)')
-    +_ork('Done (period)',doneInPeriod.length,'var(--green)')
-    +_ork('Overdue',adjustedTotalOverdue,'var(--amber)')
+    +_ork('Plan Adherence',overallAdhStr,(overallAdh===null?'var(--muted)':overallAdh>=80?'var(--green)':overallAdh>=50?'var(--amber)':'var(--red)'))
+    +_ork('Completed',totCompleted,'var(--green)')
+    +_ork('Overdue',totOverdue,'var(--amber)')
+    +_ork('Ad-hoc',totAdhoc,'var(--accent)')
     +_ork('Open ER Cases',openER.length,'var(--red)',erSub)
     +'</div>';
-  var hrbpStats={};
-  fieldHRBPs.forEach(function(h){hrbpStats[normN(h.display_name)]={name:h.display_name,region:h.region||'',planned:0,done:0,overdue:0,openER:0};});
-  planned.forEach(function(v){var h=matchHRBP(v.hrbp_name);if(h)hrbpStats[normN(h.display_name)].planned++;});
-  doneInPeriod.forEach(function(v){var h=matchHRBP(v.hrbp_name);if(h)hrbpStats[normN(h.display_name)].done++;});
-  overduePlans.forEach(function(v){var h=matchHRBP(v.hrbp_name);if(h)hrbpStats[normN(h.display_name)].overdue++;});
-  openER.forEach(function(c){var h=matchHRBP(c.hrbp_name);if(h)hrbpStats[normN(h.display_name)].openER++;});
-  var unAssigned={planned:0,done:0,overdue:0,openER:0};
-  var hasUnassigned=false;
-  planned.forEach(function(v){if(!matchHRBP(v.hrbp_name)){unAssigned.planned++;hasUnassigned=true;}});
-  doneInPeriod.forEach(function(v){if(!matchHRBP(v.hrbp_name)){unAssigned.done++;hasUnassigned=true;}});
-  overduePlans.forEach(function(v){if(!matchHRBP(v.hrbp_name)){unAssigned.overdue++;hasUnassigned=true;}});
-  openER.forEach(function(c){if(!matchHRBP(c.hrbp_name)){unAssigned.openER++;hasUnassigned=true;}});
-  // Credit done visits against past-planned per HRBP
-  Object.keys(hrbpStats).forEach(function(k){var s=hrbpStats[k];s.overdue=Math.max(0,s.overdue-s.done);});
-  unAssigned.overdue=Math.max(0,unAssigned.overdue-unAssigned.done);
-  var hrbpRows=fieldHRBPs.map(function(h){return {name:h.display_name,d:hrbpStats[normN(h.display_name)]};});
-  hrbpRows.sort(function(a,b){if(b.d.overdue!==a.d.overdue)return b.d.overdue-a.d.overdue;return b.d.planned-a.d.planned;});
-  if(hasUnassigned) hrbpRows.push({name:'Unassigned / Other',d:{region:'--',planned:unAssigned.planned,done:unAssigned.done,overdue:unAssigned.overdue,openER:unAssigned.openER}});
+  // HRBP table
+  var hrbpRows=fieldHRBPs.map(function(h){
+    var s=hrbpStats[normN(h.display_name)];
+    var adh=s.planned>0?Math.round(s.completed/s.planned*100):(s.completed||s.adhoc?100:null);
+    return {name:h.display_name,region:h.region||'',planned:s.planned,completed:s.completed,overdue:s.overdue,adhoc:s.adhoc,openER:s.openER,adh:adh};
+  });
+  hrbpRows.sort(function(a,b){
+    if(b.overdue!==a.overdue) return b.overdue-a.overdue;
+    var aA=a.adh===null?-1:a.adh;
+    var bA=b.adh===null?-1:b.adh;
+    return aA-bA;
+  });
   var thStyle='padding:8px 12px;text-align:left;font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)';
   var tdBase='padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px';
   var theadT='<thead><tr style="background:var(--surface3)">'
     +'<th style="'+thStyle+'">HRBP</th>'
     +'<th style="'+thStyle+'">Region</th>'
     +'<th style="'+thStyle+'">Planned</th>'
-    +'<th style="'+thStyle+'">Done (period)</th>'
+    +'<th style="'+thStyle+'">Completed</th>'
     +'<th style="'+thStyle+'">Overdue</th>'
-    +'<th style="'+thStyle+'">Open ER</th>'
+    +'<th style="'+thStyle+'">Ad-hoc</th>'
+    +'<th style="'+thStyle+'">Adherence %</th>'
     +'</tr></thead>';
   var tbodyT='<tbody>'+(hrbpRows.length?hrbpRows.map(function(row){
-    var d=row.d;
+    var adhStr=row.adh===null?'--':row.adh+'%';
+    var adhCol=row.adh===null?'var(--muted)':row.adh>=80?'var(--green)':row.adh>=50?'var(--amber)':'var(--red)';
     return '<tr>'
       +'<td style="'+tdBase+';font-weight:600">'+esc(row.name)+'</td>'
-      +'<td style="'+tdBase+';color:var(--muted)">'+esc(d.region)+'</td>'
-      +'<td style="'+tdBase+'">'+d.planned+'</td>'
-      +'<td style="'+tdBase+';color:var(--green)">'+d.done+'</td>'
-      +'<td style="'+tdBase+';color:'+(d.overdue>0?'var(--amber)':'var(--muted)')+'">'+d.overdue+'</td>'
-      +'<td style="'+tdBase+';color:'+(d.openER>0?'var(--red)':'var(--muted)')+'">'+d.openER+'</td>'
+      +'<td style="'+tdBase+';color:var(--muted)">'+esc(row.region)+'</td>'
+      +'<td style="'+tdBase+'">'+row.planned+'</td>'
+      +'<td style="'+tdBase+';color:var(--green)">'+row.completed+'</td>'
+      +'<td style="'+tdBase+';color:'+(row.overdue>0?'var(--amber)':'var(--muted)')+'">'+row.overdue+'</td>'
+      +'<td style="'+tdBase+';color:var(--accent)">'+row.adhoc+'</td>'
+      +'<td style="'+tdBase+';font-weight:600;color:'+adhCol+'">'+adhStr+'</td>'
       +'</tr>';
-  }).join(''):'<tr><td colspan="6" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')
+  }).join(''):'<tr><td colspan="7" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')
   +'</tbody>';
   var tableT='<table style="width:100%;border-collapse:collapse">'+theadT+tbodyT+'</table>';
+  // Ad-hoc visits mini-list
+  var adhocVisits=periodVisits.filter(function(v){
+    var pk=normN(v.hrbp_name)+'|'+normAcct(v.account_name);
+    return !planLookup[pk];
+  });
+  adhocVisits.sort(function(a,b){return (b.visit_date||'').localeCompare(a.visit_date||'');});
+  var adhocList=adhocVisits.length
+    ?'<table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--surface3)">'
+      +'<th style="'+thStyle+'">Account</th>'
+      +'<th style="'+thStyle+'">HRBP</th>'
+      +'<th style="'+thStyle+'">Date</th>'
+      +'</tr></thead><tbody>'
+      +adhocVisits.slice(0,20).map(function(v){
+        return '<tr>'
+          +'<td style="'+tdBase+';font-weight:600">'+esc(v.account_name||'')+'</td>'
+          +'<td style="'+tdBase+';color:var(--muted)">'+esc(v.hrbp_name||'')+'</td>'
+          +'<td style="'+tdBase+';color:var(--muted2)">'+esc((v.visit_date||'').slice(0,10))+'</td>'
+          +'</tr>';
+      }).join('')+'</tbody></table>'
+    :'<div style="color:var(--muted);font-size:12px;padding:12px">No ad-hoc visits this period.</div>';
+  // Critical site issues
+  var flagged=visits.filter(function(v){return !!v.issues_flagged;});
+  flagged.sort(function(a,b){return (b.visit_date||'').localeCompare(a.visit_date||'');});
   var flaggedCapped=flagged.slice(0,15);
   var issuesList=flaggedCapped.length
     ?'<ul style="margin:0;padding:0 0 0 18px;list-style:disc">'+flaggedCapped.map(function(v){
@@ -11042,9 +11104,10 @@ async function _loadOpsRevVisits(){
     return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';
   };
   el.innerHTML='<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:2px">HRBP Visits &amp; ER Cases</div>'
-    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+esc(periodLabel)+'</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Journey plan reconciliation &middot; '+esc(periodLabel)+'</div>'
     +kpiStrip
-    +'<div style="'+cardStyle+'">'+subHead('By HRBP - visits')+tableT+'</div>'
+    +'<div style="'+cardStyle+'">'+subHead('By HRBP - journey plan')+tableT+'</div>'
+    +(adhocVisits.length?'<div style="'+cardStyle+'">'+subHead('Ad-hoc visits (no plan)')+adhocList+'</div>':'')
     +'<div style="'+cardStyle+'">'+subHead('Critical site issues')
     +'<div style="padding:12px">'+issuesList+'</div></div>';
 }
