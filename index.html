@@ -11122,7 +11122,7 @@ async function _loadOpsRevAteContract(){
   el.innerHTML='<div style="padding:16px;color:var(--muted)">Loading ATE &amp; Contract data&#8230;</div>';
   var today=new Date();
   var todayStr=today.toISOString().slice(0,10);
-  var rAte=await _sb.from('ate_tracker').select('emp_name,account,region,status,training_end_date');
+  var rAte=await _sb.from('ate_tracker').select('name,account,region,status,training_end_date');
   var rCon=await _sb.from('contract_workforce').select('name,customer,region,past_superann,lwd_crossed,ftc_18m_risk,no_end_date,superann_date,dol');
   var rProfiles=await _sb.from('user_profiles').select('display_name,region,role,function_type').eq('active',true);
   var rAccts=await _sb.from('customer_accounts').select('name,hrbp_owner,region');
@@ -11196,7 +11196,7 @@ async function _loadOpsRevAteContract(){
   ateOverdue.forEach(function(r){
     var ds=r.training_end_date?r.training_end_date.slice(0,10):'';
     var daysOver=ds?Math.floor((today-new Date(ds+'T00:00:00'))/86400000):0;
-    critList.push({name:r.emp_name||'',type:'ATE',acct:r.account||'',region:r.region||'',daysOver:daysOver,detail:ds?'Ended '+ds:''});
+    critList.push({name:r.name||'',type:'ATE',acct:r.account||'',region:r.region||'',daysOver:daysOver,detail:ds?'Ended '+ds:''});
   });
   conOverdue.forEach(function(r){
     var flags=[];
