@@ -10668,11 +10668,23 @@ function renderOpsReviewShell(){
   var weekMon=new Date(today);
   weekMon.setDate(today.getDate()-diff);
   var wkLabel=weekMon.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  if(typeof _ovFrom==='undefined'||!_ovFrom) _initOvRange();
+  var _opLabel=(typeof _ovLabel==='function')?_ovLabel():'This Week';
+  var _opPresets=[['lastweek','Last Week'],['week','This Week'],['month','This Month'],['custom','Custom']];
+  var _opPills=_opPresets.map(function(p){
+    var act=(typeof _ovPreset!=='undefined'&&_ovPreset===p[0]);
+    return '<button onclick="_setOvPreset(\''+p[0]+'\')" style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid '+(act?'var(--accent)':'var(--border)')+';background:'+(act?'var(--accent)':'transparent')+';color:'+(act?'#fff':'var(--muted)')+'">'+p[1]+'</button>';
+  }).join('');
   return '<div style="padding:20px 28px;max-width:1400px" id="opsrev-root">'
     +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;'
     +'letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Weekly Ops Review</div>'
     +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;'
-    +'color:var(--text);margin-bottom:20px">Ops Review &#8212; Week of '+esc(wkLabel)+'</div>'
+    +'color:var(--text);margin-bottom:12px">Ops Review &#8212; Week of '+esc(wkLabel)+'</div>'
+    +'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;'
+    +'background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:16px">'
+    +'<span style="font-size:13px;font-weight:600;color:var(--text)">&#128197; Reviewing: '+esc(_opLabel)+'</span>'
+    +'<div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap">'+_opPills+'</div>'
+    +'</div>'
     +'<div id="opsrev-submissions" style="margin-bottom:32px">'
     +'<div style="color:var(--muted);font-size:12px">Loading submissions&#8230;</div></div>'
     +'<div id="opsrev-absent" style="margin-bottom:32px">'
