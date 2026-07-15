@@ -11165,8 +11165,9 @@ async function _loadOpsRevAteContract(){
     return null;
   };
   var ateOverdue=ateRows.filter(function(r){return r.status==='Active'&&r.training_end_date&&r.training_end_date.slice(0,10)<todayStr;});
-  var conOverdue=conRows.filter(function(r){return r.past_superann===true||r.lwd_crossed===true||r.ftc_18m_risk===true;});
-  var pastSuperann=conRows.filter(function(r){return r.past_superann===true;});
+  var _validSuperann=function(r){return r.past_superann===true&&r.superann_date&&r.superann_date>'2000-01-01';};
+  var conOverdue=conRows.filter(function(r){return _validSuperann(r)||r.lwd_crossed===true||r.ftc_18m_risk===true;});
+  var pastSuperann=conRows.filter(function(r){return _validSuperann(r);});
   var noEndDate=conRows.filter(function(r){return r.no_end_date===true;});
   var _ork=function(label,val,col,sub){
     return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;min-width:130px">'
@@ -11212,10 +11213,10 @@ async function _loadOpsRevAteContract(){
   });
   conOverdue.forEach(function(r){
     var flags=[];
-    if(r.past_superann) flags.push('Past Superann');
+    if(r.past_superann&&r.superann_date&&r.superann_date>'2000-01-01') flags.push('Past Superann');
     if(r.lwd_crossed) flags.push('LWD Crossed');
     if(r.ftc_18m_risk) flags.push('18m Risk');
-    var ds=r.superann_date?r.superann_date.slice(0,10):(r.dol?r.dol.slice(0,10):'');
+    var ds=(r.superann_date&&r.superann_date>'2000-01-01')?r.superann_date.slice(0,10):(r.dol?r.dol.slice(0,10):'');
     var daysOver=ds?Math.floor((today-new Date(ds+'T00:00:00'))/86400000):0;
     critList.push({name:r.name||'',type:'Contract',acct:r.customer||'',region:r.region||'',daysOver:daysOver,detail:flags.join(', ')});
   });
