@@ -11050,6 +11050,9 @@ async function _loadOpsRevVisits(){
     +'<th style="'+thStyle+'">Ad-hoc</th>'
     +'<th style="'+thStyle+'">Adherence %</th>'
     +'</tr></thead>';
+  var tfootStyle='padding:8px 12px;border-top:2px solid var(--border);font-size:12px;font-weight:700;background:var(--surface3)';
+  var tfootAdhStr=overallAdh===null?'--':overallAdh+'%';
+  var tfootAdhCol=overallAdh===null?'var(--muted)':overallAdh>=80?'var(--green)':overallAdh>=50?'var(--amber)':'var(--red)';
   var tbodyT='<tbody>'+(hrbpRows.length?hrbpRows.map(function(row){
     var adhStr=row.adh===null?'--':row.adh+'%';
     var adhCol=row.adh===null?'var(--muted)':row.adh>=80?'var(--green)':row.adh>=50?'var(--amber)':'var(--red)';
@@ -11063,7 +11066,16 @@ async function _loadOpsRevVisits(){
       +'<td style="'+tdBase+';font-weight:600;color:'+adhCol+'">'+adhStr+'</td>'
       +'</tr>';
   }).join(''):'<tr><td colspan="7" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')
-  +'</tbody>';
+  +'</tbody>'
+  +'<tfoot><tr>'
+  +'<td style="'+tfootStyle+'">Total</td>'
+  +'<td style="'+tfootStyle+';color:var(--muted)"></td>'
+  +'<td style="'+tfootStyle+'">'+totPlanned+'</td>'
+  +'<td style="'+tfootStyle+';color:var(--green)">'+totCompleted+'</td>'
+  +'<td style="'+tfootStyle+';color:'+(totOverdue>0?'var(--amber)':'var(--muted)')+'">'+totOverdue+'</td>'
+  +'<td style="'+tfootStyle+';color:var(--accent)">'+totAdhoc+'</td>'
+  +'<td style="'+tfootStyle+';color:'+tfootAdhCol+'">'+tfootAdhStr+'</td>'
+  +'</tr></tfoot>';
   var tableT='<table style="width:100%;border-collapse:collapse">'+theadT+tbodyT+'</table>';
   // Ad-hoc visits mini-list
   var adhocVisits=periodVisits.filter(function(v){
@@ -11172,6 +11184,9 @@ async function _loadOpsRevTA(){
     +'<th style="'+thStyle+'">Closed (period)</th>'
     +'<th style="'+thStyle+'">Plat / Gold</th>'
     +'</tr></thead>';
+  var totOpen=0,totCrit=0,totClosedTA=0,totPG=0;
+  rows.forEach(function(r){totOpen+=r.open;totCrit+=r.crit;totClosedTA+=r.closed;totPG+=r.pg;});
+  var tfootStyleTA='padding:8px 12px;border-top:2px solid var(--border);font-size:12px;font-weight:700;background:var(--surface3)';
   var tbodyT='<tbody>'+(rows.length?rows.map(function(row){
     return '<tr>'
       +'<td style="'+tdBase+';font-weight:600">'+esc(row.name)+'</td>'
@@ -11181,7 +11196,14 @@ async function _loadOpsRevTA(){
       +'<td style="'+tdBase+';color:'+(row.pg>0?'#a78bfa':'var(--muted)')+'">'+row.pg+'</td>'
       +'</tr>';
   }).join(''):'<tr><td colspan="5" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')
-  +'</tbody>';
+  +'</tbody>'
+  +'<tfoot><tr>'
+  +'<td style="'+tfootStyleTA+'">Total</td>'
+  +'<td style="'+tfootStyleTA+'">'+totOpen+'</td>'
+  +'<td style="'+tfootStyleTA+';color:'+(totCrit>0?'var(--red)':'var(--muted)')+'">'+totCrit+'</td>'
+  +'<td style="'+tfootStyleTA+';color:var(--green)">'+totClosedTA+'</td>'
+  +'<td style="'+tfootStyleTA+';color:'+(totPG>0?'#a78bfa':'var(--muted)')+'">'+totPG+'</td>'
+  +'</tr></tfoot>';
   var tableT='<table style="width:100%;border-collapse:collapse">'+theadT+tbodyT+'</table>';
   var cardStyle='background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px';
   var subHead=function(t){return '<div style="padding:8px 12px;background:var(--surface3);font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+t+'</div>';};
@@ -11258,6 +11280,9 @@ async function _loadOpsRevAteContract(){
     +'<th style="'+thStyle+'">HRBP</th><th style="'+thStyle+'">Region</th>'
     +'<th style="'+thStyle+'">ATE Overdue</th><th style="'+thStyle+'">Contract Overdue</th>'
     +'</tr></thead>';
+  var totATE=0,totCon=0;
+  hrbpRows.forEach(function(row){totATE+=row.d.ate;totCon+=row.d.con;});
+  var tfootStyleAC='padding:8px 12px;border-top:2px solid var(--border);font-size:12px;font-weight:700;background:var(--surface3)';
   var tbodyT='<tbody>'+(hrbpRows.length?hrbpRows.map(function(row){
     var d=row.d;
     return '<tr>'
@@ -11266,7 +11291,14 @@ async function _loadOpsRevAteContract(){
       +'<td style="'+tdBase+';color:'+(d.ate>0?'var(--red)':'var(--muted)')+'">'+d.ate+'</td>'
       +'<td style="'+tdBase+';color:'+(d.con>0?'var(--amber)':'var(--muted)')+'">'+d.con+'</td>'
       +'</tr>';
-  }).join(''):'<tr><td colspan="4" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')+'</tbody>';
+  }).join(''):'<tr><td colspan="4" style="'+tdBase+';color:var(--muted);text-align:center">No data</td></tr>')
+  +'</tbody>'
+  +'<tfoot><tr>'
+  +'<td style="'+tfootStyleAC+'">Total</td>'
+  +'<td style="'+tfootStyleAC+';color:var(--muted)"></td>'
+  +'<td style="'+tfootStyleAC+';color:'+(totATE>0?'var(--red)':'var(--muted)')+'">'+totATE+'</td>'
+  +'<td style="'+tfootStyleAC+';color:'+(totCon>0?'var(--amber)':'var(--muted)')+'">'+totCon+'</td>'
+  +'</tr></tfoot>';
   var tableT='<table style="width:100%;border-collapse:collapse">'+theadT+tbodyT+'</table>';
   var critList=[];
   ateOverdue.forEach(function(r){
