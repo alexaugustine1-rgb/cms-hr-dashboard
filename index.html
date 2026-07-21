@@ -3144,23 +3144,41 @@ function _ldPeriodFilter(){
     return {mode:'month', monthKeys:[mk], pipeFrom:mk+'-01', pipeTo:_ldYMD(new Date(y,m,0)), label:label};
   }
   // custom / other → month granularity for sessions, exact range for pipeline
-  return {mode:'range', monthKeys:_ldMonthsBetween(from,to), pipeFrom:from, pipeTo:to, label:label};
+  // Label must reflect what sessions query actually uses (month keys), not the raw date range
+  var mks = _ldMonthsBetween(from,to);
+  var _MONS_LD=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var mkFmt = mks.map(function(mk){ var p=mk.split('-'); return _MONS_LD[parseInt(p[1])-1]+' '+p[0]; }).join(', ');
+  var rangeLabel = 'Custom range — showing '+mkFmt+' data';
+  return {mode:'range', monthKeys:mks, pipeFrom:from, pipeTo:to, label:rangeLabel};
 }
 
 // ── L&D TAB LOADER ───────────────────────────────────────────
+var _ldFetchGen = 0; // generation counter — guards against stale fetch overwrites
+
 async function loadLDTab() {
   var f = _ldPeriodFilter();
   var lbl = document.getElementById('ldPeriodLabel');
   if (lbl) lbl.textContent = f.label || '';
 
+  // Increment generation so any in-flight fetch from a previous period call is discarded
+  var gen = ++_ldFetchGen;
+
+  // Reset KPI cards to loading sentinel so stale values never look like confirmed data
+  ['ld-kpi-sessions','ld-kpi-pax','ld-kpi-pipeline','ld-kpi-planvact'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.textContent='—';
+  });
+  ['ld-kpi-sessions-sub','ld-kpi-pax-sub','ld-kpi-pipeline-sub','ld-kpi-planvact-sub'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.textContent='Loading…';
+  });
+
   // Load sessions and pipeline in parallel
   await Promise.all([
-    _loadLDSessions(f),
-    _loadLDPipeline(f),
+    _loadLDSessions(f, gen),
+    _loadLDPipeline(f, gen),
   ]);
 }
 
-async function _loadLDSessions(f) {
+async function _loadLDSessions(f, gen) {
   var panel = document.getElementById('ldSessionsPanel');
   if (!panel) return;
 
@@ -3180,6 +3198,9 @@ async function _loadLDSessions(f) {
     else if (f.mode==='range') q = q.in('month_key', f.monthKeys);
     var res = await q;
     var rows = res.data || [];
+
+    // Guard: discard if a newer loadLDTab() call has already superseded this fetch
+    if (_ldFetchGen !== gen) return;
 
     // Update KPI cards up front (so an empty period resets them to 0)
     var totalSessions = rows.length;
@@ -3269,7 +3290,7 @@ async function _loadLDSessions(f) {
   }
 }
 
-async function _loadLDPipeline(f) {
+async function _loadLDPipeline(f, gen) {
   var panel  = document.getElementById('ldPipelinePanel');
   var badge  = document.getElementById('ld-pipeline-badge');
   var kpPlan = document.getElementById('ld-kpi-pipeline');
@@ -3300,6 +3321,10 @@ async function _loadLDPipeline(f) {
     var conducted = allRows.filter(function(r){ return r.status==='Conducted'; }).length;
     var totalPlan = allRows.length;
     var pvaRate   = totalPlan > 0 ? Math.round(conducted/totalPlan*100)+'%' : '—';
+
+    // Guard: discard if a newer loadLDTab() call has already superseded this fetch
+    if (_ldFetchGen !== gen) return;
+
     if (kpPlan) kpPlan.textContent = rows.length;
     if (kpSub)  kpSub.textContent  = rows.length+' open in period';
     if (elPva)  elPva.textContent  = pvaRate;
