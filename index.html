@@ -9587,6 +9587,24 @@ function _setOvPreset(preset, customFrom, customTo) {
   if(_ort&&_ort.style.display!=='none') loadOpsReview();
   var _ldt=document.getElementById('tab-ld');
   if(_ldt&&_ldt.classList.contains('active')&&typeof loadLDTab==='function') loadLDTab();
+  // Sync HRBP connects tab to the selected period when it is active
+  if(typeof currentTab!=='undefined'&&currentTab==='hrbp'&&typeof weekKeyForDate==='function'&&typeof loadHRBPSiteVisitsForTab==='function'){
+    var _hrbpWkTarget='';
+    if(preset==='week'){
+      _hrbpWkTarget=weekKeyForDate(new Date());
+    } else if(preset==='lastweek'){
+      var _hlw=new Date(); _hlw.setDate(_hlw.getDate()-7);
+      _hrbpWkTarget=weekKeyForDate(_hlw);
+    }
+    if(_hrbpWkTarget&&typeof WEEKS_DATA!=='undefined'&&WEEKS_DATA[_hrbpWkTarget]){
+      currentWeek=_hrbpWkTarget;
+      document.querySelectorAll('.week-btn').forEach(function(b){
+        b.classList.toggle('active',b.textContent.indexOf(_hrbpWkTarget)!==-1||(WEEK_NAMES[_hrbpWkTarget]&&b.textContent.indexOf(WEEK_NAMES[_hrbpWkTarget])!==-1));
+      });
+      render();
+      setTimeout(loadHRBPSiteVisitsForTab,150);
+    }
+  }
 }
 
 async function loadTAClosedMTD() {
