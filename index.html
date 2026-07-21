@@ -7219,12 +7219,6 @@ async function submitWeeklyForm(fnType,region){
 }
 
 async function rebuildWeekFromSubmissions(weekKey){
-  // Only rebuild if weekly_reports doesn't already have this week
-  // (Supabase has the authoritative row — RLS-restricted queries produce partial data)
-  if(WEEKS_DATA[weekKey]&&(WEEKS_DATA[weekKey].total_respondents>0)){
-    console.log('[rebuild] Skipping — week already has submissions:', weekKey);
-    return;
-  }
   const{data:subs}=await _sb.from('weekly_submissions').select('*').eq('week_key',weekKey);
   if(!subs||!subs.length)return;
   const wT=WEEKS_DATA[weekKey]||{};
