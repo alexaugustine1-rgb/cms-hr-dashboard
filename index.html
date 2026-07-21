@@ -6227,6 +6227,21 @@ async function renderSubmitTab(mc){
   const displayName = profile.display_name || _sbUser?.email?.split('@')[0] || 'User';
   const roleLabel={'admin':'CXO','executive':'CXO','hrbp':'Lead'}[profile?.role]||(profile?.role||'').toUpperCase();
   if(profile?.role==='admin'||profile?.role==='executive'){await renderSubmissionTracker(mc,displayName,roleLabel);return;}
+  if(fnType==='ta'||fnType==='admin'){
+    var _redir_icon=fnType==='ta'?'🗂':'🗃';
+    var _redir_title=fnType==='ta'?'Use TA Pipeline &amp; Action Centre':'Use Action Centre';
+    var _redir_body=fnType==='ta'
+      ?'Log aging blockers and new joiners from the <strong>TA Pipeline</strong> tab. Raise escalations to HR Ops via <strong>Action Centre</strong>.'
+      :'Log facility issues, vendor tasks, and other items directly in <strong>Action Centre</strong>. No weekly form submission needed.';
+    mc.innerHTML='<div style="max-width:560px;margin:56px auto;text-align:center;padding:0 24px">'
+      +'<div style="font-size:36px;margin-bottom:14px">'+_redir_icon+'</div>'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:22px;letter-spacing:1px;color:var(--text);margin-bottom:10px">'+_redir_title+'</div>'
+      +'<p style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:24px">'+_redir_body+'</p>'
+      +'<button onclick="switchTab(\'actioncentre\')" style="padding:10px 24px;background:var(--accent);border:none;border-radius:8px;color:var(--bg);font-size:13px;font-weight:600;cursor:pointer">Open Action Centre</button>'
+      +(fnType==='ta'?'<button onclick="switchTab(\'ta\')" style="margin-left:12px;padding:10px 24px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer">TA Pipeline</button>':'')
+      +'</div>';
+    return;
+  }
   // Always include current real-world week even if not in DB yet
 
 
