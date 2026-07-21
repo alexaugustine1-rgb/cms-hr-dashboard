@@ -4252,6 +4252,7 @@ var _tasksLoaded = false;
 var _caseEntries = [];  // structured ER/abscond/retention cases
 var _retentionEntries = []; // structured retention cases
 var _hrbpTrainingEntries = [];  // structured training sessions from HRBP form
+var _ldSessionEntries = [];     // structured training sessions from L&D form
 var _pendingTasks = []; // open tasks from prior weeks shown at top of form
 var _taskFilter = { type: 'all', status: 'open' };
 
@@ -6008,6 +6009,40 @@ function renderHrbpTrainingRows(){
   }
   if(hidden)hidden.value=JSON.stringify(_hrbpTrainingEntries);
 }
+function addLdSessionRow(name,trainer,category,participants,mode,duration,region,account){
+  _ldSessionEntries.push({name:name||'',trainer:trainer||'',category:category||'Technical',participants:participants||'',mode:mode||'Classroom',duration:duration||'',region:region||'',account:account||''});
+  renderLdSessionRows();
+}
+function removeLdSessionRow(i){_ldSessionEntries.splice(i,1);renderLdSessionRows();}
+function renderLdSessionRows(){
+  var cont=document.getElementById('ld-session-rows');
+  var hidden=document.getElementById('f_ld_session_entries');
+  if(!cont)return;
+  var cats=['Technical','Behavioural','OEM','Certification','Induction','Compliance'];
+  var modes=['Classroom','Virtual','Hybrid','Self-paced'];
+  if(!_ldSessionEntries.length){
+    cont.innerHTML='<div style="font-size:11px;color:var(--muted);padding:6px 0;font-style:italic">No sessions added yet — click + Add Session below.</div>';
+  } else {
+    cont.innerHTML=_ldSessionEntries.map(function(e,i){
+      var catOpts=cats.map(function(c){return'<option value="'+c+'"'+(e.category===c?' selected':'')+'>'+c+'</option>';}).join('');
+      var modeOpts=modes.map(function(m){return'<option value="'+m+'"'+(e.mode===m?' selected':'')+'>'+m+'</option>';}).join('');
+      var upd='_ldSessionEntries['+i+']';
+      var sync='document.getElementById(\'f_ld_session_entries\').value=JSON.stringify(_ldSessionEntries)';
+      return'<div style="display:grid;grid-template-columns:2fr 1.2fr 110px 70px 100px 60px 80px 1fr 28px;gap:5px;margin-bottom:7px;align-items:center">'
+        +'<input type="text" value="'+esc(e.name)+'" oninput="'+upd+'.name=this.value;'+sync+'" placeholder="Training name" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'
+        +'<input type="text" value="'+esc(e.trainer)+'" oninput="'+upd+'.trainer=this.value;'+sync+'" placeholder="Trainer" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'
+        +'<select onchange="'+upd+'.category=this.value;'+sync+'" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+catOpts+'</select>'
+        +'<input type="number" value="'+esc(e.participants)+'" min="0" oninput="'+upd+'.participants=this.value;'+sync+'" placeholder="Pax" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;text-align:center">'
+        +'<select onchange="'+upd+'.mode=this.value;'+sync+'" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'+modeOpts+'</select>'
+        +'<input type="number" value="'+esc(e.duration)+'" min="0" step="0.5" oninput="'+upd+'.duration=this.value;'+sync+'" placeholder="Hrs" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;text-align:center">'
+        +'<input type="text" value="'+esc(e.region)+'" oninput="'+upd+'.region=this.value;'+sync+'" placeholder="Region" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'
+        +'<input type="text" value="'+esc(e.account)+'" oninput="'+upd+'.account=this.value;'+sync+'" placeholder="Account (opt.)" style="padding:6px 8px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">'
+        +'<button type="button" onclick="removeLdSessionRow('+i+')" style="background:none;border:1px solid var(--red);border-radius:6px;color:var(--red);cursor:pointer;font-size:15px;padding:2px 6px;line-height:1">&times;</button>'
+        +'</div>';
+    }).join('');
+  }
+  if(hidden)hidden.value=JSON.stringify(_ldSessionEntries);
+}
 function weekLabelToMonthKey(label){
   if(!label)return new Date().toISOString().substring(0,7);
   var months={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
@@ -6274,6 +6309,7 @@ async function renderSubmitTab(mc){
   if(typeof renderTaAgingEntries==='function')renderTaAgingEntries();
   if(typeof renderTaJoinerEntries==='function')renderTaJoinerEntries();
   if(fnType==='ta'&&typeof loadUpcomingJoinersForForm==='function')loadUpcomingJoinersForForm();
+  if(fnType==='ld'&&typeof renderLdSessionRows==='function')renderLdSessionRows();
   // Load pending tasks checklist
   if(typeof loadPendingTasks==='function') loadPendingTasks();
 }
@@ -6821,7 +6857,7 @@ if(t==='hrbp'){
       +'<div class="wform-row"><textarea id="f_anything_else" placeholder="Any other gap, risk or follow-up item…" style="min-height:54px"></textarea></div></div>'
       +buildActionsSection();
   }
-  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Planned Programs (Pipeline)<span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:8px">Programs planned for coming weeks</span></label><input type="hidden" id="f_ld_upcoming"><input type="hidden" id="f_ld_pipeline"><div style="display:grid;grid-template-columns:2fr 1.2fr 120px 100px 90px 80px 80px 60px 60px 24px;gap:5px;margin-bottom:6px"><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Program</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Trainer</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Date</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Region</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Mode</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Category</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Pax</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Hrs</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Priority</span><span></span></div><div id="ld-pipeline-rows"></div><button type="button" onclick="addLdPipelineRow()" style="margin-top:6px;padding:5px 14px;border:1px dashed var(--accent);border-radius:6px;background:none;color:var(--accent);font-size:12px;cursor:pointer">+ Add Program</button></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>'
+  if(t==='ld')return'<div class="wform-section"><div class="wform-section-title">L&D Numbers</div><div class="wform-grid2"><div class="wform-row"><label>Programs Conducted</label><input type="number" id="f_ld_sessions" value="0"></div><div class="wform-row"><label>Coverage / Nominations</label><input type="text" id="f_ld_coverage" placeholder="e.g. 120 nominations"></div></div></div><div class="wform-section"><div class="wform-section-title">Sessions Conducted This Week</div><div style="font-size:11px;color:var(--muted);margin-bottom:10px">Log each session below — entries save directly to training records on submit.</div><div style="display:grid;grid-template-columns:2fr 1.2fr 110px 70px 100px 60px 80px 1fr 28px;gap:5px;margin-bottom:6px"><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Training</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Trainer</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Category</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Pax</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Mode</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Hrs</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Region</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Account</span><span></span></div><input type="hidden" id="f_ld_session_entries"><div id="ld-session-rows"></div><button type="button" onclick="addLdSessionRow()" style="margin-top:6px;padding:5px 14px;border:1px dashed var(--accent);border-radius:6px;background:none;color:var(--accent);font-size:12px;cursor:pointer">+ Add Session</button></div><div class="wform-section"><div class="wform-section-title">Details</div><div class="wform-row"><label>Training Details</label><textarea id="f_ld_details" style="min-height:90px" placeholder="Program name, date, attendance…"></textarea></div><div class="wform-row"><label>Planned Programs (Pipeline)<span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:8px">Programs planned for coming weeks</span></label><input type="hidden" id="f_ld_upcoming"><input type="hidden" id="f_ld_pipeline"><div style="display:grid;grid-template-columns:2fr 1.2fr 120px 100px 90px 80px 80px 60px 60px 24px;gap:5px;margin-bottom:6px"><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Program</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Trainer</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Date</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Region</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Mode</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Category</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Pax</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Hrs</span><span style="font-size:10px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Priority</span><span></span></div><div id="ld-pipeline-rows"></div><button type="button" onclick="addLdPipelineRow()" style="margin-top:6px;padding:5px 14px;border:1px dashed var(--accent);border-radius:6px;background:none;color:var(--accent);font-size:12px;cursor:pointer">+ Add Program</button></div><div class="wform-row"><label>Capability Gaps Identified</label><textarea id="f_ld_gaps" placeholder="Gaps raised by delivery…"></textarea></div><div class="wform-row"><label>L&D Risks / Dependencies</label><textarea id="f_ld_risks" placeholder="Trainer availability, LMS issues…"></textarea></div></div>'
   +buildActionsSection();
   if(t==='admin')return'<div class="wform-section"><div class="wform-section-title">Admin & Facilities</div><div class="wform-row"><label>Facility Issues & Resolution Details</label><textarea id="f_admin_issues" style="min-height:110px" placeholder="AC issues, power supply, internet, office setup…"></textarea></div><div class="wform-row"><label>Cost Optimisation / Savings Initiatives</label><textarea id="f_admin_savings" placeholder="Vendor negotiations, energy savings…"></textarea></div></div>'
   +buildActionsSection();
@@ -6978,6 +7014,40 @@ async function submitWeeklyForm(fnType,region){
       _hrbpTrainingEntries=[];if(typeof renderHrbpTrainingRows==='function')renderHrbpTrainingRows();
     }
   }
+  // Write L&D structured session entries to training_sessions
+  if (fnType === 'ld') {
+    var _ldSessEntries = [];
+    try { _ldSessEntries = JSON.parse(document.getElementById('f_ld_session_entries')?.value || '[]'); } catch(e) { _ldSessEntries = []; }
+    var _ldSessValid = _ldSessEntries.filter(function(s){ return s.name && s.name.trim(); });
+    if (_ldSessValid.length > 0) {
+      var _ldWkLabel = (WEEKS_DATA[_formWeekKey] && WEEKS_DATA[_formWeekKey].label) || '';
+      var _ldMKey = weekLabelToMonthKey(_ldWkLabel);
+      // Delete any existing rows for this week+submitter to prevent duplicates on re-submit
+      await _sb.from('training_sessions').delete()
+        .eq('week_key', _formWeekKey)
+        .eq('created_by', _sbUser.email);
+      var _ldRecs = _ldSessValid.map(function(s){
+        return {
+          month_key:      _ldMKey,
+          week_key:       _formWeekKey,
+          training_name:  s.name.trim(),
+          trainer:        s.trainer || record.submitter_name || 'L&D',
+          participants:   parseInt(s.participants) || 0,
+          region:         s.region || 'Pan India',
+          mode:           s.mode || 'Classroom',
+          category:       s.category || 'Technical',
+          duration_hours: parseFloat(s.duration) || null,
+          account:        s.account || null,
+          count_type:     'Attendees',
+          created_by:     _sbUser.email,
+        };
+      });
+      await _sb.from('training_sessions').insert(_ldRecs);
+      _ldSessionEntries = [];
+      if (typeof renderLdSessionRows === 'function') renderLdSessionRows();
+    }
+  }
+
   // Write pipeline entries to training_pipeline
   if (fnType === 'ld' || fnType === 'hrbp') {
     var _pKey     = fnType === 'ld' ? 'f_ld_pipeline' : 'f_hrbp_pipeline';
