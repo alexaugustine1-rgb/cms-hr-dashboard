@@ -3043,16 +3043,8 @@ function renderLD(w, pw) {
   return `
     <div class="section-label">L&D Activity
       <span style="float:right;display:flex;align-items:center;gap:8px">
-        <span style="font-size:10px;color:var(--muted);letter-spacing:0;text-transform:none;font-family:inherit">View</span>
-        <select id="ldMonthSel"
-          onchange="loadLDTab(this.value)"
-          style="font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface3);color:var(--text);font-family:inherit">
-          <option value="2026-05">May 2026</option>
-          <option value="2026-04">April 2026</option>
-          <option value="2026-03">March 2026</option>
-          <option value="2026-02">February 2026</option>
-          <option value="all">All Time</option>
-        </select>
+        <span style="font-size:10px;color:var(--muted);letter-spacing:0;text-transform:none;font-family:inherit">Period (set via bar above)</span>
+        <span id="ldPeriodLabel" style="font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid var(--border);background:var(--surface3);color:var(--text);font-family:DM Mono,monospace">—</span>
       </span>
     </div>
 
@@ -3121,50 +3113,86 @@ function renderLD(w, pw) {
     </div>` : ''}`;
 }
 
-// ── L&D TAB LOADER ───────────────────────────────────────────
-async function loadLDTab(monthKey) {
-  // Default to current month if not specified
-  var mk = monthKey || '2026-05';
+// ── L&D period derivation — driven by the global Period bar ───
+// Reuses _ovPreset / _ovFrom / _ovTo (set by _setOvPreset / _initOvRange).
+function _ldYMD(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _ldParseYMD(s){ var p=String(s).split('-'); return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2])); }
+function _ldMonthsBetween(from,to){
+  var a=_ldParseYMD(from), b=_ldParseYMD(to), out=[];
+  var y=a.getFullYear(), m=a.getMonth();
+  while(y<b.getFullYear() || (y===b.getFullYear() && m<=b.getMonth())){
+    out.push(y+'-'+String(m+1).padStart(2,'0'));
+    m++; if(m>11){m=0;y++;}
+  }
+  return out.length?out:[String(from).slice(0,7)];
+}
+// Translate the active Period-bar selection into an L&D filter descriptor.
+// Sessions are keyed by month_key/week_key; pipeline is keyed by planned_date.
+function _ldPeriodFilter(){
+  if(typeof _initOvRange==='function' && (typeof _ovFrom==='undefined' || !_ovFrom)) _initOvRange();
+  var p  = (typeof _ovPreset!=='undefined') ? _ovPreset : 'month';
+  var from= (typeof _ovFrom!=='undefined'&&_ovFrom) ? _ovFrom : '';
+  var to  = (typeof _ovTo!=='undefined'&&_ovTo)   ? _ovTo   : '';
+  if(!from||!to){ var t=new Date(); from=_ldYMD(new Date(t.getFullYear(),t.getMonth(),1)); to=_ldYMD(t); p='month'; }
+  var label=(typeof _ovLabel==='function')?_ovLabel():'';
+  if(p==='week'||p==='lastweek'){
+    var mon=_ldParseYMD(from), sun=new Date(mon); sun.setDate(mon.getDate()+6);
+    return {mode:'week', weekKey:weekKeyForDate(mon), pipeFrom:_ldYMD(mon), pipeTo:_ldYMD(sun), label:label};
+  }
+  if(p==='month'||p==='lastmonth'){
+    var mk=from.slice(0,7), y=parseInt(mk.slice(0,4)), m=parseInt(mk.slice(5,7));
+    return {mode:'month', monthKeys:[mk], pipeFrom:mk+'-01', pipeTo:_ldYMD(new Date(y,m,0)), label:label};
+  }
+  // custom / other → month granularity for sessions, exact range for pipeline
+  return {mode:'range', monthKeys:_ldMonthsBetween(from,to), pipeFrom:from, pipeTo:to, label:label};
+}
 
-  // Sync the month selector if it exists
-  var sel = document.getElementById('ldMonthSel');
-  if (sel && sel.value !== mk) sel.value = mk;
+// ── L&D TAB LOADER ───────────────────────────────────────────
+async function loadLDTab() {
+  var f = _ldPeriodFilter();
+  var lbl = document.getElementById('ldPeriodLabel');
+  if (lbl) lbl.textContent = f.label || '';
 
   // Load sessions and pipeline in parallel
   await Promise.all([
-    _loadLDSessions(mk),
-    _loadLDPipeline(mk),
+    _loadLDSessions(f),
+    _loadLDPipeline(f),
   ]);
 }
 
-async function _loadLDSessions(mk) {
+async function _loadLDSessions(f) {
   var panel = document.getElementById('ldSessionsPanel');
   if (!panel) return;
+
+  // KPI card handles — updated on every call so cards always track the selection
+  var elSess  = document.getElementById('ld-kpi-sessions');
+  var elSessS = document.getElementById('ld-kpi-sessions-sub');
+  var elPax   = document.getElementById('ld-kpi-pax');
+  var elPaxS  = document.getElementById('ld-kpi-pax-sub');
+  var periodTxt = (f && f.label) ? f.label : 'Selected period';
 
   try {
     var q = _sb.from('training_sessions').select('*')
       .order('month_key', {ascending:false})
       .order('trainer',   {ascending:true});
-    if (mk && mk !== 'all') q = q.eq('month_key', mk);
+    if      (f.mode==='week')  q = q.eq('week_key',  f.weekKey);
+    else if (f.mode==='month') q = q.eq('month_key', f.monthKeys[0]);
+    else if (f.mode==='range') q = q.in('month_key', f.monthKeys);
     var res = await q;
     var rows = res.data || [];
+
+    // Update KPI cards up front (so an empty period resets them to 0)
+    var totalSessions = rows.length;
+    var totalPax = rows.reduce(function(s,r){ return s+(r.participants||0); }, 0);
+    if (elSess)  elSess.textContent  = totalSessions;
+    if (elSessS) elSessS.textContent = periodTxt;
+    if (elPax)   elPax.textContent   = totalPax;
+    if (elPaxS)  elPaxS.textContent  = 'Batch size total';
 
     if (!rows.length) {
       panel.innerHTML = '<div class="empty-state">No sessions recorded for this period.</div>';
       return;
     }
-
-    // Update KPI cards
-    var totalSessions = rows.length;
-    var totalPax = rows.reduce(function(s,r){ return s+(r.participants||0); }, 0);
-    var elSess  = document.getElementById('ld-kpi-sessions');
-    var elSessS = document.getElementById('ld-kpi-sessions-sub');
-    var elPax   = document.getElementById('ld-kpi-pax');
-    var elPaxS  = document.getElementById('ld-kpi-pax-sub');
-    if (elSess)  elSess.textContent  = totalSessions;
-    if (elSessS) elSessS.textContent = mk === 'all' ? 'All time' : _fmtMonthKey(mk);
-    if (elPax)   elPax.textContent   = totalPax;
-    if (elPaxS)  elPaxS.textContent  = 'Batch size total';
 
     // Category breakdown
     var catCount = {};
@@ -3234,26 +3262,38 @@ async function _loadLDSessions(mk) {
       +'</div></div>';
 
   } catch(e) {
+    if (elSess) elSess.textContent = '—';
+    if (elPax)  elPax.textContent  = '—';
     var p2 = document.getElementById('ldSessionsPanel');
     if (p2) p2.innerHTML = '<div style="padding:20px;color:var(--red);font-size:12px">Error loading sessions: '+esc(e.message)+'</div>';
   }
 }
 
-async function _loadLDPipeline(mk) {
+async function _loadLDPipeline(f) {
   var panel  = document.getElementById('ldPipelinePanel');
   var badge  = document.getElementById('ld-pipeline-badge');
   var kpPlan = document.getElementById('ld-kpi-pipeline');
   var kpSub  = document.getElementById('ld-kpi-pipeline-sub');
+  var elPva  = document.getElementById('ld-kpi-planvact');
+  var elPvaS = document.getElementById('ld-kpi-planvact-sub');
   if (!panel) return;
+
+  // Pipeline is keyed by planned_date → filter to the selected period's calendar bounds
+  var pf = (f && f.pipeFrom) ? f.pipeFrom : null;
+  var pt = (f && f.pipeTo)   ? f.pipeTo   : null;
 
   try {
     var q = _sb.from('training_pipeline').select('*')
       .in('status', ['Planned','Confirmed'])
       .order('planned_date', {ascending:true});
+    if (pf) q = q.gte('planned_date', pf);
+    if (pt) q = q.lte('planned_date', pt);
     var res = await q;
     var rows = res.data || [];
 
     var qAll = _sb.from('training_pipeline').select('*');
+    if (pf) qAll = qAll.gte('planned_date', pf);
+    if (pt) qAll = qAll.lte('planned_date', pt);
     var resAll = await qAll;
     var allRows = resAll.data || [];
 
@@ -3261,15 +3301,13 @@ async function _loadLDPipeline(mk) {
     var totalPlan = allRows.length;
     var pvaRate   = totalPlan > 0 ? Math.round(conducted/totalPlan*100)+'%' : '—';
     if (kpPlan) kpPlan.textContent = rows.length;
-    if (kpSub)  kpSub.textContent  = rows.length+' open items';
-    var elPva  = document.getElementById('ld-kpi-planvact');
-    var elPvaS = document.getElementById('ld-kpi-planvact-sub');
+    if (kpSub)  kpSub.textContent  = rows.length+' open in period';
     if (elPva)  elPva.textContent  = pvaRate;
     if (elPvaS) elPvaS.textContent = conducted+' of '+totalPlan+' planned conducted';
     if (badge)  badge.textContent  = rows.length+' open';
 
     if (!rows.length) {
-      panel.innerHTML = '<div class="empty-state">No programs in pipeline. Add programs via the LD or HRBP weekly form.</div>';
+      panel.innerHTML = '<div class="empty-state">No programs in pipeline for this period. Add programs via the LD or HRBP weekly form.</div>';
       return;
     }
 
@@ -3853,10 +3891,7 @@ function render() {
   }
   // Auto-load LD tab data after every render (tab content resets on each render)
   if (typeof loadLDTab === 'function') {
-    setTimeout(function() {
-      var sel = document.getElementById('ldMonthSel');
-      loadLDTab(sel ? sel.value : '2026-05');
-    }, 100);
+    setTimeout(function() { loadLDTab(); }, 100);
   }
   // Animate bars
   setTimeout(() => {
@@ -3875,9 +3910,7 @@ function switchTab(id, btn) {
   if(btn) btn.classList.add('active');
   currentTab = id;
   if (id === 'ld' && typeof loadLDTab === 'function') {
-    var sel = document.getElementById('ldMonthSel');
-    var mon = sel ? sel.value : '2026-05';
-    loadLDTab(mon);
+    loadLDTab();
   }
 }
 
@@ -4686,7 +4719,7 @@ function switchTab(id, btn) {
   }
 
   if(id==='actioncentre' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadActionTasks, 100); }
-  else if(id==='ld') { setTimeout(function(){ var sel=document.getElementById('ldMonthSel'); loadLDTab(sel?sel.value:'2026-05'); }, 50); }
+  else if(id==='ld') { setTimeout(function(){ loadLDTab(); }, 50); }
   else if(id==='users') renderUsersTab(el);
   else if(id==='accounts') renderAccountsTab(el);
   else if(id==='gallery') renderGalleryTab();
@@ -6084,8 +6117,9 @@ function renderHrbpPipelineRows() {
 }
 
 // ── WEEK KEY HELPERS (global) ─────────────────────────────────────────────
-function getCurrentWeekKey() {
-  var now = new Date();
+function getCurrentWeekKey() { return weekKeyForDate(new Date()); }
+function weekKeyForDate(dt) {
+  var now = dt || new Date();
   var mo = now.getMonth() + 1; // +1: getMonth() is 0-indexed, map is 1-indexed
   var day = now.getDate();
   // Static map for FY2025-26 (Jan–Dec 2026) — extend as needed
@@ -9449,6 +9483,8 @@ function _setOvPreset(preset, customFrom, customTo) {
   loadEMJoinerCounts();
   var _ort=document.getElementById('tab-opsreview');
   if(_ort&&_ort.style.display!=='none') loadOpsReview();
+  var _ldt=document.getElementById('tab-ld');
+  if(_ldt&&_ldt.classList.contains('active')&&typeof loadLDTab==='function') loadLDTab();
 }
 
 async function loadTAClosedMTD() {
