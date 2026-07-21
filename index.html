@@ -1394,6 +1394,8 @@ function renderOps(w, pw, elArg) {
   if (!_statRisksLoaded && typeof _sb !== 'undefined') {
     loadStatutoryRisks(); // async — tab renders immediately, patches when ready
   }
+  if (!_tasksLoaded && typeof _sb !== 'undefined') { loadOpsTasksIfNeeded(); }
+  if (!_hcSnapshotLoaded && typeof _sb !== 'undefined') { loadHCSnapshot(); }
   var isAdminView = (_sbRole && (_sbRole.role === 'admin' || _sbRole.role === 'executive'));
   var week = w || (WEEK_ORDER&&WEEK_ORDER.length?WEEKS_DATA[WEEK_ORDER[WEEK_ORDER.length-1]]:{label:'&mdash;',payroll_risks:[],payroll_errors:0,payroll_month:''});
   if(!week||!week.week_key){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading week data…</div>';return;}
@@ -1407,29 +1409,6 @@ function renderOps(w, pw, elArg) {
     var s=String(r||'').trim().toLowerCase();
     return r&&r.trim()&&!['na','nil','none'].includes(s);
   });
-  var payErrors = (week&&week.payroll_errors)||0;
-  var payMonth  = (week&&week.payroll_month)||'';
-  var hropsGapsHTML = hropsGaps.length
-    ? hropsGaps.map(function(g){
-        return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:8px;padding:10px 14px;margin-bottom:8px">'
-          +'<div style="font-size:11px;color:var(--text);line-height:1.5">'+esc(g)+'</div></div>';
-      }).join('')
-    : '<div style="font-size:12px;color:var(--muted);padding:10px 0">No process gaps logged this week.</div>';
-  var hropsEscHTML = hropsEsc.length
-    ? hropsEsc.map(function(e){
-        return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid #a78bfa;border-radius:8px;padding:10px 14px;margin-bottom:8px">'
-          +'<div style="font-size:11px;color:var(--text);line-height:1.5">'+esc(e)+'</div></div>';
-      }).join('')
-    : '<div style="font-size:12px;color:var(--muted);padding:10px 0">No escalations logged this week.</div>';
-  var payErrBanner = payErrors>0
-    ? '<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px">'
-        +'<div style="font-size:13px;font-weight:600;color:var(--red)">'+payErrors+' payroll error'+(payErrors!==1?'s':'')
-        +(payMonth?' — '+esc(payMonth):'')+' — Must resolve before disbursement.</div></div>'
-    : '';
-  var hropsGaps=((week&&week.hrops_gaps)||[]).map(function(r){return String(r||'');}).filter(function(r){var s=r.trim().toLowerCase();return r.trim()&&!['na','nil','none','no gaps'].includes(s);});
-  var hropsEsc=((week&&week.hrops_esc_texts)||[]).map(function(r){return String(r||'');}).filter(function(r){var s=r.trim().toLowerCase();return r.trim()&&!['na','nil','none'].includes(s);});
-  var payErrors=(week&&week.payroll_errors)||0;
-  var payMonth=(week&&week.payroll_month)||'';
   var hropsGapsHTML=hropsGaps.map(function(g){
     return'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:8px;padding:10px 14px;margin-bottom:8px">'
       +'<div style="font-size:11px;color:var(--text);line-height:1.5">'+esc(g)+'</div></div>';}).join('')
@@ -1438,15 +1417,36 @@ function renderOps(w, pw, elArg) {
     return'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid #a78bfa;border-radius:8px;padding:10px 14px;margin-bottom:8px">'
       +'<div style="font-size:11px;color:var(--text);line-height:1.5">'+esc(e)+'</div></div>';}).join('')
     ||'<div style="font-size:12px;color:var(--muted);padding:10px 0">No escalations logged this week.</div>';
-  var payErrBanner=payErrors>0
-    ?'<div style="background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px">'
-      +'<div style="font-size:13px;font-weight:600;color:var(--red)">'+payErrors+' payroll error'+(payErrors!==1?'s':'')
-      +(payMonth?' — '+esc(payMonth):'')+' — Must resolve before disbursement.</div></div>'
+  // ── Live Payroll & Admin tasks from action_tasks (Phase D) ────────────────
+  var _openSt=['Open','In Progress','Escalated'];
+  var _payTasks=_actionTasks.filter(function(t){return t.function_area==='Payroll'&&_openSt.indexOf(t.status)!==-1;});
+  var _adminTasks=_actionTasks.filter(function(t){return t.function_area==='Admin'&&_openSt.indexOf(t.status)!==-1;});
+  var _hcBannerHTML=_hcSnapshot
+    ?'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;gap:24px">'
+      +'<div><div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted)">Headcount — '+esc(_hcSnapshot.month_label||_hcSnapshot.month_key)+'</div>'
+      +'<div style="font-family:Bebas_Neue,sans-serif;font-size:26px;color:var(--text);line-height:1">'+(_hcSnapshot.closing_hc||0)+'</div>'
+      +'<div style="font-size:10px;color:var(--muted)">closing HC</div></div>'
+      +'<div style="font-size:11px;color:var(--muted);line-height:1.8">'
+      +'Opening: <strong style="color:var(--text)">'+(_hcSnapshot.opening_hc||0)+'</strong>&nbsp;&nbsp;'
+      +'Joiners: <strong style="color:var(--green)">+'+(_hcSnapshot.joiners||0)+'</strong>&nbsp;&nbsp;'
+      +'Exits: <strong style="color:var(--red)">&minus;'+(_hcSnapshot.exits||0)+'</strong></div></div>'
     :'';
-  var payRisks=((week&&week.payroll_risks)||[]).filter(function(r){return r&&r.trim()&&!['na','nil','none'].includes(r.toLowerCase().trim());});
-  var payRiskHTML = payRisks.length
-    ? payRisks.map(function(r){return '<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:7px;font-size:12px;color:var(--text)">&starf; '+esc(r)+'</div>';}).join('')
-    : '<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No payroll escalations reported this week</div>';
+  function _liveTaskCard(t){
+    var sc={Open:'var(--red)','In Progress':'var(--amber)',Escalated:'#a78bfa'}[t.status]||'var(--muted)';
+    return'<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid '+sc+';border-radius:8px;padding:9px 14px;margin-bottom:7px;display:flex;align-items:flex-start;gap:12px">'
+      +'<span style="font-size:10px;padding:2px 8px;border-radius:20px;border:1px solid '+sc+';color:'+sc+';white-space:nowrap;margin-top:1px">'+esc(t.status)+'</span>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;color:var(--text)">'+esc(t.title||'—')+'</div>'
+      +(t.description?'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+esc(t.description.substring(0,80))+'</div>':'')
+      +'</div>'
+      +(t.due_date?'<div style="font-size:10px;color:var(--muted2);white-space:nowrap">'+esc(t.due_date.substring(0,10))+'</div>':'')
+      +'</div>';
+  }
+  var _payTasksHTML=_payTasks.length
+    ?_payTasks.map(_liveTaskCard).join('')
+    :'<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open payroll tasks</div>';
+  var _adminTasksHTML=_adminTasks.length
+    ?_adminTasks.map(_liveTaskCard).join('')
+    :'<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;background:var(--surface2);border:1px dashed var(--border);border-radius:8px">No open admin tasks</div>';
   var filt = _statRisks.filter(function(r){
     if(_statFilter.type!=='All'&&r.risk_type!==_statFilter.type) return false;
     if(_statFilter.status!=='All'&&r.status!==_statFilter.status) return false;
@@ -1537,9 +1537,11 @@ function renderOps(w, pw, elArg) {
     +hropsEscHTML
     +'</div>'
     +'</div>'
-    +payErrBanner
-    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">Payroll Escalations &mdash; '+esc((week&&week.label)||'Latest Week')+'</div>'
-    +payRiskHTML
+    +_hcBannerHTML
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--red);margin-bottom:8px">⚠ Open Payroll Tasks</div>'
+    +_payTasksHTML
+    +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted2);margin:14px 0 8px">🗃 Open Admin Tasks</div>'
+    +_adminTasksHTML
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0 16px">'
     +[['Open',counts.Open,'var(--red)'],['In Progress',counts['In Progress'],'var(--amber)'],['Escalated',counts.Escalated,'#a78bfa'],['Closed',counts.Closed,'var(--green)']].map(function(k){
       return '<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid '+k[2]+';border-radius:8px;padding:10px;text-align:center">'
@@ -4248,6 +4250,8 @@ function renderAbsenteeism(el) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 var _actionTasks = [];
+var _hcSnapshot = null;
+var _hcSnapshotLoaded = false;
 var _tasksLoaded = false;
 var _caseEntries = [];  // structured ER/abscond/retention cases
 var _retentionEntries = []; // structured retention cases
@@ -13212,6 +13216,34 @@ var _statFilter = { type: 'All', status: 'All' };
 const STAT_TYPES = ['PF','ESIC','S&E','Grievance','Labour Notice','Other'];
 const STAT_STATUSES = ['Open','In Progress','Escalated','Closed'];
 
+async function loadOpsTasksIfNeeded() {
+  if (_tasksLoaded) { renderOps(null,null,document.getElementById('tab-ops')); return; }
+  try {
+    var res = await _sb.from('action_tasks').select('*').order('created_at',{ascending:false}).limit(200);
+    _actionTasks = res.data || [];
+    _tasksLoaded = true;
+  } catch(e) {
+    console.error('[loadOpsTasksIfNeeded]', e);
+    _tasksLoaded = true;
+  }
+  var _opsEl = document.getElementById('tab-ops');
+  if (_opsEl) renderOps(null, null, _opsEl);
+}
+
+async function loadHCSnapshot() {
+  if (_hcSnapshotLoaded) { renderOps(null,null,document.getElementById('tab-ops')); return; }
+  try {
+    var res = await _sb.from('monthly_hc_snapshot').select('*').order('month_key',{ascending:false}).limit(1);
+    _hcSnapshot = (res.data && res.data[0]) || null;
+    _hcSnapshotLoaded = true;
+  } catch(e) {
+    console.error('[loadHCSnapshot]', e);
+    _hcSnapshotLoaded = true;
+  }
+  var _opsEl2 = document.getElementById('tab-ops');
+  if (_opsEl2) renderOps(null, null, _opsEl2);
+}
+
 async function loadStatutoryRisks() {
   const el = document.getElementById('tab-ops');
   if (!el) return;
@@ -13364,6 +13396,8 @@ function snavClick(id, el) {
   // Async tabs handled separately
   if(id==='ta' && typeof _sbUser !== 'undefined' && _sbUser && !_taEscLoaded) { setTimeout(loadTAEscalations, 100); }
   if(id==='ops' && typeof _sbUser !== 'undefined' && _sbUser && !_statRisksLoaded) { setTimeout(loadStatutoryRisks, 100); }
+  if(id==='ops' && typeof _sbUser !== 'undefined' && _sbUser && !_tasksLoaded) { setTimeout(loadOpsTasksIfNeeded, 150); }
+  if(id==='ops' && typeof _sbUser !== 'undefined' && _sbUser && !_hcSnapshotLoaded) { setTimeout(loadHCSnapshot, 200); }
   if(id==='absenteeism' && typeof _sbUser !== 'undefined' && _sbUser) { setTimeout(loadAbsentCases, 100); }
   if(id==='joiners' && typeof _sbUser !== 'undefined' && _sbUser && !_pjLoaded) { setTimeout(loadProspectiveJoiners, 100); }
   if(id==='ate' && typeof _sbUser !== 'undefined' && _sbUser && !_ateLoaded) { setTimeout(loadATECases, 100); }
