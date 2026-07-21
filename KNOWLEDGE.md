@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.20.2 | **Last updated:** 13 Jul 2026 — Ops Review: ATE panel fixed + in-tab period toggle/banner. Delivery-team rollout (D1 PM/SDM/RDH) + score recalibration (#30) + Ops Review UI restructure pending.
+**Version:** 3.21.0 | **Last updated:** 21 Jul 2026 — Submit tab restructured (TA/Admin/Payroll redirect), Ops Review live from action_tasks + monthly_hc_snapshot, weekly_reports rebuild guard removed, HRBP period bar synced.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,62 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 21 Jul 2026 — Submit tab restructured; Ops Review live data; weekly_reports freeze fixed (commits 71bf7ec, a4ebb10, 769d872, b740d51, c3380a0)
+
+#### HRBP Connect tab — period bar not updating (fix 71bf7ec)
+- **Symptom:** "This Week" / "Last Week" buttons in the global period bar did nothing on the HRBP Connect tab.
+- **Root cause:** `_setOvPreset()` fired the L&D hook but had no HRBP hook. `currentWeek` never changed, so `loadHRBPSiteVisitsForTab()` wasn't called.
+- **Fix:** Added a sync block at the end of `_setOvPreset` that runs only when `currentTab==='hrbp'`. Maps `preset==='week'` → `weekKeyForDate(today)` and `preset==='lastweek'` → `weekKeyForDate(today-7)`, sets `currentWeek`, updates the active week button, calls `render()` + `loadHRBPSiteVisitsForTab()` (150ms delay). Month/YTD presets not mapped (no single-week equivalent). Block is a no-op if the HRBP functions don't exist yet.
+
+#### weekly_reports 8-week data freeze (fix a4ebb10)
+- **Symptom:** Ops Review, WoW bar, and Overview showed zero submissions for W18–W31 despite real submissions in weekly_submissions.
+- **Root cause:** `rebuildWeekFromSubmissions(weekKey)` had a guard that checked `WEEKS_DATA[weekKey].total_respondents > 0` (client-side cache) and skipped the DB upsert if true. Since the cache was populated (JS aggregation ran), the guard fired and the Supabase upsert never ran — DB stayed frozen at zeros.
+- **Fix:** Removed the guard entirely. The function is naturally idempotent (full select + upsert on every call). Committed a4ebb10.
+- **Historical backfill:** Single CTE UPDATE via `execute_sql` for W18/W20/W23–W31 (11 weeks) using `jsonb_agg(...) FILTER (WHERE ...)` to mirror the JS aggregation logic.
+- **KEY LEARNING:** Client-side cache guards on DB write paths are a recurring silent failure class. If a value is in the in-memory cache, the guard fires and the DB never gets updated. Idempotent upserts don't need guards — remove them.
+
+#### Phase A — Submit tab redirect for TA and Admin (commit 769d872)
+- TA (`function_type='ta'`) and Admin (`function_type='admin'` or mapped variants) users now see a redirect page instead of a weekly form on the Submit tab.
+- TA redirect: two buttons — **Open Action Centre** + **TA Pipeline** (for aging blockers, expected joiners, and escalations).
+- Admin redirect: one button — **Open Action Centre**.
+- Implemented as an early-return block in `renderSubmitTab` (line ~6230), immediately after the admin/executive role check (same pattern). Fires before the week selector or form builder.
+- `buildFunctionSections('ta')` and `('admin')` are untouched and still reachable if the gate is removed.
+- `ta_closed` in weekly_reports is auto-populated from NewJoinee data (line 15150) — not from the TA form — and is unaffected.
+
+#### Phase B — Submit tab redirect for Payroll (commit b740d51)
+- Payroll users (`function_type='payroll'`) see a redirect with two buttons: **Open Action Centre** (operational issues) and **Ops Review** (statutory risks).
+- Entry points were already ungated: `openNewTaskModal()` has no role gate; `openStatRiskModal()` is already accessible via the "+ New Risk" button at line 1529 in `renderOps`. No new UI needed.
+- `buildFunctionSections('payroll')` is untouched.
+
+#### Phase C — Admin task_type taxonomy (confirmation only, no code)
+- `FUNCTION_AREAS` already includes 'Admin' (line 4260). `openNewTaskModal()` is ungated. Admin users can log tasks in Action Centre immediately after the Phase A redirect.
+- Admin task_type values: `planned_action`, `risk`, `escalation` (same modal as all other users). Specific category (facility, travel, vendor, asset, utility, safety) goes in the description field.
+
+#### Phase D — Ops Review reads live action_tasks + monthly_hc_snapshot (commit c3380a0)
+- **Replaced** (weekly_reports snapshot reads): `payroll_errors`, `payroll_month`, `payErrBanner`, `payroll_risks`, `payRiskHTML`.
+- **Replaced with live reads:**
+  - **Open Payroll Tasks** — `_actionTasks` filtered to `function_area='Payroll'` and `status` in Open/In Progress/Escalated.
+  - **Open Admin Tasks** — `_actionTasks` filtered to `function_area='Admin'`, same status filter.
+  - **HC Banner** — latest row from `monthly_hc_snapshot` (columns: `closing_hc`, `opening_hc`, `joiners`, `exits`, `month_label`). Replaces the manually-typed `payroll_hc` field.
+- **New loaders** (both follow the `_statRisks` async-patch pattern — render immediately, patch on load completion):
+  - `loadOpsTasksIfNeeded()` — populates `_actionTasks` if `_tasksLoaded` is false; calls `renderOps` on completion.
+  - `loadHCSnapshot()` — queries `monthly_hc_snapshot` (latest row), stores in `_hcSnapshot`; calls `renderOps` on completion.
+- Both loaders triggered from `renderOps` (inline guard) AND from the `switchTab('ops')` handler.
+- **Duplicate variable declarations** (`hropsGaps`, `hropsEsc`, `hropsGapsHTML`, `hropsEscHTML` appeared twice in the old code) collapsed to one clean set.
+- **HR Ops section** (`hrops_gaps`, `hrops_esc_texts`) is unchanged.
+
+#### Phase E — TA escalation path (confirmed, no code)
+- TA Pipeline tab already has `openNewTaskModal('escalation')` button at line 13182 and `loadTAEscalations()` at line 12768. No action needed.
+
+#### Submit tab — what each function type now sees
+| function_type | Submit tab |
+|---|---|
+| hrbp, hrops, ld, facilities | Weekly form (unchanged) |
+| ta | Redirect → Action Centre + TA Pipeline |
+| admin (and facility/admin variants) | Redirect → Action Centre |
+| payroll | Redirect → Action Centre + Ops Review |
+| role=admin or role=executive | Submission tracker (existing) |
 
 ### 21 Jul 2026 — L&D tab: recent trainings invisible + filters/KPIs unresponsive (fix, commit PENDING)
 - **Symptom (Alex):** L&D tab showed no recent training; the top This Week/Last Week/This Month filters and the L&D KPI cards did not respond.
