@@ -11,6 +11,24 @@
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
 
+### 22 Jul 2026 — HRBP Connects month aggregation + KNOWLEDGE.md housekeeping (commit f7fe184)
+
+#### Phase F — HRBP Connects: This Month / Last Month now aggregate across weeks (commit f7fe184)
+- **Symptom (audit 22 Jul):** "This Month" and "Last Month" buttons in the global period bar were silent no-ops on HRBP Connects — confirmed by reading `_setOvPreset()` HRBP block (added 71bf7ec): only `week`/`lastweek` were mapped; month paths left `_hrbpWkTarget=''` and the inner `if` never fired.
+- **Decision (Alex):** "This Month" = aggregate across all weeks in the calendar month (same semantic as L&D tab), NOT the single most-recent week.
+- **Fix — new functions:**
+  - `_hrbpWeekKeysInRange(from, to)`: iterates day-by-day from `from` to `to` via the existing `weekKeyForDate()` static map, returns deduplicated W-keys (e.g. `['W29','W30','W31','W32']` for July).
+  - `loadHRBPSiteVisitsForRange(from, to, label)`: fetches `weekly_reports` (for discipline/retention/issues/activities arrays) + `weekly_submissions` (for hrbp_connects) for those week_keys in parallel. Builds synthetic `w` object by concatenating all arrays across weeks. Sets `_hrbpSVFrom`/`_hrbpSVTo` globals (new) so `renderHRBP` scopes the site visit log and KPI counts to the month. Shows loading placeholder while fetch is in flight.
+- **Fix — `_setOvPreset()` HRBP block:** added `month`/`lastmonth` branch calling `loadHRBPSiteVisitsForRange(_ovFrom, _ovTo, label)` via `setTimeout(...,0)`. `_ovFrom`/`_ovTo` are already set by `_initOvRange()` earlier in `_setOvPreset`.
+- **Fix — `renderHRBP()`:** `_svAllTime` = full `_hrbpSVCache` (all-time); `_svAll` = date-filtered when `_hrbpSVFrom` set. Visit log cards, region tab counts, Site Visits KPI, and `_mySVs` (HRBP personal count) all use `_svAll`. Leaderboard keeps `_svAllTime` (intentional — see pending decision below). Visit log header and Site Visits KPI label reflect active period.
+- **Fix — `loadHRBPSiteVisitsForTab()`:** clears `_hrbpSVFrom`/`_hrbpSVTo` on entry so switching back to week mode removes the month filter.
+- **PENDING ALEX DECISION — leaderboard scope:** Leaderboard comment says "all-time by design" (`_leaderPool = _svAllTime`). Should "This Month" scope leaderboard rankings to that month's visits? If yes, change `_leaderPool = _svAll` (one line). Kept all-time for now pending this call.
+- **Tab-switch behaviour note:** navigating away from HRBP Connects and back always reloads the current week (via `loadHRBPSiteVisitsForTab` in switchTab) — month filter resets. Same behaviour as existing week buttons. Consistent; no action needed.
+
+#### Phase G — KNOWLEDGE.md documentation fixes (text-only, no JS changes)
+- Fixed stale "commit PENDING" annotation in the 21 Jul L&D session entry → real hashes `0294590`, `c157388`.
+- Replaced stale "Recent Commits (newest first)" table (stopped at 7846abc, 6 Jul — ~90 commits behind) with single line pointing to Session Log. All 90 missing commits were already documented in the Session Log above; nothing lost.
+
 ### 21 Jul 2026 — Submit tab restructured; Ops Review live data; weekly_reports freeze fixed (commits 71bf7ec, a4ebb10, 769d872, b740d51, c3380a0)
 
 #### HRBP Connect tab — period bar not updating (fix 71bf7ec)
@@ -67,7 +85,7 @@
 | payroll | Redirect → Action Centre + Ops Review |
 | role=admin or role=executive | Submission tracker (existing) |
 
-### 21 Jul 2026 — L&D tab: recent trainings invisible + filters/KPIs unresponsive (fix, commit PENDING)
+### 21 Jul 2026 — L&D tab: recent trainings invisible + filters/KPIs unresponsive (commits 0294590, c157388)
 - **Symptom (Alex):** L&D tab showed no recent training; the top This Week/Last Week/This Month filters and the L&D KPI cards did not respond.
 - **Root cause 1 — stale month dropdown:** L&D had its OWN `<select id="ldMonthSel">` hardcoded to May→Feb 2026 + All Time, and `loadLDTab` defaulted to `'2026-05'`. June (4 sess/60 pax, W27) and July (2 sess/14 pax, W29) records existed in `training_sessions` but there was NO menu option to reach them. Verified via Supabase (project mzyrcrkwgbqgwajkjdnp).
 - **Root cause 2 — Period bar never wired to L&D:** the global `#ovRangeBar` (This Week/Last Week/This Month/Last Month) `_setOvPreset()` only reloaded Overview + Ops Review (`_ort` hook); it had no L&D hook, so on L&D clicking it did nothing and the L&D KPI cards (fed only by the dropdown) never changed. Also `_loadLDSessions` returned early on empty months WITHOUT resetting Sessions/Pax cards (stale numbers), and Pipeline/Plan-vs-Actual weren't period-filtered at all.
@@ -620,37 +638,7 @@ PENDING NEXT SESSION:
 - **hiring_cycles Supabase migration** — create table before Hiring Report tab goes live (cols: id uuid PK, name text, label text, cycle_from date, cycle_to date, notes text, created_by text, created_at timestamptz). Add RLS select policy for authenticated users; insert/update for admin+ta.
 - KNOWLEDGE.md re-upload to Claude.ai project (current file is stale)
 
-### Recent Commits (newest first)
-- 7846abc (6 Jul): Hiring Report: remove notes from header, DOJ date format, hide from HRBP sidebar (cleanup — 2 of 3 changes were already live)
-- 8b66bfa (6 Jul): Hiring Report: DOJ date format + hide from HRBP sidebar
-- 7dc1cbe (6 Jul): Hiring Report tab: named cycles, region realization %, account closures, critical aging, next pipeline
-- fee8bbc (6 Jul): RMG Workspace: Pipe + Stage columns from _taCandMap (13-col grid)
-- b575f9c (6 Jul): processEmployeeMaster: fuzzy+DOJ reconcile via reconcile_prospective_joiners() RPC
-- 3e949dd (6 Jul): Long Absenteeism: filter against employee_master; RMG added-by/added-on columns
-- 1e613bf (19 Jun): sync ta_candidates → prospective_joiners: Appointment Letter + Pre Joining stages with tier enrichment
-- ebdc980 (19 Jun): Onboarding Tracker: full redesign — pipeline by week, HRBP auto-scope, action needed, joined MTD
-- d6129e9 (19 Jun): Prospective Joiners: default ±60d DOJ window filter + toggle to show all
-- 732f602 (19 Jun): fix: mar_joined KPI sourced from NewJoinee DOJ in Super Employee Master
-- 5335867 (19 Jun): fix dropout rate use full _pjData; retire TA Commitments sidebar
-- 8c1839e (19 Jun): processEmployeeMaster: persist to employee_master + auto-reconcile prospective_joiners
-- 7d047db (19 Jun): Prospective Joiners: joining this week/next week strip + dropout rate by recruiter
-- 8ebea20 (19 Jun): TA Pipeline: raise req grid slice cap 150→250 to show all open reqs
-- 23bd3ec (19 Jun): TA Pipeline 11-col grid (Pipe/Stage/ActvD) + phantom filter
-- 000ec2e (19 Jun): processCandidate → ta_candidates from candidate transaction report
-- 58945e4 (19 Jun): RMG sidebar scoping (7 tabs) + Long Absenteeism read-only gate
-- ae3fc58 (18 Jun): KNOWLEDGE: 18 Jun — RMG status model, TAT enrich, filter-responsive cards, phantom-open principle
-- e970c51 (18 Jun): RMG filter-responsive cards — counts follow Region+Status, flag filters rows only
-- fccee3d (18 Jun): RMG: TAT enrich live + Open/Closed pills + filter-responsive cards
-- 312fb7a (18 Jun): fix derived status Open-only for Approved
-- 1368754 (18 Jun): req_tracker: mirror full TAT — retain all reqs, add zinghr_status (raw), derive Open/Closed from status + balance
-- daa1ab0: req_tracker as live source — TAT upserts with enrich RPC, candidate req_id linkage
-- fb43e77 / fa1976d: Recruiter Mapping — TA recruiters only, strip emp codes from attribution
-- 40fd550 (17 Jun): TA Pipeline — billing type filter, filled-unclosed banner, backfill emp column
-- aa507d7 (17 Jun): RMG Workspace — reconciliation grid, Add Position form, role-gated view/edit
-- 8f9edc6 (09 Jun): Account Health — region filter, live LWD, annualised attrition
-- c355d6d (09 Jun): ATE conversion tracking — fte_emp_code, reconciliation, UI badges
-- e48a8f0: Action Centre — clickable KPI chips, filter bar, table view
-- 0d9450d: OD/WFH — wfh_od_actions, multi-instance badge, HRBP action dropdown
+See Session Log above for full commit history.
 
 ---
 
