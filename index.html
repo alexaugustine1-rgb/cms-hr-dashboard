@@ -1740,6 +1740,8 @@ function isNil(s) {
 var _hrbpSVCache = []; // ALL site visits from hrbp_site_visits table (not week-restricted)
 var _hrbpSubTab = 'connects'; // active HRBP sub-tab
 var _hrbpVPCache = []; // visit plans from hrbp_visit_plans
+var _hrbpSVFrom = ''; // YYYY-MM-DD — date filter applied to site visit log in month mode (empty = all time)
+var _hrbpSVTo   = ''; // YYYY-MM-DD
 var _wfhOdActions = {}; // emp_name → action for current month/view
 async function loadWFHODActions(monthKey, viewType) {
   if (!_sbUser || !_sb) return;
@@ -1780,6 +1782,7 @@ async function saveODAction(empName, monthKey, viewType, region, action) {
 
 async function loadHRBPSiteVisitsForTab() {
   if (!_sbUser || !_sb) return;
+  _hrbpSVFrom = ''; _hrbpSVTo = ''; // week mode: reset any month date filter
   try {
     var wk = currentWeek || '';
     // Fetch ALL site visits (no week filter) + fresh weekly_reports row in parallel
@@ -1879,6 +1882,83 @@ async function loadHRBPSiteVisitsForTab() {
       setTimeout(renderHRBPScorecardIntoDOM, 100);
     }
   } catch(e) { console.warn('[siteVisitsTab]', e.message); }
+}
+
+// Returns unique week_keys (e.g. ['W29','W30','W31']) for all days from fromDate to toDate (YYYY-MM-DD).
+function _hrbpWeekKeysInRange(fromDate, toDate) {
+  var keys = [], seen = {};
+  var d = new Date(fromDate + 'T00:00:00');
+  var end = new Date(toDate + 'T00:00:00');
+  while (d <= end) {
+    var k = weekKeyForDate(d);
+    if (k && !seen[k]) { seen[k] = 1; keys.push(k); }
+    d.setDate(d.getDate() + 1);
+  }
+  return keys;
+}
+
+// Aggregate HRBP Connects tab across all weeks in [fromDate, toDate] for month/lastmonth preset.
+async function loadHRBPSiteVisitsForRange(fromDate, toDate, label) {
+  if (!_sbUser || !_sb) return;
+  var el = document.getElementById('tab-hrbp');
+  if (el) el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Loading ' + label + '…</div>';
+  try {
+    var weekKeys = _hrbpWeekKeysInRange(fromDate, toDate);
+    var _vpQuery = _sb.from('hrbp_visit_plans')
+      .select('*').in('status', ['Planned','Rescheduled'])
+      .order('planned_date', {ascending: true});
+    if (_sbRole && _sbRole.role === 'hrbp' && _sbRole.display_name) {
+      _vpQuery = _vpQuery.eq('hrbp_name', _sbRole.display_name);
+    }
+    var _wrProm = weekKeys.length
+      ? _sb.from('weekly_reports').select('*').in('week_key', weekKeys)
+      : Promise.resolve({data: [], error: null});
+    var _subProm = weekKeys.length
+      ? _sb.from('weekly_submissions')
+          .select('submitter_name,region,function_type,hrbp_connect_details,hrbp_activities,hrbp_issues,hrbp_discipline,hrbp_site_visited')
+          .in('week_key', weekKeys).eq('function_type', 'hrbp')
+      : Promise.resolve({data: [], error: null});
+    var results = await Promise.all([_wrProm, _subProm, _vpQuery]);
+    var wrRows  = results[0].data || [];
+    var subRows = results[1].data || [];
+    var vpRows  = results[2].data || [];
+    if (vpRows) _hrbpVPCache = vpRows;
+    // Cache fetched weekly_reports rows into WEEKS_DATA for week-button continuity
+    wrRows.forEach(function(wr){ if (wr.week_key) WEEKS_DATA[wr.week_key] = wr; });
+    // Build synthetic w by aggregating all weeks in range
+    var synW = {
+      label: label, hrbp_visits: 0,
+      hrbp_connects: [], hrbp_discipline: [], hrbp_retention: [],
+      hrbp_issues: [], hrbp_activities: [], hrbp_case_entries: []
+    };
+    wrRows.forEach(function(wr) {
+      synW.hrbp_visits += (wr.hrbp_visits || 0);
+      if (Array.isArray(wr.hrbp_discipline))   synW.hrbp_discipline   = synW.hrbp_discipline.concat(wr.hrbp_discipline);
+      if (Array.isArray(wr.hrbp_retention))    synW.hrbp_retention    = synW.hrbp_retention.concat(wr.hrbp_retention);
+      if (Array.isArray(wr.hrbp_issues))       synW.hrbp_issues       = synW.hrbp_issues.concat(wr.hrbp_issues);
+      if (Array.isArray(wr.hrbp_activities))   synW.hrbp_activities   = synW.hrbp_activities.concat(wr.hrbp_activities);
+      if (Array.isArray(wr.hrbp_case_entries)) synW.hrbp_case_entries = synW.hrbp_case_entries.concat(wr.hrbp_case_entries);
+    });
+    // Build hrbp_connects from weekly_submissions (one entry per HRBP per week, no dedup across weeks)
+    subRows.forEach(function(s) {
+      synW.hrbp_connects.push({
+        name: s.submitter_name || '', region: s.region || '',
+        detail: s.hrbp_connect_details || s.hrbp_activities || '',
+        issues: s.hrbp_issues || '', er_cases: s.hrbp_discipline || '',
+        site_visited: !!s.hrbp_site_visited
+      });
+    });
+    // Activate date filter so renderHRBP scopes the site visit log to this month
+    _hrbpSVFrom = fromDate;
+    _hrbpSVTo   = toDate;
+    if (el) {
+      el.innerHTML = renderHRBP(synW, null);
+      setTimeout(renderHRBPScorecardIntoDOM, 100);
+    }
+  } catch(e) {
+    console.warn('[loadHRBPSiteVisitsForRange]', e.message);
+    if (el) el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--red)">Error loading period data. Please try again.</div>';
+  }
 }
 
 // ── JOURNEY PLAN PANEL ────────────────────────────────────────────────────
@@ -2629,7 +2709,12 @@ function renderHRBP(w, pw) {
   const _vtypeCol = {'Connect':'var(--accent)','Town Hall':'#34d399','R&R':'#f59e0b','Induction':'#a78bfa','Internal Meeting':'var(--muted)','Training':'#60a5fa','Other':'var(--muted2)'};
   const _vtypeIcon = {'Connect':'🤝','Town Hall':'🏛','R&R':'🏆','Induction':'📋','Internal Meeting':'🏢','Training':'🎓','Other':'📌'};
   const _tierCol2  = {'Platinum':'#a78bfa','Gold':'#f59e0b','Silver':'#94a3b8','Regular':'var(--muted2)','Internal':'#34d399'};
-  const _svAll = (typeof _hrbpSVCache !== 'undefined') ? _hrbpSVCache : [];
+  const _svAllTime = (typeof _hrbpSVCache !== 'undefined') ? _hrbpSVCache : [];
+  // In month mode _hrbpSVFrom/_hrbpSVTo are set; visit log and KPIs scope to that range.
+  // Leaderboard always uses _svAllTime (all-time, by design — see comment above _leaderPool).
+  const _svAll = (_hrbpSVFrom && _hrbpSVTo)
+    ? _svAllTime.filter(function(sv){ return sv.visit_date >= _hrbpSVFrom && sv.visit_date <= _hrbpSVTo; })
+    : _svAllTime;
   var _svFiltered = _svAll;
   if (_hcR !== 'All') _svFiltered = _svFiltered.filter(function(sv){ return sv.region === _hcR; });
   if (_hcH !== 'All') _svFiltered = _svFiltered.filter(function(sv){ return sv.submitter_name === _hcH; });
@@ -2674,8 +2759,8 @@ function renderHRBP(w, pw) {
     + '</div>';
 
   // ── HRBP leaderboard ─────────────────────────────────────────────────────
-  // Leaderboard always shows ALL HRBPs pan-India; region filter only scopes the visit log below
-  const _leaderPool = _svAll;
+  // Leaderboard always shows ALL HRBPs pan-India, all-time; region filter only scopes the visit log below
+  const _leaderPool = _svAllTime;
   const _hrbpStats = {};
   _leaderPool.forEach(function(sv){
     const nm = sv.submitter_name || 'Unknown';
@@ -2693,7 +2778,7 @@ function renderHRBP(w, pw) {
     ? '<div style="margin-bottom:20px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;overflow:hidden">'
       + '<div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'
       + '<div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:700;letter-spacing:1px;color:var(--muted2);text-transform:uppercase">🏆 HRBP Visit Leaderboard — All India</div>'
-      + '<div style="font-size:10px;color:var(--muted2)">'+_svAll.length+' total visits · click to filter log</div>'
+      + '<div style="font-size:10px;color:var(--muted2)">'+_svAllTime.length+' total visits'+(_hrbpSVFrom?' · visit log filtered to '+esc(w.label):'')+' · click to filter log</div>'
       + '</div>'
       + '<div style="display:grid;grid-template-columns:36px 1fr 80px 1fr 52px 72px 72px;align-items:center;padding:6px 18px;border-bottom:1px solid var(--border)">'
       + '<div></div>'
@@ -2754,7 +2839,7 @@ function renderHRBP(w, pw) {
         }).join('');
         return '<div style="margin-top:4px">'
           + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-          + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;color:var(--muted2);text-transform:uppercase">Visit Log — '+_svFiltered.length+' visit'+(_svFiltered.length>1?'s':'')+' · '+Object.keys(_grouped).length+' account'+(Object.keys(_grouped).length>1?'s':'')+' (all time)</div>'
+          + '<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;color:var(--muted2);text-transform:uppercase">Visit Log — '+_svFiltered.length+' visit'+(_svFiltered.length>1?'s':'')+' · '+Object.keys(_grouped).length+' account'+(Object.keys(_grouped).length>1?'s':'')+' ('+(_hrbpSVFrom?esc(w.label):'all time')+')</div>'
           + '<div style="display:flex;gap:6px;flex-wrap:wrap">'+_vtSummary+'</div>'
           + '</div>'
           + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">'
@@ -2809,9 +2894,10 @@ function renderHRBP(w, pw) {
         : '');
 
   // Count actual site visits — for HRBP users scope to their own visits only, admin/exec see all
-  const _mySVs = (typeof _hrbpSVCache !== 'undefined' && _isHRBP && _myName)
-    ? _hrbpSVCache.filter(function(sv){ return sv.submitter_name && sv.submitter_name.toLowerCase().trim() === _myName.toLowerCase().trim(); })
-    : (typeof _hrbpSVCache !== 'undefined' ? _hrbpSVCache : []);
+  // Use date-filtered _svAll so "Site Visits" KPI counts the selected period, not all time
+  const _mySVs = (_isHRBP && _myName)
+    ? _svAll.filter(function(sv){ return sv.submitter_name && sv.submitter_name.toLowerCase().trim() === _myName.toLowerCase().trim(); })
+    : _svAll;
   const _svVisitCount = _mySVs.length;
   const _connectVisitCount = w.hrbp_connects.reduce((total, c) => {
     const detail = c.detail || c.activities || '';
@@ -2868,7 +2954,7 @@ function renderHRBP(w, pw) {
   const _connectsPanel = `
     <div class="section-label">HRBP Numbers · ${esc(w.label)}</div>
     <div class="mini-stats" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
-      <div class="mini-stat"><div class="mini-stat-val" style="color:var(--accent)">${actualVisits}</div><div class="mini-stat-label">Site Visits (All Time)</div></div>
+      <div class="mini-stat"><div class="mini-stat-val" style="color:var(--accent)">${actualVisits}</div><div class="mini-stat-label">Site Visits (${_hrbpSVFrom ? w.label : 'All Time'})</div></div>
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--green)">${w.hrbp_connects.length}</div><div class="mini-stat-label">Detailed Connects Logged</div></div>
       <div class="mini-stat"><div class="mini-stat-val" style="color:var(--amber)">${w.hrbp_discipline.filter(d=>!isNil(d)&&d.length>10).length}</div><div class="mini-stat-label">ER / Discipline Cases</div></div>
     </div>
@@ -9621,6 +9707,10 @@ function _setOvPreset(preset, customFrom, customTo) {
     } else if(preset==='lastweek'){
       var _hlw=new Date(); _hlw.setDate(_hlw.getDate()-7);
       _hrbpWkTarget=weekKeyForDate(_hlw);
+    } else if((preset==='month'||preset==='lastmonth')&&typeof loadHRBPSiteVisitsForRange==='function'){
+      // _ovFrom/_ovTo already set by _initOvRange() above; use them directly
+      var _hRangeLabel=(typeof _ovLabel==='function')?_ovLabel():(preset==='lastmonth'?'Last Month':'This Month');
+      setTimeout(function(){ loadHRBPSiteVisitsForRange(_ovFrom,_ovTo,_hRangeLabel); },0);
     }
     if(_hrbpWkTarget&&typeof WEEKS_DATA!=='undefined'&&WEEKS_DATA[_hrbpWkTarget]){
       currentWeek=_hrbpWkTarget;
