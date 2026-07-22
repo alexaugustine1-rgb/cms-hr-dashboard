@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.21.0 | **Last updated:** 21 Jul 2026 — Submit tab restructured (TA/Admin/Payroll redirect), Ops Review live from action_tasks + monthly_hc_snapshot, weekly_reports rebuild guard removed, HRBP period bar synced.
+**Version:** 3.22.0 | **Last updated:** 22 Jul 2026 — HRBP Connects This Month/Last Month now aggregate across weeks (Phase F, f7fe184); KNOWLEDGE.md housekeeping — stale PENDING hashes fixed, Recent Commits table replaced (Phase G, c2c80a4).
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -11,7 +11,7 @@
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
 
-### 22 Jul 2026 — HRBP Connects month aggregation + KNOWLEDGE.md housekeeping (commit f7fe184)
+### 22 Jul 2026 — HRBP Connects month aggregation + KNOWLEDGE.md housekeeping (commits f7fe184, c2c80a4)
 
 #### Phase F — HRBP Connects: This Month / Last Month now aggregate across weeks (commit f7fe184)
 - **Symptom (audit 22 Jul):** "This Month" and "Last Month" buttons in the global period bar were silent no-ops on HRBP Connects — confirmed by reading `_setOvPreset()` HRBP block (added 71bf7ec): only `week`/`lastweek` were mapped; month paths left `_hrbpWkTarget=''` and the inner `if` never fired.
