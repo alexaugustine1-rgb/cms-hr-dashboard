@@ -13699,7 +13699,18 @@ async function sbBoot(user){
       dcRows.forEach(function(row) {
         if (!row.data) return;
         if (row.id==='fnf'        && row.row_count>0) { FNF_DATA        = row.data; window.FNF_CACHE_DATE        = row.uploaded_at||null; console.log('[sbBoot] FNF_DATA:',row.row_count,'rows'); }
-        if (row.id==='resignation' && row.row_count>0) { CMS_RES_DATA   = row.data; window.RES_CACHE_DATE         = row.uploaded_at||null; console.log('[sbBoot] CMS_RES_DATA:',row.row_count,'rows'); }
+        if (row.id==='resignation' && row.row_count>0) {
+          CMS_RES_DATA = row.data;
+          // Retroactively patch tier on cached rows stored before the fix (were all 'Regular')
+          if (CMS_RES_DATA && CUSTOMER_LIST && CUSTOMER_LIST.length) {
+            var _bt={};
+            CUSTOMER_LIST.forEach(function(c){if(c.n)_bt[String(c.n).toUpperCase().trim().replace(/\s+/g,' ')]=c.t||'Regular';});
+            var _blt=function(n){if(!n)return'Regular';var k=String(n).toUpperCase().trim().replace(/\s+/g,' ');if(_bt[k])return _bt[k];for(var j in _bt){if(j.indexOf(k)>=0||k.indexOf(j)>=0)return _bt[j];}return'Regular';};
+            CMS_RES_DATA=CMS_RES_DATA.map(function(r){return Object.assign({},r,{tier:_blt(r.customer)});});
+          }
+          window.RES_CACHE_DATE = row.uploaded_at||null;
+          console.log('[sbBoot] CMS_RES_DATA:',row.row_count,'rows');
+        }
         if (row.id==='od' && row.row_count>0) { window.OD_CACHE_DATE=row.uploaded_at||null;
           // New structure: {months, monthArr, monthSummary} — or legacy flat array
           if (row.data && row.data.months) {
