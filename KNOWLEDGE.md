@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.22.0 | **Last updated:** 22 Jul 2026 — HRBP Connects This Month/Last Month now aggregate across weeks (Phase F, f7fe184); KNOWLEDGE.md housekeeping — stale PENDING hashes fixed, Recent Commits table replaced (Phase G, c2c80a4).
+**Version:** 3.22.1 | **Last updated:** 06 Aug 2026 — Resignation & Backfill tab: tier hardcoded to 'Regular' on every eSep upload, fixed (commit PENDING).
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,13 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 06 Aug 2026 — Resignation & Backfill tab: tier hardcoded to 'Regular' on every eSep upload (commit PENDING)
+- **Symptom (Alex, 6 Aug):** Resignation & Backfill tab rows showed the customer name correctly but tier was wrong on every row — badge always read "Regular" regardless of the account's real tier, the tier filter buttons (Platinum/Gold/Silver) returned nothing, and the Platinum/Gold-No-Req escalation stat card silently undercounted.
+- **Root cause:** `processResignationData()` (the eSep upload parser) hardcoded `tier: 'Regular'` in the row-mapping step instead of deriving it from the account. Customer name was correctly pulled from the sheet (`CustomerNa`/`Customer Name`/`CustomerName`), but tier was never looked up — unlike the TA candidate → prospective_joiners sync, which does call `_lookupTier()`.
+- **Fix:** added a `_resLookupTier()` helper inside `processResignationData()`, sourced from the global `CUSTOMER_LIST` cache (populated in `sbBoot` at every login from `customer_accounts` — reliable and always available). Deliberately did NOT reuse `_lookupTier()`/`_tierMap` — that map is only populated inside `_loadHRCycleData`, which runs solely when the Hiring Report tab has been opened, so it would silently return 'Regular' for everyone on a fresh session. Same fuzzy substring-match fallback as `_lookupTier`, defaulting to 'Regular' only when no account match is found. `tier:` now reads `_resLookupTier(cust_name)`.
+- **Backfill needed:** the fix only applies to eSep uploads going forward. Existing rows already sitting in `data_cache` (id='resignation') still carry the old bad tier — re-upload the current eSep file once after deploying to backfill correct tiers into both the cache and the boot literal.
+- Files touched: `index.html` (`processResignationData`, ~line 15705).
 
 ### 22 Jul 2026 — HRBP Connects month aggregation + KNOWLEDGE.md housekeeping (commits f7fe184, c2c80a4)
 

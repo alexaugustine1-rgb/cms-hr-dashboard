@@ -15733,6 +15733,23 @@ async function processResignationData(wb) {
 
   log('Processing '+rows.length+' eSep records for Resignation tab…','info');
 
+  // Build a customer→tier lookup from CUSTOMER_LIST (populated at boot from
+  // customer_accounts — reliable, unlike _tierMap which only fills once the
+  // Hiring Report tab has been opened). Same fuzzy-match approach as _lookupTier.
+  const _resTierMap = {};
+  (CUSTOMER_LIST||[]).forEach(function(c){
+    if (c.n) _resTierMap[String(c.n).toUpperCase().trim().replace(/\s+/g,' ')] = c.t || 'Regular';
+  });
+  const _resLookupTier = (custName) => {
+    if (!custName) return 'Regular';
+    const k = String(custName).toUpperCase().trim().replace(/\s+/g,' ');
+    if (_resTierMap[k]) return _resTierMap[k];
+    for (const key in _resTierMap) {
+      if (key.indexOf(k)>=0 || k.indexOf(key)>=0) return _resTierMap[key];
+    }
+    return 'Regular';
+  };
+
   // Only include rows that are actionable:
   // - EmpStatus is not 'Existing' (those are active employees, not resigned)
   // - LWD is in future OR within last 90 days (older cases are stale, not actionable)
@@ -15765,14 +15782,15 @@ async function processResignationData(wb) {
     const finalSt  = g(r,'FinalStatus');
     const days_since  = daysDiff(res_raw);
     const days_to_lwd = lwd_raw ? Math.floor((new Date(String(lwd_raw).split(' ')[0])-today)/86400000) : 0;
+    const cust_name   = g(r,'CustomerNa','Customer Name','CustomerName');
     return {
       emp_code:     g(r,'EmployeeCode','Employee Code'),
       name:         g(r,'EmployeeName','Employee Name').replace(/^(Mr\.|Ms\.|Mrs\.)\s*/,'').trim(),
       designation:  '',
       location:     '',
       region:       g(r,'Region'),
-      customer:     g(r,'CustomerNa','Customer Name','CustomerName'),
-      tier:         'Regular',
+      customer:     cust_name,
+      tier:         _resLookupTier(cust_name),
       resign_date:  fmt(res_raw),
       lwd:          fmt(lwd_raw),
       days_since, days_to_lwd,
