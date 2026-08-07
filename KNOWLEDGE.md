@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.23.1 | **Last updated:** 06 Aug 2026 — Resignation tab: hide Closed-req rows (not actionable); "N resolved" chip + corrected footer denominator.
+**Version:** 3.23.2 | **Last updated:** 07 Aug 2026 — Resignation tab: No Backfill disposition — RMG can mark positions not being replaced; mandatory reason + description; stored in account_positions_log.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,16 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 07 Aug 2026 — Resignation tab: No Backfill disposition (commit 9d09787)
+- **Problem:** Positions where the account contract ended or headcount was deliberately not replaced sat permanently in the "No hire request raised" red list with no way to resolve them. The 225 "No Req" count was inflated with non-gaps.
+- **Fix:** Third disposition added alongside "Req Raised" and "No Req". RMG/admin users see a **No Backfill** button on every unlinked row. Clicking it expands an inline form in the row with: (1) reason dropdown — mandatory: Contract ended / HC reduction / Client decision / Other; (2) description textarea — mandatory free text. On confirm, writes to `account_positions_log` with `position_type='No Backfill'`, `no_backfill_reason=<dropdown>`, `notes=<description text>`, `req_status='Cancelled'`, `backfill_emp_code=<emp_code>`. No `zinghr_req_id` required.
+- **DB:** Added `no_backfill_reason text` column to `account_positions_log`. Description stored in existing `notes` column. Single source of truth — same table as req links and ZingHR positions.
+- **`_loadResBackfillMap` update:** Now selects `position_type,no_backfill_reason,notes`. Handles `position_type='No Backfill'` rows without requiring `zinghr_req_id` — sets `{ no_backfill: true, nb_reason, nb_notes }` on the map entry.
+- **`renderResignation` update:** Per-row overlay sets `no_backfill/nb_reason/nb_notes` when map entry has `no_backfill=true`. `noBackfillCount` strips these rows before the active/past split (same pattern as `closedReqCount`) so `platGoldNoReq`, stat cards, and R1 failure counts stay clean. Filter bar: "N no backfill" chip separate from "N req closed". Footer: combined hidden count with per-type breakdown.
+- **Guard:** If an employee already has a req linked (position_type ≠ 'No Backfill' AND zinghr_req_id set), `markNoBackfill` requires a confirmation before overriding.
+- **New functions:** `_toggleResNBForm(empCode)` (DOM toggle, no re-render), `markNoBackfill(empCode)` (validates, writes, reloads map, re-renders).
+- Files touched: `index.html` (renderResignation, _loadResBackfillMap, new helpers); `account_positions_log` (new column `no_backfill_reason`).
 
 ### 06 Aug 2026 (session 2, follow-up) — Resignation tab: hide Closed-req rows (commit d1ac350)
 - **Change:** Rows where the auto-matched backfill req has `req_status = 'Closed'` are now stripped from the Resignation tab before the active/past split. "Closed" is set only by ZingHR report upload (not manual), so it's authoritative — position was filled or req was cancelled; neither is actionable on this tab.
