@@ -8848,6 +8848,11 @@ function renderResignation(){
     }
     return _out;
   });
+  // Strip rows whose backfill req is already Closed — position was either
+  // filled or cancelled via ZingHR upload. Not actionable here; count shown
+  // as a chip in the filter bar so they remain discoverable.
+  var closedReqCount = data.filter(function(r){ return r.req_stage==='Closed'; }).length;
+  data = data.filter(function(r){ return r.req_stage !== 'Closed'; });
   // Split: active (future LWD) vs recently left (past LWD)
   var dataActive = data.filter(function(r){return (r.days_to_lwd||0)>=0;});
   var dataPast   = data.filter(function(r){return (r.days_to_lwd||0)<0;});
@@ -8967,12 +8972,14 @@ function renderResignation(){
     +'<span style="width:1px;height:18px;background:var(--border);margin:0 4px"></span>'
     +'<span style="font-size:11px;color:var(--muted)">Req:</span>'+qf
     +'<span style="width:1px;height:18px;background:var(--border);margin:0 4px"></span>'
-    +'<span style="font-size:11px;color:var(--muted)">R1:</span>'+r1f+'</div>'
+    +'<span style="font-size:11px;color:var(--muted)">R1:</span>'+r1f
+    +(closedReqCount>0?'<span style="width:1px;height:18px;background:var(--border);margin:0 8px"></span><span title="Backfill req closed in ZingHR — position filled or cancelled. Not shown in main list." style="font-size:10px;color:var(--muted);padding:2px 9px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);cursor:default">'+closedReqCount+' resolved</span>':'')
+    +'</div>'
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
     +'<div style="display:grid;grid-template-columns:170px 160px 80px 70px 70px 80px 1fr 90px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
     +['Employee','Account / Exit Reason','Region','Resigned','LWD','Days Left','Hire Request Status','R1'].map(function(h){return'<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';}).join('')+'</div>'
     +(rows||'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>')+'</div>'
-    +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+data.length+' of '+CMS_RES_DATA.length+' active resignations</div>'
+    +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+data.length+' of '+(CMS_RES_DATA.length-closedReqCount)+' actionable resignations'+(closedReqCount?' &nbsp;&middot;&nbsp;<span style="color:var(--muted2)">'+closedReqCount+' resolved (req closed) hidden</span>':'')+'</div>'
     +'</div>';
 }
 
