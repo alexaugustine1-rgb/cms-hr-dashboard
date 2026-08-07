@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.23.0 | **Last updated:** 06 Aug 2026 — Resignation & Backfill tab: built resignation→req linking via account_positions_log.backfill_emp_code (auto-match + RMG manual-link fallback); req column was never populated before.
+**Version:** 3.23.1 | **Last updated:** 06 Aug 2026 — Resignation tab: hide Closed-req rows (not actionable); "N resolved" chip + corrected footer denominator.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,12 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 06 Aug 2026 (session 2, follow-up) — Resignation tab: hide Closed-req rows (commit d1ac350)
+- **Change:** Rows where the auto-matched backfill req has `req_status = 'Closed'` are now stripped from the Resignation tab before the active/past split. "Closed" is set only by ZingHR report upload (not manual), so it's authoritative — position was filled or req was cancelled; neither is actionable on this tab.
+- **Implementation:** `closedReqCount` computed post-overlay, pre-split. `data` filtered to exclude Closed rows. All downstream counts (`platGoldNoReq`, R1 failure, stat cards) are automatically clean because the filter happens before the split. Filter bar gets a **"N resolved"** chip (with tooltip) when count > 0. Footer denominator changed from `CMS_RES_DATA.length` to `CMS_RES_DATA.length - closedReqCount` with a muted "N resolved hidden" note.
+- **Note:** The separate TA/RMG tab tracks open positions with pipeline detail. This tab only needs to show unresolved gaps.
+- Files touched: `index.html` (`renderResignation`).
 
 ### 06 Aug 2026 (session 2) — Resignation & Backfill tab: build req-link join (was never implemented)
 - **Symptom (Alex, 6 Aug):** All 262 of 262 rows in the Resignation & Backfill tab showed "No hire request raised". Every row, including active Platinum/Gold accounts.
