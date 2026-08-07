@@ -8717,18 +8717,27 @@ var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
       var map = {};
       try {
         var res = await _sb.from('account_positions_log')
-          .select('id,zinghr_req_id,backfill_emp_code,req_status,status,req_age_days')
+          .select('id,zinghr_req_id,backfill_emp_code,req_status,status,req_age_days,position_type,no_backfill_reason,notes')
           .not('backfill_emp_code','is',null);
         if (res.error) throw res.error;
         (res.data||[]).forEach(function(p){
           var k = String(p.backfill_emp_code||'').trim().toUpperCase();
-          if (!k || !p.zinghr_req_id) return;
-          map[k] = {
-            pos_id: p.id,
-            req_id: p.zinghr_req_id,
-            stage:  (typeof _rmgEffStatus==='function') ? _rmgEffStatus(p) : (p.req_status||'Open'),
-            age:    p.req_age_days||0
-          };
+          if (!k) return;
+          if (p.position_type === 'No Backfill') {
+            map[k] = {
+              pos_id:      p.id,
+              no_backfill: true,
+              nb_reason:   p.no_backfill_reason||'',
+              nb_notes:    p.notes||''
+            };
+          } else if (p.zinghr_req_id) {
+            map[k] = {
+              pos_id: p.id,
+              req_id: p.zinghr_req_id,
+              stage:  (typeof _rmgEffStatus==='function') ? _rmgEffStatus(p) : (p.req_status||'Open'),
+              age:    p.req_age_days||0
+            };
+          }
         });
       } catch(e) { console.warn('[_loadResBackfillMap]', e.message); }
       window._resBackfillMap = map;
@@ -8812,6 +8821,89 @@ var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
       }
     }
 
+    function _toggleResNBForm(empCode){
+      var f = document.getElementById('resNBForm_'+empCode);
+      if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function markNoBackfill(empCode){
+      var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+      var canMark = role.role==='admin'||role.role==='rmg'||role.function_type==='rmg';
+      if(!canMark){
+        if(typeof showToast==='function') showToast('Read-only — contact RMG to update','error');
+        return;
+      }
+      var reasonEl = document.getElementById('resNBReason_'+empCode);
+      var notesEl  = document.getElementById('resNBNotes_'+empCode);
+      var reason = (reasonEl&&reasonEl.value||'').trim();
+      var notes  = (notesEl&&notesEl.value||'').trim();
+      if(!reason){
+        if(typeof showToast==='function') showToast('Select a reason first','error');
+        return;
+      }
+      if(!notes){
+        if(typeof showToast==='function') showToast('Add a description before confirming','error');
+        return;
+      }
+      var resRow=(CMS_RES_DATA||[]).find(function(r){return String(r.emp_code||'').trim()===String(empCode).trim();});
+      if(!resRow){
+        if(typeof showToast==='function') showToast('Could not find that resignation record','error');
+        return;
+      }
+      var user=(role.display_name)||'resignation_tab';
+      try {
+        var existing = await _sb.from('account_positions_log')
+          .select('id,position_type,zinghr_req_id')
+          .eq('backfill_emp_code', empCode)
+          .limit(1);
+        if(existing.error) throw existing.error;
+        var posRow = existing.data && existing.data[0];
+
+        if(posRow && posRow.zinghr_req_id && posRow.position_type !== 'No Backfill'){
+          var ok = confirm('Employee '+empCode+' already has req '+posRow.zinghr_req_id+' linked. Mark as No Backfill and remove the req link?');
+          if(!ok) return;
+        }
+
+        if(posRow){
+          var upd = await _sb.from('account_positions_log').update({
+            position_type:      'No Backfill',
+            req_status:         'Cancelled',
+            zinghr_req_id:      null,
+            no_backfill_reason: reason,
+            notes:              notes,
+            updated_by:         user,
+            updated_at:         new Date().toISOString()
+          }).eq('id', posRow.id);
+          if(upd.error) throw upd.error;
+        } else {
+          var ins = await _sb.from('account_positions_log').insert({
+            account_name:       resRow.customer||null,
+            region:             resRow.region||null,
+            designation:        resRow.designation||null,
+            position_type:      'No Backfill',
+            backfill_emp_code:  empCode,
+            backfill_emp_name:  resRow.name||null,
+            req_status:         'Cancelled',
+            no_backfill_reason: reason,
+            notes:              notes,
+            raised_by:          user,
+            raised_by_id:       (_sbUser&&_sbUser.id)||null,
+            updated_by:         user,
+            updated_at:         new Date().toISOString(),
+            created_at:         new Date().toISOString()
+          });
+          if(ins.error) throw ins.error;
+        }
+        await _loadResBackfillMap();
+        var el=document.getElementById('tab-resignation');
+        if(el) el.innerHTML=renderResignation();
+        if(typeof showToast==='function') showToast('Marked as no backfill','success');
+      } catch(e){
+        if(typeof showToast==='function') showToast('Failed: '+e.message,'error');
+        else alert('Failed: '+e.message);
+      }
+    }
+
 function renderResignation(){
   // Hard-enforce region for non-Pan India users regardless of filter state
   if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India' && !_isMultiRegion()) {
@@ -8842,17 +8934,27 @@ function renderResignation(){
     // upload time, since RMG can link/raise a req at any point afterward.
     var _link = (window._resBackfillMap||{})[String(r.emp_code||'').trim().toUpperCase()];
     if (_link) {
-      _out.req_id    = _link.req_id;
-      _out.req_stage = _link.stage;
-      _out.req_age   = _link.age;
+      if (_link.no_backfill) {
+        _out.no_backfill = true;
+        _out.nb_reason   = _link.nb_reason;
+        _out.nb_notes    = _link.nb_notes;
+      } else {
+        _out.req_id    = _link.req_id;
+        _out.req_stage = _link.stage;
+        _out.req_age   = _link.age;
+      }
     }
     return _out;
   });
   // Strip rows whose backfill req is already Closed — position was either
   // filled or cancelled via ZingHR upload. Not actionable here; count shown
   // as a chip in the filter bar so they remain discoverable.
-  var closedReqCount = data.filter(function(r){ return r.req_stage==='Closed'; }).length;
+  var closedReqCount   = data.filter(function(r){ return r.req_stage==='Closed'; }).length;
   data = data.filter(function(r){ return r.req_stage !== 'Closed'; });
+  // Strip rows deliberately marked No Backfill by RMG/admin — deliberate
+  // decision (contract ended, HC reduction, etc.). Also not actionable here.
+  var noBackfillCount  = data.filter(function(r){ return r.no_backfill===true; }).length;
+  data = data.filter(function(r){ return r.no_backfill !== true; });
   // Split: active (future LWD) vs recently left (past LWD)
   var dataActive = data.filter(function(r){return (r.days_to_lwd||0)>=0;});
   var dataPast   = data.filter(function(r){return (r.days_to_lwd||0)<0;});
@@ -8900,10 +9002,26 @@ function renderResignation(){
     var r1Badge=r.r1_status==='Accepted'?'<span style="font-size:10px;color:var(--green)">&#10003; Approved</span>':'<span style="font-size:10px;color:var(--red);font-weight:600">&#9888; Pending</span>';
     var _canLinkReq = (typeof _sbRole!=='undefined'&&_sbRole&&(_sbRole.role==='admin'||_sbRole.role==='rmg'||_sbRole.function_type==='rmg'));
     var _noReqBadge = '<span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(248,113,113,.15);color:#f87171">&#9888; No hire request raised</span>'
-      + (_canLinkReq ? '<div style="display:flex;gap:4px;align-items:center;margin-top:4px">'
+      + (_canLinkReq ? '<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:4px">'
           +'<input type="text" placeholder="Req ID" id="resLinkReq_'+esc(r.emp_code)+'" style="width:64px;font-size:10px;padding:3px 5px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
-          +'<button onclick="linkResignationReq(\''+esc(r.emp_code)+'\')" style="font-size:10px;padding:3px 9px;background:var(--accent);color:var(--bg);border:none;border-radius:4px;cursor:pointer;font-weight:600">Link</button>'
-          +'</div>' : '');
+          +'<button onclick="linkResignationReq(\''+esc(r.emp_code)+'\')" style="font-size:10px;padding:3px 9px;background:var(--accent);color:var(--bg);border:none;border-radius:4px;cursor:pointer;font-weight:600">Link Req</button>'
+          +'<button onclick="_toggleResNBForm(\''+esc(r.emp_code)+'\')" style="font-size:10px;padding:3px 9px;background:var(--surface3);color:var(--muted);border:1px solid var(--border);border-radius:4px;cursor:pointer">No Backfill</button>'
+          +'</div>'
+          +'<div id="resNBForm_'+esc(r.emp_code)+'" style="display:none;margin-top:6px;padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px">'
+          +'<div style="font-size:10px;color:var(--muted);margin-bottom:5px;font-weight:600">Mark position as not being backfilled</div>'
+          +'<select id="resNBReason_'+esc(r.emp_code)+'" style="width:100%;font-size:10px;padding:4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);margin-bottom:5px">'
+          +'<option value="">Select reason (mandatory)…</option>'
+          +'<option value="Contract ended">Contract ended</option>'
+          +'<option value="HC reduction">HC reduction</option>'
+          +'<option value="Client decision">Client decision</option>'
+          +'<option value="Other">Other</option>'
+          +'</select>'
+          +'<textarea id="resNBNotes_'+esc(r.emp_code)+'" placeholder="Description (mandatory) — e.g. contract not renewed as of Jun 2026, client confirmed no replacement" style="width:100%;font-size:10px;padding:4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);resize:vertical;box-sizing:border-box;margin-bottom:5px" rows="2"></textarea>'
+          +'<div style="display:flex;gap:4px">'
+          +'<button onclick="markNoBackfill(\''+esc(r.emp_code)+'\')" style="font-size:10px;padding:3px 10px;background:#f87171;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:600">Confirm No Backfill</button>'
+          +'<button onclick="_toggleResNBForm(\''+esc(r.emp_code)+'\')" style="font-size:10px;padding:3px 9px;background:var(--surface2);color:var(--muted);border:1px solid var(--border);border-radius:4px;cursor:pointer">Cancel</button>'
+          +'</div></div>'
+        : '');
     var reqCell=r.req_id?'<div style="font-size:11px"><span style="color:var(--green);font-weight:500">&#10003; REQ-'+esc(r.req_id)+'</span> <span style="color:var(--muted);font-size:10px">'+r.req_age+'d old</span></div><div style="font-size:10px;color:var(--muted)">'+esc(r.req_stage)+(r.req_ta?' &middot; '+esc(r.req_ta.split(',')[0]):'')+' </div>':_noReqBadge;
     var rowBg=r.days_to_lwd<0?'rgba(248,113,113,.06)':r.days_to_lwd<30?'rgba(248,113,113,.02)':'';
     var isPlatGoldNoReq = (r.tier==='Platinum'||r.tier==='Gold') && !r.req_id;
@@ -8973,13 +9091,14 @@ function renderResignation(){
     +'<span style="font-size:11px;color:var(--muted)">Req:</span>'+qf
     +'<span style="width:1px;height:18px;background:var(--border);margin:0 4px"></span>'
     +'<span style="font-size:11px;color:var(--muted)">R1:</span>'+r1f
-    +(closedReqCount>0?'<span style="width:1px;height:18px;background:var(--border);margin:0 8px"></span><span title="Backfill req closed in ZingHR — position filled or cancelled. Not shown in main list." style="font-size:10px;color:var(--muted);padding:2px 9px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);cursor:default">'+closedReqCount+' resolved</span>':'')
+    +(closedReqCount>0?'<span style="width:1px;height:18px;background:var(--border);margin:0 8px"></span><span title="Backfill req closed in ZingHR — position filled or cancelled. Not shown in main list." style="font-size:10px;color:var(--muted);padding:2px 9px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);cursor:default">'+closedReqCount+' req closed</span>':'')
+    +(noBackfillCount>0?'<span style="width:1px;height:18px;background:var(--border);margin:0 8px"></span><span title="Marked No Backfill by RMG — deliberate decision, not a gap. Not shown in main list." style="font-size:10px;color:var(--muted);padding:2px 9px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);cursor:default">'+noBackfillCount+' no backfill</span>':'')
     +'</div>'
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
     +'<div style="display:grid;grid-template-columns:170px 160px 80px 70px 70px 80px 1fr 90px;padding:8px 14px;background:var(--surface3);border-bottom:1px solid var(--border)">'
     +['Employee','Account / Exit Reason','Region','Resigned','LWD','Days Left','Hire Request Status','R1'].map(function(h){return'<div style="font-family:\'DM Mono\',monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)">'+h+'</div>';}).join('')+'</div>'
     +(rows||'<div style="padding:40px;text-align:center;color:var(--muted)">No records match filters</div>')+'</div>'
-    +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+data.length+' of '+(CMS_RES_DATA.length-closedReqCount)+' actionable resignations'+(closedReqCount?' &nbsp;&middot;&nbsp;<span style="color:var(--muted2)">'+closedReqCount+' resolved (req closed) hidden</span>':'')+'</div>'
+    +'<div style="margin-top:8px;font-size:11px;color:var(--muted)">Showing '+data.length+' of '+(CMS_RES_DATA.length-closedReqCount-noBackfillCount)+' actionable resignations'+(closedReqCount||noBackfillCount?' &nbsp;&middot;&nbsp;<span style="color:var(--muted2)">'+(closedReqCount+noBackfillCount)+' hidden ('+[closedReqCount?closedReqCount+' req closed':'',noBackfillCount?noBackfillCount+' no backfill':''].filter(Boolean).join(' · ')+')</span>':'')+'</div>'
     +'</div>';
 }
 
