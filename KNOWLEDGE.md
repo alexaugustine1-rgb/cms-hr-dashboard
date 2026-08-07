@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.22.1 | **Last updated:** 06 Aug 2026 — Resignation & Backfill tab: tier hardcoded to 'Regular' on every eSep upload, fixed (commit PENDING).
+**Version:** 3.23.0 | **Last updated:** 06 Aug 2026 — Resignation & Backfill tab: built resignation→req linking via account_positions_log.backfill_emp_code (auto-match + RMG manual-link fallback); req column was never populated before.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,16 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 06 Aug 2026 (session 2) — Resignation & Backfill tab: build req-link join (was never implemented)
+- **Symptom (Alex, 6 Aug):** All 262 of 262 rows in the Resignation & Backfill tab showed "No hire request raised". Every row, including active Platinum/Gold accounts.
+- **Diagnosis:** Not a broken join — the join simply never existed. `processResignationData()` initialises `req_id`/`req_stage`/`req_age`/`req_ta` to blank on every eSep upload, and no code anywhere ever populated them. RMG Workspace already had a working `backfill_emp_code` field on `account_positions_log` — when RMG raises a backfill req they fill that field in. That data just never flowed back to the Resignation tab.
+- **Fix — auto-match:** New `_loadResBackfillMap()` async function queries `account_positions_log` for all rows where `backfill_emp_code IS NOT NULL`, builds a map keyed by `emp_code.toUpperCase()`, and stores it as `window._resBackfillMap`. Called at boot in `sbBoot()` (same timing as `CUSTOMER_LIST` — available before first Resignation tab render). Inside `renderResignation()`'s per-row `.map()`, each row now checks `_resBackfillMap[emp_code]` and overlays `req_id`, `req_stage`, `req_age` from the live map, overriding whatever was frozen in `CMS_RES_DATA` at upload time.
+- **Fix — manual fallback:** New `linkResignationReq(empCode)` function. For RMG/admin users, each "No hire request raised" row now shows a small Req ID text input + "Link" button inline. On submit: if the req ID already has an `account_positions_log` row, it updates `backfill_emp_code` on that row (with a guard that requires confirmation if the req is already linked to a different employee). If no row exists for that req ID, it inserts a new `account_positions_log` row with `position_type='Backfill — Resignation'`. Both paths write to the same `account_positions_log.backfill_emp_code` column RMG Workspace uses — single source of truth.
+- **Fix — platGoldNoReq escalation card:** The Platinum/Gold-No-Req stat card was filtering `CMS_RES_DATA` directly, bypassing the live req-link overlay. Changed source to `dataAllMerged` (the post-overlay active+past merged set), so the escalation count now reflects actual unlinked reqs.
+- **Known limitation:** `account_positions_log` has no recruiter column, so `req_ta` stays blank on auto-matched rows. The TA name won't appear next to the req status on the Resignation tab even when auto-matched. Manual-linked rows also have no TA, for the same reason. No action needed unless we add a recruiter join later.
+- **Coverage caveat:** Auto-match coverage depends on how consistently RMG has been filling `backfill_emp_code` in RMG Workspace. Run `SELECT count(*) FROM account_positions_log WHERE backfill_emp_code IS NOT NULL AND backfill_emp_code != ''` after deploying to gauge real coverage. If coverage is low, the manual-link fallback will carry the gap until RMG catches up.
+- Files touched: `index.html` (`renderResignation`, `sbBoot`, new helpers `_loadResBackfillMap` + `linkResignationReq`).
 
 ### 06 Aug 2026 — Resignation & Backfill tab: tier hardcoded to 'Regular' on every eSep upload (commit PENDING)
 - **Symptom (Alex, 6 Aug):** Resignation & Backfill tab rows showed the customer name correctly but tier was wrong on every row — badge always read "Regular" regardless of the account's real tier, the tier filter buttons (Platinum/Gold/Silver) returned nothing, and the Platinum/Gold-No-Req escalation stat card silently undercounted.

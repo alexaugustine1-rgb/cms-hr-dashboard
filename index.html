@@ -8705,6 +8705,113 @@ function _filterBtn(label,active,onclick){
 
 // ── RESIGNATION & BACKFILL ────────────────────────────────────────────────
 var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
+
+    // Live req-link map: resigned emp_code (upper-trimmed) → backfill req details.
+    // Sourced from account_positions_log.backfill_emp_code — the SAME field RMG
+    // already fills in from RMG Workspace when they raise a backfill req. Read
+    // fresh (not baked into CMS_RES_DATA at eSep-upload time) because a req can be
+    // raised/linked at any point after the resignation was uploaded — freezing it
+    // at upload time would go stale immediately, same class of bug as the tier fix.
+    window._resBackfillMap = window._resBackfillMap || {};
+    async function _loadResBackfillMap(){
+      var map = {};
+      try {
+        var res = await _sb.from('account_positions_log')
+          .select('id,zinghr_req_id,backfill_emp_code,req_status,status,req_age_days')
+          .not('backfill_emp_code','is',null);
+        if (res.error) throw res.error;
+        (res.data||[]).forEach(function(p){
+          var k = String(p.backfill_emp_code||'').trim().toUpperCase();
+          if (!k || !p.zinghr_req_id) return;
+          map[k] = {
+            pos_id: p.id,
+            req_id: p.zinghr_req_id,
+            stage:  (typeof _rmgEffStatus==='function') ? _rmgEffStatus(p) : (p.req_status||'Open'),
+            age:    p.req_age_days||0
+          };
+        });
+      } catch(e) { console.warn('[_loadResBackfillMap]', e.message); }
+      window._resBackfillMap = map;
+      return map;
+    }
+
+    // Manual fallback: link a resignation to a ZingHR req ID directly from the
+    // Resignation tab, writing into the same account_positions_log.backfill_emp_code
+    // column RMG Workspace uses — single source of truth, not a second competing store.
+    async function linkResignationReq(empCode){
+      var role=(typeof _sbRole!=='undefined'&&_sbRole)||{};
+      var canLink = role.role==='admin'||role.role==='rmg'||role.function_type==='rmg';
+      if(!canLink){
+        if(typeof showToast==='function') showToast('Read-only — contact RMG to link a req','error');
+        return;
+      }
+      var input=document.getElementById('resLinkReq_'+empCode);
+      var reqId=(input&&input.value||'').trim();
+      if(!reqId){
+        if(typeof showToast==='function') showToast('Enter a ZingHR req ID first','error');
+        return;
+      }
+      var resRow=(CMS_RES_DATA||[]).find(function(r){return String(r.emp_code||'').trim()===String(empCode).trim();});
+      if(!resRow){
+        if(typeof showToast==='function') showToast('Could not find that resignation record','error');
+        return;
+      }
+      var user=(role.display_name)||'resignation_tab';
+      try {
+        var existing = await _sb.from('account_positions_log')
+          .select('id,backfill_emp_code,backfill_emp_name')
+          .eq('zinghr_req_id', reqId)
+          .limit(1);
+        if (existing.error) throw existing.error;
+        var posRow = existing.data && existing.data[0];
+
+        if (posRow) {
+          // Guard: never silently steal a req already linked to a DIFFERENT employee
+          if (posRow.backfill_emp_code && String(posRow.backfill_emp_code).trim()!==String(empCode).trim()) {
+            var ok = confirm('Req '+reqId+' is already linked to employee '+posRow.backfill_emp_code
+              +(posRow.backfill_emp_name?' ('+posRow.backfill_emp_name+')':'')
+              +'. Re-link it to '+(resRow.name||empCode)+' ('+empCode+') instead?');
+            if (!ok) return;
+          }
+          var upd = await _sb.from('account_positions_log').update({
+            backfill_emp_code: empCode,
+            backfill_emp_name: resRow.name||null,
+            updated_by: user,
+            updated_at: new Date().toISOString()
+          }).eq('id', posRow.id);
+          if (upd.error) throw upd.error;
+        } else {
+          // No existing position-log row for this req — create one, marked as
+          // raised from the Resignation tab so RMG can see its origin.
+          var ins = await _sb.from('account_positions_log').insert({
+            zinghr_req_id:      reqId,
+            account_name:       resRow.customer||null,
+            region:             resRow.region||null,
+            designation:        resRow.designation||null,
+            position_type:      'Backfill — Resignation',
+            backfill_emp_code:  empCode,
+            backfill_emp_name:  resRow.name||null,
+            req_status:         'Open',
+            req_age_days:       0,
+            raised_by:          user,
+            raised_by_id:       (_sbUser&&_sbUser.id)||null,
+            updated_by:         user,
+            updated_at:         new Date().toISOString(),
+            created_at:         new Date().toISOString()
+          });
+          if (ins.error) throw ins.error;
+        }
+
+        await _loadResBackfillMap();
+        var el=document.getElementById('tab-resignation');
+        if(el) el.innerHTML=renderResignation();
+        if(typeof showToast==='function') showToast('Linked to REQ-'+reqId,'success');
+      } catch(e) {
+        if(typeof showToast==='function') showToast('Link failed: '+e.message,'error');
+        else alert('Link failed: '+e.message);
+      }
+    }
+
 function renderResignation(){
   // Hard-enforce region for non-Pan India users regardless of filter state
   if(typeof _sbRole !== 'undefined' && _sbRole && _sbRole.region && _sbRole.region !== 'Pan India' && !_isMultiRegion()) {
@@ -8731,6 +8838,14 @@ function renderResignation(){
         if (!isNaN(_rD)) _out.days_since = Math.floor((_today - _rD)/86400000);
       } catch(e){}
     }
+    // Live req link — overrides whatever was frozen into CMS_RES_DATA at
+    // upload time, since RMG can link/raise a req at any point afterward.
+    var _link = (window._resBackfillMap||{})[String(r.emp_code||'').trim().toUpperCase()];
+    if (_link) {
+      _out.req_id    = _link.req_id;
+      _out.req_stage = _link.stage;
+      _out.req_age   = _link.age;
+    }
     return _out;
   });
   // Split: active (future LWD) vs recently left (past LWD)
@@ -8751,6 +8866,10 @@ function renderResignation(){
     if(_resR1==='Approved') out=out.filter(function(r){return r.r1_status==='Accepted';});
     return out;
   }
+  // Keep the full (region/tier/req/R1-unfiltered) merged set around for the
+  // Platinum/Gold escalation card below — it must reflect the live req link
+  // too, not the raw CMS_RES_DATA which never carries req_id past upload time.
+  var dataAllMerged = dataActive.concat(dataPast);
   var filtActive = applyFilters(dataActive);
   var filtPast   = applyFilters(dataPast);
   // Combined for stat cards
@@ -8763,7 +8882,7 @@ function renderResignation(){
     if(ta!==tb) return ta-tb;
     return a.days_to_lwd-b.days_to_lwd;
   });
-  var platGoldNoReq=CMS_RES_DATA.filter(function(r){return['Platinum','Gold'].includes(r.tier)&&!r.req_id;});
+  var platGoldNoReq=dataAllMerged.filter(function(r){return['Platinum','Gold'].includes(r.tier)&&!r.req_id;});
   var _resRfOpts=_isMultiRegion()?['All'].concat(_myRegions()):['All','North','South','East','West'];
   var _resRfLbls=_isMultiRegion()?{'All':'All my regions'}:{};
   var rf=_resRfOpts.map(function(v){return _filterBtn(_resRfLbls[v]||v,_resRegion===v,"_resRegion='"+v+"';document.getElementById('tab-resignation').innerHTML=renderResignation()");}).join('');
@@ -8774,7 +8893,13 @@ function renderResignation(){
     var urgCol=urgencyColor(r.days_to_lwd);
     var lwdLbl=r.days_to_lwd<0?'<span style="color:#f87171;font-weight:700">OVERDUE '+Math.abs(r.days_to_lwd)+'d</span>':r.days_to_lwd===999?'&#x2014;':'<span style="color:'+urgCol+';font-weight:'+(r.days_to_lwd<30?700:400)+'">'+r.days_to_lwd+'d</span>';
     var r1Badge=r.r1_status==='Accepted'?'<span style="font-size:10px;color:var(--green)">&#10003; Approved</span>':'<span style="font-size:10px;color:var(--red);font-weight:600">&#9888; Pending</span>';
-    var reqCell=r.req_id?'<div style="font-size:11px"><span style="color:var(--green);font-weight:500">&#10003; REQ-'+esc(r.req_id)+'</span> <span style="color:var(--muted);font-size:10px">'+r.req_age+'d old</span></div><div style="font-size:10px;color:var(--muted)">'+esc(r.req_stage)+(r.req_ta?' &middot; '+esc(r.req_ta.split(',')[0]):'')+' </div>':'<span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(248,113,113,.15);color:#f87171">&#9888; No hire request raised</span>';
+    var _canLinkReq = (typeof _sbRole!=='undefined'&&_sbRole&&(_sbRole.role==='admin'||_sbRole.role==='rmg'||_sbRole.function_type==='rmg'));
+    var _noReqBadge = '<span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(248,113,113,.15);color:#f87171">&#9888; No hire request raised</span>'
+      + (_canLinkReq ? '<div style="display:flex;gap:4px;align-items:center;margin-top:4px">'
+          +'<input type="text" placeholder="Req ID" id="resLinkReq_'+esc(r.emp_code)+'" style="width:64px;font-size:10px;padding:3px 5px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text)">'
+          +'<button onclick="linkResignationReq(\''+esc(r.emp_code)+'\')" style="font-size:10px;padding:3px 9px;background:var(--accent);color:var(--bg);border:none;border-radius:4px;cursor:pointer;font-weight:600">Link</button>'
+          +'</div>' : '');
+    var reqCell=r.req_id?'<div style="font-size:11px"><span style="color:var(--green);font-weight:500">&#10003; REQ-'+esc(r.req_id)+'</span> <span style="color:var(--muted);font-size:10px">'+r.req_age+'d old</span></div><div style="font-size:10px;color:var(--muted)">'+esc(r.req_stage)+(r.req_ta?' &middot; '+esc(r.req_ta.split(',')[0]):'')+' </div>':_noReqBadge;
     var rowBg=r.days_to_lwd<0?'rgba(248,113,113,.06)':r.days_to_lwd<30?'rgba(248,113,113,.02)':'';
     var isPlatGoldNoReq = (r.tier==='Platinum'||r.tier==='Gold') && !r.req_id;
     var rowBorder = isPlatGoldNoReq ? 'border-left:3px solid #a78bfa;' : '';
@@ -13661,6 +13786,10 @@ async function sbBoot(user){
     }
   } catch(e) { console.warn('[customer_accounts]', e.message); }
   _loadWfhApprovedSet();
+  // Load resignation→req backfill links — same reliability requirement as
+  // CUSTOMER_LIST above (must be ready before the Resignation tab first
+  // renders, not lazily on some other tab's visit — see KNOWLEDGE.md tier fix).
+  if (typeof _loadResBackfillMap === 'function') { try { await _loadResBackfillMap(); } catch(e) { console.warn('[_loadResBackfillMap boot]', e.message); } }
 
   // Load TEAM_MEMBERS from user_profiles — replaces hardcoded array
   try {
