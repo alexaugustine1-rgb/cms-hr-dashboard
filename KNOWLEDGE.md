@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.23.2 | **Last updated:** 07 Aug 2026 — Resignation tab: No Backfill disposition — RMG can mark positions not being replaced; mandatory reason + description; stored in account_positions_log.
+**Version:** 3.23.3 | **Last updated:** 11 Aug 2026 — Bug fix: null designation crash on Link Req and No Backfill inserts into account_positions_log.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,13 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 11 Aug 2026 — Bug fix: null designation crash on Link Req + No Backfill (commit b16424d)
+- **Symptom (Pruthvi, 11 Aug):** Clicking "Link Req" or "Confirm No Backfill" on the Resignation tab showed a red toast: `null value in column "designation" of relation "account_positions_log" violates not-null constraint`. Both actions failed; no data was written.
+- **Root cause:** Both INSERT paths used `designation: resRow.designation||null`. When an employee's designation field is blank or missing in `CMS_RES_DATA` (empty string from the eSep parser), the JS expression `''||null` evaluates to `null` — which violates the NOT NULL constraint on `account_positions_log.designation`.
+- **Fix:** Changed both INSERTs to `designation: resRow.designation||''`. An empty string satisfies the constraint; the field can be corrected later via the RMG Workspace grid if needed.
+- **Affected functions:** `linkResignationReq()` (line ~8799) and `markNoBackfill()` (line ~8882).
+- Files touched: `index.html` (2-line change, no schema change).
 
 ### 07 Aug 2026 — Resignation tab: No Backfill disposition (commit 9d09787)
 - **Problem:** Positions where the account contract ended or headcount was deliberately not replaced sat permanently in the "No hire request raised" red list with no way to resolve them. The 225 "No Req" count was inflated with non-gaps.
