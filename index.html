@@ -8796,7 +8796,7 @@ var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
             zinghr_req_id:      reqId,
             account_name:       resRow.customer||null,
             region:             resRow.region||null,
-            designation:        resRow.designation||null,
+            designation:        resRow.designation||'',
             position_type:      'Backfill — Resignation',
             backfill_emp_code:  empCode,
             backfill_emp_name:  resRow.name||null,
@@ -8879,7 +8879,7 @@ var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
           var ins = await _sb.from('account_positions_log').insert({
             account_name:       resRow.customer||null,
             region:             resRow.region||null,
-            designation:        resRow.designation||null,
+            designation:        resRow.designation||'',
             position_type:      'No Backfill',
             backfill_emp_code:  empCode,
             backfill_emp_name:  resRow.name||null,
