@@ -8868,6 +8868,7 @@ var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
           var upd = await _sb.from('account_positions_log').update({
             position_type:      'No Backfill',
             req_status:         'Cancelled',
+            status:             'Closed',
             zinghr_req_id:      null,
             no_backfill_reason: reason,
             notes:              notes,
@@ -8884,6 +8885,7 @@ var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
             backfill_emp_code:  empCode,
             backfill_emp_name:  resRow.name||null,
             req_status:         'Cancelled',
+            status:             'Closed',
             no_backfill_reason: reason,
             notes:              notes,
             raised_by:          user,
@@ -10302,7 +10304,7 @@ async function loadRMGTab(){
     var res=await _sb.from('account_positions_log')
       .select('*').order('req_age_days',{ascending:false});
     if(res.error) throw res.error;
-    _rmgData=res.data||[];
+    _rmgData=(res.data||[]).filter(function(r){ return r.position_type!=='No Backfill'; });
     var acRes=await _sb.from('customer_accounts')
       .select('name,region').eq('active',true).order('name');
     _rmgAccounts=(acRes.data||[]);
@@ -10792,7 +10794,7 @@ function _rmgReconFlag(r){
 function _rmgEffStatus(r){
   if((r.status||'')==='Closed') return 'Closed';
   if((r.req_status||'')==='Not in ZingHR') return 'Not in ZingHR';
-  if((r.req_status||'')==='Closed') return 'Closed';
+  if((r.req_status||'')==='Closed'||(r.req_status||'')==='Cancelled') return 'Closed';
   if(r.req_status===null||r.req_status===undefined||r.req_status==='') return 'Not in ZingHR';
   return 'Open';
 }

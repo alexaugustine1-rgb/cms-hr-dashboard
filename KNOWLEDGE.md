@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.24.0 | **Last updated:** 13 Aug 2026 — Excel export added to Resignation &amp; Backfill tab.
+**Version:** 3.24.1 | **Last updated:** 13 Aug 2026 — Fix: No Backfill rows showing as Open/Backfill—Resignation in RMG Workspace.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,19 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 13 Aug 2026 — Fix: No Backfill rows showing as Open/Backfill—Resignation in RMG Workspace (commit TBD)
+- **Reported by:** Pruthvi (RMG) — after using the No Backfill feature for ~15 Exide and Syngene resignations, RMG Workspace still showed those positions as Position Type: "Backfill — Resignation", Status: "Open", no req ID, no Elah ID, as if nothing had happened.
+- **Diagnosis:** Step 2 diagnostic query confirmed the DB writes were correct — all rows had `position_type='No Backfill'`, `req_status='Cancelled'`, `no_backfill_reason` populated. Two code bugs caused the bad display:
+  - **Bug A — `_rmgEffStatus()` blind spot:** `req_status='Cancelled'` fell through all conditional checks (which only handled 'Closed', 'Not in ZingHR', null) and returned `'Open'`. So No Backfill rows counted toward `_rmgOpenCnt` and appeared in the Open-status filter.
+  - **Bug B — position_type dropdown defaulted to first option:** The `<select>` for Position Type in the RMG grid listed only `['Backfill — Resignation', 'Backfill — Internal Movement', 'New Position', 'Relief', 'Redeployment']`. Since 'No Backfill' was not in the list, the browser silently selected the first option — 'Backfill — Resignation' — explaining exactly what Alex saw.
+- **Fixes applied:**
+  1. `loadRMGTab()`: filter `position_type='No Backfill'` rows out of `_rmgData` at load time — they are not actionable open positions, so they should not appear in the grid, the Open count, or the Excel export.
+  2. `_rmgEffStatus()`: added `|| (r.req_status||'')==='Cancelled'` to the Closed check as defense-in-depth.
+  3. `markNoBackfill()`: both the UPDATE and INSERT paths now also write `status='Closed'`, so future No Backfill rows are semantically clean in the DB (not just position_type='No Backfill').
+  4. SQL UPDATE: `UPDATE account_positions_log SET status='Closed', updated_at=NOW() WHERE position_type='No Backfill' AND status='Open'` — patched all 15 existing rows (11 Exide via Pruthvi + 1 Exide via Chander Mohan + 2 Syngene via Pruthvi + 1 more) without requiring Pruthvi to re-click anything.
+- **After-state confirmed:** All Exide/Syngene No Backfill rows show `position_type='No Backfill'`, `req_status='Cancelled'`, `status='Closed'`. No Backfill rows are excluded from `_rmgData` on next RMG tab load — they will not appear in the grid, Open count, or export.
+- Files touched: `index.html` (4 locations: loadRMGTab, _rmgEffStatus, markNoBackfill UPDATE, markNoBackfill INSERT); `account_positions_log` (15 rows updated via SQL, no schema change).
 
 ### 13 Aug 2026 — Excel export added to Resignation &amp; Backfill tab (commit f68d9e1)
 - **Feature:** Added `exportResignationXlsx()` function and a matching ⬇ Excel button in the tab header, following the exact same pattern as `exportRMGWorkspaceXlsx()` on the RMG Workspace tab.
