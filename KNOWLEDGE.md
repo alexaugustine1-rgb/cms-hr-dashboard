@@ -11,7 +11,7 @@
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
 
-### 13 Aug 2026 — Fix: No Backfill rows showing as Open/Backfill—Resignation in RMG Workspace (commit TBD)
+### 13 Aug 2026 — Fix: No Backfill rows showing as Open/Backfill—Resignation in RMG Workspace (commit bc36e08)
 - **Reported by:** Pruthvi (RMG) — after using the No Backfill feature for ~15 Exide and Syngene resignations, RMG Workspace still showed those positions as Position Type: "Backfill — Resignation", Status: "Open", no req ID, no Elah ID, as if nothing had happened.
 - **Diagnosis:** Step 2 diagnostic query confirmed the DB writes were correct — all rows had `position_type='No Backfill'`, `req_status='Cancelled'`, `no_backfill_reason` populated. Two code bugs caused the bad display:
   - **Bug A — `_rmgEffStatus()` blind spot:** `req_status='Cancelled'` fell through all conditional checks (which only handled 'Closed', 'Not in ZingHR', null) and returned `'Open'`. So No Backfill rows counted toward `_rmgOpenCnt` and appeared in the Open-status filter.
