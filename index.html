@@ -8794,7 +8794,7 @@ var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
           // raised from the Resignation tab so RMG can see its origin.
           var ins = await _sb.from('account_positions_log').insert({
             zinghr_req_id:      reqId,
-            account_name:       resRow.customer||null,
+            account_name:       resRow.customer||'',
             region:             resRow.region||null,
             designation:        resRow.designation||'',
             position_type:      'Backfill — Resignation',
@@ -8878,7 +8878,7 @@ var _resRegion='All',_resTier='All',_resReq='All',_resR1='All';
           if(upd.error) throw upd.error;
         } else {
           var ins = await _sb.from('account_positions_log').insert({
-            account_name:       resRow.customer||null,
+            account_name:       resRow.customer||'',
             region:             resRow.region||null,
             designation:        resRow.designation||'',
             position_type:      'No Backfill',
