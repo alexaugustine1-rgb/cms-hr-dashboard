@@ -9063,11 +9063,15 @@ function renderResignation(){
       +'<div style="font-size:11px;font-weight:600;color:'+col+';margin-top:4px">'+lbl+' &middot; R1:'+(r.r1_status||'Pending')+'</div>'
       +'</div>';
   }).join('');
+  window._resExportData = data;
   return'<div style="padding:28px 36px;max-width:1200px">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">'
     +'<div><div style="font-family:\'DM Mono\',monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent)">Resignation &amp; Backfill Intelligence</div>'
     +'<div style="font-family:\'Bebas Neue\',sans-serif;font-size:28px;letter-spacing:1px;color:var(--text);margin-top:2px">Active Resignations &#x2192; Hire Status</div></div>'
-    +'<div style="font-size:11px;color:var(--muted)">Data as of '+(function(d){if(!d)return'--';var _dt=new Date(d);return _dt.getDate().toString().padStart(2,'0')+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_dt.getMonth()]+' '+_dt.getFullYear();})(window.RES_CACHE_DATE||null)+'  &middot; '+S.total_res+' active resignations</div></div>'
+    +'<div style="display:flex;align-items:center;gap:12px">'
+    +'<div style="font-size:11px;color:var(--muted)">Data as of '+(function(d){if(!d)return'--';var _dt=new Date(d);return _dt.getDate().toString().padStart(2,'0')+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][_dt.getMonth()]+' '+_dt.getFullYear();})(window.RES_CACHE_DATE||null)+'  &middot; '+S.total_res+' active resignations</div>'
+    +'<button onclick="exportResignationXlsx()" style="padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;border:1px solid var(--accent);background:none;color:var(--accent);cursor:pointer">&#11015; Excel</button>'
+    +'</div></div>'
     // R1 process failure alert
     +(r1FailPast.length>0 ? '<div style="background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px">'
       +'<span style="font-size:18px">⚠️</span>'
@@ -10585,6 +10589,42 @@ function exportRMGWorkspaceXlsx(){
   var mm=String(today.getMonth()+1).padStart(2,'0');
   var dd=String(today.getDate()).padStart(2,'0');
   XLSX.writeFile(wb,'rmg_workspace_'+yyyy+'-'+mm+'-'+dd+'.xlsx');
+}
+
+function exportResignationXlsx(){
+  var role=_sbRole||{};
+  var canView=role.role==='admin'||role.role==='rmg'||role.function_type==='rmg'
+    ||role.function_type==='hrbp'||role.function_type==='ta'
+    ||role.role==='hrops'||role.function_type==='hrops';
+  if(!canView){showToast('Access denied','error');return;}
+  var data=(window._resExportData||[]).slice();
+  if(!data.length){showToast('No rows to export','error');return;}
+  var rows=data.map(function(r){
+    return {
+      'Employee':r.name||'',
+      'Emp Code':r.emp_code||'',
+      'Designation':r.designation||'',
+      'Account':r.customer||'',
+      'Tier':r.tier||'',
+      'Region':r.region||'',
+      'Resigned':r.resign_date||'',
+      'LWD':r.lwd||'',
+      'Days to LWD':typeof r.days_to_lwd==='number'?r.days_to_lwd:'',
+      'Req ID':r.req_id||'',
+      'Req Status':r.req_stage||'',
+      'Req Age (d)':r.req_id?(r.req_age||0):'',
+      'R1 Status':r.r1_status||'',
+      'Reason':r.reason||''
+    };
+  });
+  var wb=XLSX.utils.book_new();
+  var ws=XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb,ws,'Resignation & Backfill');
+  var today=new Date();
+  var yyyy=today.getFullYear();
+  var mm=String(today.getMonth()+1).padStart(2,'0');
+  var dd=String(today.getDate()).padStart(2,'0');
+  XLSX.writeFile(wb,'resignation_backfill_'+yyyy+'-'+mm+'-'+dd+'.xlsx');
 }
 
 function _renderRMGAddForm(){

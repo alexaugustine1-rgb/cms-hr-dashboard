@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.23.3 | **Last updated:** 11 Aug 2026 — Bug fix: null designation crash on Link Req and No Backfill inserts into account_positions_log.
+**Version:** 3.24.0 | **Last updated:** 13 Aug 2026 — Excel export added to Resignation &amp; Backfill tab.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,14 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 13 Aug 2026 — Excel export added to Resignation &amp; Backfill tab (commit TBD)
+- **Feature:** Added `exportResignationXlsx()` function and a matching ⬇ Excel button in the tab header, following the exact same pattern as `exportRMGWorkspaceXlsx()` on the RMG Workspace tab.
+- **Respects active filters:** `renderResignation()` now sets `window._resExportData = data` (the final sorted+filtered array, after region/tier/req/R1 filters and No Backfill/Closed stripping) just before its `return`. The export function reads this global so the downloaded file always matches what the user sees on screen.
+- **Columns exported:** Employee, Emp Code, Designation, Account, Tier, Region, Resigned, LWD, Days to LWD, Req ID, Req Status, Req Age (d), R1 Status, Reason. No-backfill and closed-req rows are excluded (already stripped from `data` before export).
+- **Role gate:** Same canView check as RMG export (admin / rmg / hrbp / ta / hrops).
+- **Filename:** `resignation_backfill_YYYY-MM-DD.xlsx`; sheet name `Resignation & Backfill`.
+- Files touched: `index.html` only (new function + one `window._resExportData` assignment + header button).
 
 ### 11 Aug 2026 — Bug fix: null designation crash on Link Req + No Backfill (commit b16424d)
 - **Symptom (Pruthvi, 11 Aug):** Clicking "Link Req" or "Confirm No Backfill" on the Resignation tab showed a red toast: `null value in column "designation" of relation "account_positions_log" violates not-null constraint`. Both actions failed; no data was written.
