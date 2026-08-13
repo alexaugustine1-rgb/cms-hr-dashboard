@@ -11,7 +11,7 @@
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
 
-### 13 Aug 2026 — Excel export added to Resignation &amp; Backfill tab (commit TBD)
+### 13 Aug 2026 — Excel export added to Resignation &amp; Backfill tab (commit f68d9e1)
 - **Feature:** Added `exportResignationXlsx()` function and a matching ⬇ Excel button in the tab header, following the exact same pattern as `exportRMGWorkspaceXlsx()` on the RMG Workspace tab.
 - **Respects active filters:** `renderResignation()` now sets `window._resExportData = data` (the final sorted+filtered array, after region/tier/req/R1 filters and No Backfill/Closed stripping) just before its `return`. The export function reads this global so the downloaded file always matches what the user sees on screen.
 - **Columns exported:** Employee, Emp Code, Designation, Account, Tier, Region, Resigned, LWD, Days to LWD, Req ID, Req Status, Req Age (d), R1 Status, Reason. No-backfill and closed-req rows are excluded (already stripped from `data` before export).
