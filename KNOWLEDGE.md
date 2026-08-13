@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.24.1 | **Last updated:** 13 Aug 2026 — Fix: No Backfill rows showing as Open/Backfill—Resignation in RMG Workspace.
+**Version:** 3.24.3 | **Last updated:** 13 Aug 2026 — Fix null account_name crash on Link Req / No Backfill; password resets for Salma &amp; Somasri.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,18 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 13 Aug 2026 — Fix null account_name crash on Link Req / No Backfill (commit 6e59bb8)
+- **Reported by:** Pruthvi's team — "Link Req" for Aviral Agarwal (SUTHERLAND row visible in screenshot) threw: `null value in column "account_name" of relation "account_positions_log" violates not-null constraint`.
+- **Root cause:** Same pattern as the designation fix (11 Aug b16424d). `resRow.customer||null` evaluates to `null` when an employee's account field is blank in CMS_RES_DATA (eSep upload had no account for that employee). `account_positions_log.account_name` is NOT NULL.
+- **Fix:** Both INSERT paths changed from `resRow.customer||null` → `resRow.customer||''`: (1) `linkResignationReq()` INSERT branch; (2) `markNoBackfill()` INSERT branch. Empty string satisfies the constraint; RMG can fill account name manually via the Workspace grid.
+- Files touched: `index.html` (2-line change, no schema change).
+
+### 13 Aug 2026 — Password reset: Salma Saifi and Somasri Sukumar Samanta
+- **Reported by:** Salma (TA, North) and Somasri (HRBP, West) unable to log in — "invalid login credentials".
+- **Diagnosis:** Token columns were clean (no NULL issue). Passwords had been set to something other than `CMS2026` at account creation and were no longer known.
+- **Fix:** Both passwords reset via SQL `crypt('CMS2026', gen_salt('bf', 10))`. Verified `matches_cms2026 = true` for both after update. No code change.
+- **Credentials:** `salma.saifi@cmsitservices.com` / `CMS2026`; `somasri.samanta@cmsitservices.com` / `CMS2026`.
 
 ### 13 Aug 2026 — Fix: No Backfill rows showing as Open/Backfill—Resignation in RMG Workspace (commit bc36e08)
 - **Reported by:** Pruthvi (RMG) — after using the No Backfill feature for ~15 Exide and Syngene resignations, RMG Workspace still showed those positions as Position Type: "Backfill — Resignation", Status: "Open", no req ID, no Elah ID, as if nothing had happened.
