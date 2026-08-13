@@ -1,92 +1,38 @@
 # CMS HR Ops Command Centre — Claude Code Rules
 
-## Standing Rules — Non-Negotiable
-- str_replace ONLY. Never rewrite the full file.
-- node --check after every single edit. Extract scripts to temp .js first. No output = clean pass.
-- If node --check errors: print 3 lines above and 3 below before fixing.
-- Single HTML file. No splitting. No build toolchain. No npm.
+> **Read `KNOWLEDGE.md` first.** It is the single source of truth for this project
+> (architecture, schema, parsers, users, phases, known debt, history). This file
+> holds only the non-negotiable guardrails that must load every session. Keep it
+> short — put project knowledge in KNOWLEDGE.md, not here.
+
+## Non-Negotiable Rules
+- **str_replace ONLY.** Never rewrite the full index.html. If a task seems to need a
+  full rewrite, STOP and tell Alex.
+- **node --check after EVERY edit.** Extract scripts to a temp .js first (Node v24
+  won't check .html directly). No output = clean pass. On error, print 3 lines above
+  and below before fixing.
+- Single HTML file. No splitting, no build toolchain, no npm/webpack/React.
 - All persistent data in Supabase. No hardcoded arrays with real data.
-- Git commits: email alexaugustine1@gmail.com
+- Git commits authored as alexaugustine1@gmail.com.
 - After every phase: explicit PASS/FAIL checklist before stopping.
 
-## Known Crash Patterns
-Any of these crashes login with "ReferenceError: sbLogin is not defined":
-- Orphaned em-dash in string concatenation
-- await inside a non-async function
-- Block-scoped function declarations inside try blocks
-- const or let declared inside try blocks
-node --check catches all of these.
+## Overwrite Prevention (silent full-rewrites have lost features before)
+- Note index.html line count before the session. If output differs by >~50 lines
+  from input, STOP — do not commit (likely a silent rewrite). New-function additions
+  over 50 lines are OK but must be documented in the commit report.
+- Before committing, grep — if any return 0 results, DO NOT commit:
+  `grep -n "saveODAction\|loadWFHODActions\|_wfhOdActions\|multiBadge" index.html`
 
-## Shared Tables — FLAG Before Touching
-Shared with OPS360. Additive only. No drops or type changes.
-- workforce_intel, absent_cases, resignation_tracker
-- planned_leaves, employee_account_mapping
+## Known Crash Patterns (all caught by node --check)
+Crashes login with "ReferenceError: sbLogin is not defined":
+orphaned em-dash in string concatenation · await in a non-async function ·
+block-scoped function declarations inside try blocks · const/let inside try blocks.
 
-## Current File State
-- File: index.html | Lines: 11,250 | Latest commit: c67b8b8
-- Phases complete: 1, 2, 3, 6B-DBT, L&D Tab Redesign (full)
-- Next: Phase 4 — Account Health tab (read KNOWLEDGE.md for spec)
+## Cowork note
+index.html lives in Dropbox; the bash sandbox may show a stale/truncated copy. The
+Read/Edit file tools see the true file. To node --check in Cowork, extract edited
+regions via Read into a temp .js in the outputs dir and check that.
 
-## Key Functions
-- sbBoot(): search "async function sbBoot"
-- renderOverview(): search "function renderOverview"
-- renderAccountHealth(): search "function renderAccountHealth"
-- nameMatch() LOCAL: inside renderAccountHealth() line ~6291
-- normaliseCustomer(): search "function normaliseCustomer"
-- processReqTAT(): search "async function processReqTAT"
-- processCandidate(): search "async function processCandidate"
-- handleUploadFile(): search "function handleUploadFile"
-- switchTab() LIVE: search "function switchTab" — second occurrence is live
-- computeHRBPScore(): search "function computeHRBPScore"
-- loadLDTab(): search "async function loadLDTab" — drives full L&D tab
-- _loadLDSessions(): search "async function _loadLDSessions"
-- _loadLDPipeline(): search "async function _loadLDPipeline"
-- CUSTOMER_LIST: global, populated at boot from customer_accounts
-- TA_ACTIVE_REQS: global, populated by processReqTAT
-- _absentCases: global, populated by loadAbsentCases()
-- WI: hardcoded const line ~845, overridden by Supabase at boot
-
-## Architecture Notes
-- Absent resolution chip: reads window._absResolvedCount and
-  window._absTotalCount — set in sbBoot() separately.
-  Do NOT modify loadAbsentCases() query.
-- Duplicate switchTab: BOTH now call loadLDTab. Second definition is live.
-- L&D tab: renderLD() returns static shell only. loadLDTab() loads all
-  data async (training_sessions + training_pipeline). Fires on render()
-  and switchTab('ld'). Month selector id = ldMonthSel.
-- HRBP form has TWO training sections:
-  1. "Training Conducted This Week" → f_hrbp_training_entries → training_sessions
-  2. "Training Programs Planned / Conducted" → f_hrbp_pipeline → training_pipeline
-- LD form: f_ld_pipeline (structured grid) replaces old f_ld_upcoming free-text.
-  f_ld_upcoming hidden input kept for backward compat.
-
-## Supabase
-- Project ID: mzyrcrkwgbqgwajkjdnp
-- pg_trgm extension: enabled
-- execute_sql for DML | apply_migration for DDL
-
-## OVERWRITE PREVENTION — MANDATORY
-
-Features get silently lost when sessions rewrite the full file.
-These rules are non-negotiable:
-
-1. str_replace ONLY. Never write the full file. If a task
-   feels like it needs a full rewrite, STOP and tell Alex
-   instead of proceeding.
-
-2. Before every session: note the current line count of
-   index.html. If the output file differs by more than 50
-   lines from the input, STOP — do not commit. A change of
-   50+ lines likely means a full rewrite happened silently.
-
-3. Features known to have been lost in past rewrites and
-   must be preserved:
-   - HRBP action dropdown on OD/WFH tab (wfh_od_actions)
-   - _wfhOdActions cache + saveODAction() function
-   - loadWFHODActions() function
-   - multi-instance badge in renderOD rows
-   These must be present in index.html at every commit.
-
-4. Before committing, grep for these function names:
-   grep -n "saveODAction\|loadWFHODActions\|_wfhOdActions\|multiBadge" index.html
-   If any return 0 results, DO NOT commit.
+## End of session
+Update `KNOWLEDGE.md` per its update protocol (schema/phase/commit/role/parser/bug
+changes). Do not create new "knowledge" files — keep it all in KNOWLEDGE.md.
