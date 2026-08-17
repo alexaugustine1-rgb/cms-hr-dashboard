@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.27.0 | **Last updated:** 17 Aug 2026 — TA Pipeline open-req grid filters by period (reqs raised in window); period switching fixed; Hiring Report driven by the period bar; candidate upload 0-row fix.
+**Version:** 3.27.1 | **Last updated:** 17 Aug 2026 — TA Pipeline: grid filters by period, ageing KPIs span all open reqs; period switching fixed; Hiring Report driven by the period bar; candidate upload 0-row fix.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,17 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 17 Aug 2026 — Ageing KPIs span all open reqs while the grid stays period-filtered (commit 080ff46)
+- **Decision by Alex**, after seeing 236f48c: the grid should follow the period bar, but ageing KPIs should always compute across **all** open requisitions. Reason: a req raised this month cannot be &gt;45d old, so a period-scoped Critical count reads 0 by arithmetic and hides the real backlog. This supersedes the "window &lt;45d" caveat added in 236f48c, which has been removed.
+- **Structure — the pattern to follow when adding anything to this tab:**
+  - `_taApplyFilters(arr, setLiveCounts)` holds every filter EXCEPT period (region / tier / type / billing / recruiter / customer). Both views share it, so they can only ever differ on period.
+  - `data` = period-filtered + those filters → **the grid, Open Reqs, Plat/Gold Open, phantom count, unassigned alert, customer matrix.**
+  - `agingData` = ALL open reqs + those filters, never period-scoped → **Critical &gt;45d, the Req Aging band strip (counts and percentages), the Platinum/Gold critical alert.** Falls through to `data` when the period filter is off, so nothing is computed twice.
+  - Rule of thumb: if a metric is about *how long something has been waiting*, it belongs on `agingData`. If it is about *what came in during a window*, it belongs on `data`.
+- **Labelling:** Critical reads "all open reqs" while the period filter is on; the aging strip header appends "all N open reqs, not the period slice"; Open Reqs and Plat/Gold Open keep the "raised &lt;period&gt;" note.
+- **Verified:** local browser run with synthetic reqs (46 raised Aug @12d, 29 raised Jul @33d, 50 older @270d) — Open Reqs renders 46 / 29 / 125 across This Month / Last Month / All open while Critical &gt;45d holds at 50 in all three and the aging strip reports 125 throughout. No console errors.
+- Files touched: `index.html` (16,937 → 16,949 lines). No schema change, no new query.
 
 ### 17 Aug 2026 — TA Pipeline open-req grid now filters by period (commit 236f48c)
 - **Decision by Alex:** answered the open question from 3.26.1 — yes, the open-req grid should filter by the period bar. This deliberately changes what the tab measures.
@@ -1153,7 +1164,7 @@ unchanged) → Vercel team setup with custom domain → GitHub repo transfer.
 ## Known Debt — Carry Forward
 - **`updated_at` is not an event date.** On every bulk-upserted table it records when the parser last touched the row, so date-range filters on it return "all" or "nothing". 849 of 856 `req_tracker` Closed rows share one `updated_at`. Use `filled_date` / `ecode_date` / `doj` instead. Audit any other range filter still using `updated_at`.
 - **`head:true` on Supabase counts returns undefined** against the client this app pins. Use `select(col,{count:'exact'}).limit(1)` and read `.count`, and always handle the null case loudly.
-- ~~**Open-req grid period filter — undecided.**~~ DECIDED 17 Aug 2026 — Alex chose yes. Shipped in 236f48c, default on, with an All-open toggle. Consequence to remember: "Open Reqs" on TA Pipeline is now "open reqs raised in the period", and Critical &gt;45d is 0 for any window under 45 days.
+- ~~**Open-req grid period filter — undecided.**~~ DECIDED 17 Aug 2026 — Alex chose yes. Shipped in 236f48c, default on, with an All-open toggle; ageing scope settled in 080ff46. Net behaviour: "Open Reqs" on TA Pipeline means "open reqs raised in the period", while Critical &gt;45d, the aging strip and the Plat/Gold alert always span all open reqs. Do not "align" the two — they are deliberately different scopes.
 - **Period bar coverage:** `_setOvPreset()` notifies Overview, Ops Review, L&D, HRBP, TA Pipeline and Hiring Report. Any tab added later must be wired in there explicitly — there is no generic broadcast, which is exactly how TA Pipeline and Hiring Report ended up ignoring the bar.
 - **Jan–Mar 2026 candidate gap (permanent):** ta_candidates has no ecode_date before 2026-04-02. ZingHR's ~3-month download limit means it cannot be backfilled from ZingHR. Only recoverable from Super Employee Master if ever needed.
 - **17 Aug candidate data not in DB:** ta_candidates still holds only the 10 Jul batch (426 rows). Needs a re-upload of the 17 Aug candidate transactional file on the fixed build (commit 2f6fdfb). Failures are now loud (red banner names the column/error).
