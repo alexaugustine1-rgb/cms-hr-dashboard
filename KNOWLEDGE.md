@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.26.1 | **Last updated:** 17 Aug 2026 — TA Pipeline period switching actually works (closures scoped on filled_date, not updated_at); Hiring Report driven by the period bar; candidate upload 0-row fix; ZingHR 3-month export limit documented.
+**Version:** 3.27.0 | **Last updated:** 17 Aug 2026 — TA Pipeline open-req grid filters by period (reqs raised in window); period switching fixed; Hiring Report driven by the period bar; candidate upload 0-row fix.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,17 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 17 Aug 2026 — TA Pipeline open-req grid now filters by period (commit 236f48c)
+- **Decision by Alex:** answered the open question from 3.26.1 — yes, the open-req grid should filter by the period bar. This deliberately changes what the tab measures.
+- **Implementation:** new `_taPeriodFilter` global (default **true**). `renderTAPipeline()` filters `allData` — not just `data` — on `req_raised_date` inside `_ovFrom.._ovTo`, so the grid, the KPI cards, the unassigned alert and the phantom count all describe the same set.
+- **`req_raised_date` is safe to filter on:** all 125 open `req_tracker` rows have it populated (0 nulls), range 2025-10-30 → 2026-08-16. It is already carried onto `TA_ACTIVE_REQS` by the boot-time direct load, so no extra query.
+- **Real distribution** (17 Aug 2026): All open **125** · raised This Month **46** · raised Last Month **29**.
+- **Toggle:** a 📅 chip in the filter bar switches between "Raised &lt;period&gt;" and "All open reqs", with an "N raised earlier hidden" counter. The full pipeline is always one click away — added because a period-scoped view of an open-req list can otherwise look like data loss.
+- **Critical &gt;45d caveat (important, do not "fix"):** a req raised inside a window shorter than 45 days cannot yet be &gt;45d old, so with This Month selected Critical reads **0 by arithmetic**, not because the backlog cleared. The card shows an amber "window &lt;45d — see All open reqs" hint whenever `_taPeriodFilter` is on and the window is ≤45 days. The aging/backlog picture lives in the All-open view.
+- **KPI cards** now say "raised &lt;period&gt;" instead of "as of Live" whenever the filter is on, via a local `scopeNote()`.
+- **Verified:** local browser run with synthetic reqs matching the real distribution (46 Aug / 29 Jul / 50 older) — Open Reqs renders 46 / 29 / 125 across This Month / Last Month / All open, chip label and hidden-count correct, caveat shows only on the short windows. No console errors.
+- Files touched: `index.html` (16,897 → 16,937 lines). No schema change, no new query.
 
 ### 17 Aug 2026 — TA Pipeline period switching still did nothing; two follow-up bugs (commit 3e4927f)
 - **Reported by:** Alex, after ac3dab2 shipped — "in TA pipeline tab while switching this month and last month filters, I do not see any change in data". Confirmed he was on the new build (`total_pipeline` cached as 389, the post-`getRowsAuto` row count, not the old 514), so this was not a stale deploy.
@@ -1142,7 +1153,7 @@ unchanged) → Vercel team setup with custom domain → GitHub repo transfer.
 ## Known Debt — Carry Forward
 - **`updated_at` is not an event date.** On every bulk-upserted table it records when the parser last touched the row, so date-range filters on it return "all" or "nothing". 849 of 856 `req_tracker` Closed rows share one `updated_at`. Use `filled_date` / `ecode_date` / `doj` instead. Audit any other range filter still using `updated_at`.
 - **`head:true` on Supabase counts returns undefined** against the client this app pins. Use `select(col,{count:'exact'}).limit(1)` and read `.count`, and always handle the null case loudly.
-- **Open-req grid period filter — undecided.** Whether TA Pipeline's grid should filter by `req_raised_date` within the selected window is an open question with Alex; it would change "Open Reqs" from a live snapshot into a per-period metric.
+- ~~**Open-req grid period filter — undecided.**~~ DECIDED 17 Aug 2026 — Alex chose yes. Shipped in 236f48c, default on, with an All-open toggle. Consequence to remember: "Open Reqs" on TA Pipeline is now "open reqs raised in the period", and Critical &gt;45d is 0 for any window under 45 days.
 - **Period bar coverage:** `_setOvPreset()` notifies Overview, Ops Review, L&D, HRBP, TA Pipeline and Hiring Report. Any tab added later must be wired in there explicitly — there is no generic broadcast, which is exactly how TA Pipeline and Hiring Report ended up ignoring the bar.
 - **Jan–Mar 2026 candidate gap (permanent):** ta_candidates has no ecode_date before 2026-04-02. ZingHR's ~3-month download limit means it cannot be backfilled from ZingHR. Only recoverable from Super Employee Master if ever needed.
 - **17 Aug candidate data not in DB:** ta_candidates still holds only the 10 Jul batch (426 rows). Needs a re-upload of the 17 Aug candidate transactional file on the fixed build (commit 2f6fdfb). Failures are now loud (red banner names the column/error).
