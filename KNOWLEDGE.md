@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.27.1 | **Last updated:** 17 Aug 2026 — TA Pipeline: grid filters by period, ageing KPIs span all open reqs; period switching fixed; Hiring Report driven by the period bar; candidate upload 0-row fix.
+**Version:** 3.28.0 | **Last updated:** 17 Aug 2026 — TA Pipeline reframed as Open Pipeline (stock) + Activity (flow) rows, Filled and Joined split; Hiring Report driven by the period bar; candidate upload 0-row fix.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,21 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 17 Aug 2026 — TA Pipeline reframed: Open Pipeline (stock) + Activity (flow) — commit 4a81388
+- **Raised by Alex:** "I think I am wrong here, it is important to see the total open positions also — pls advise what is the best way to frame this tab." Correct call. After 080ff46 the single KPI row was self-contradicting: Open Reqs **46** beside Critical &gt;45d **52**; Plat/Gold Open **13** beside an alert reading "30 reqs past 45d" (real Plat/Gold open: **55**); an aging strip totalling **125** under a "46" headline; and an unassigned alert saying **6** when **26** open reqs actually have no recruiter. Two scopes were sharing one row with only small grey text to separate them — worse than either scope alone.
+- **The framing principle — apply this to any pipeline-style tab.** A recruiting tab answers two different questions and they must not share a row:
+  - **Stock** — what is open right now. Point-in-time; a period filter is meaningless. Open reqs, aging, critical, Plat/Gold at risk, unassigned, filled-but-not-closed.
+  - **Flow** — what moved inside the window. Period-scoped. Raised, filled, joined, closures per recruiter, fill speed.
+- **Layout shipped:**
+  - Row 1 **"Open Pipeline"** — header reads "live · as of &lt;date&gt; · not affected by the period bar". Cards: Open Reqs · Critical &gt;45d · Plat/Gold Open · Unassigned. All read `agingData`. The aging strip, Plat/Gold critical alert, unassigned alert and filled-but-not-closed banner sit beneath it and now reconcile with the headline.
+  - Row 2 **"Activity"** — header reads "&lt;period&gt; · follows the period bar". Cards: Reqs Raised · Reqs Filled · Joined · Avg Fill Speed.
+  - Each row carries an explicit scope header, so the distinction is structural rather than a footnote. `_rowHdr()` / `_kpiCard()` are the local helpers.
+- **Filled and Joined split into separate tiles.** They were paired as "Filled → Joined" with an arrow and an "all joined ✓" verdict, implying a within-window funnel that **does not exist**: the 40 August joiners came mostly from the 80 reqs filled in July. Filled is annotated "by filled date" (`req_tracker.filled_date`), Joined "by DOJ" (`employee_master.doj`). The derived "N pending joining" line is gone — it subtracted two different cohorts. **If a real funnel is ever wanted it must be cohort-based** (of the reqs filled in this window, how many of those specific hires have joined), which is a new query, not a relabel.
+- **Alerts moved from `allData` to `agingData`.** The unassigned alert and the filled-but-not-closed banner are to-do lists, so they must count every open req, not just those raised inside the window. The unassigned alert had been under-reporting 26 as 6 — an actionable number wrong by 20.
+- **Grid period chip now defaults OFF** and is relabelled "Grid: all open reqs" / "Grid: raised &lt;period&gt;". The tab's job is working the live open pipeline, so the full list is the starting point and the period narrows it. The chip affects **only** the grid — no KPI moves when it is toggled.
+- **Verified:** local browser run against synthetic reqs mirroring the real DB (125 open, 55 plat/gold, 26 unassigned, 46 raised Aug, 29 raised Jul) — row 1 holds 125 / 50 / 55 / 26 across every period and both chip states, row 2 moves 46/18/40 (This Month) → 29/80/92 (Last Month), unassigned alert reads 26, no arrow funnel present, no console errors.
+- Files touched: `index.html` (16,949 → 16,964 lines). No schema change, no new query.
 
 ### 17 Aug 2026 — Ageing KPIs span all open reqs while the grid stays period-filtered (commit 080ff46)
 - **Decision by Alex**, after seeing 236f48c: the grid should follow the period bar, but ageing KPIs should always compute across **all** open requisitions. Reason: a req raised this month cannot be &gt;45d old, so a period-scoped Critical count reads 0 by arithmetic and hides the real backlog. This supersedes the "window &lt;45d" caveat added in 236f48c, which has been removed.
@@ -1164,7 +1179,9 @@ unchanged) → Vercel team setup with custom domain → GitHub repo transfer.
 ## Known Debt — Carry Forward
 - **`updated_at` is not an event date.** On every bulk-upserted table it records when the parser last touched the row, so date-range filters on it return "all" or "nothing". 849 of 856 `req_tracker` Closed rows share one `updated_at`. Use `filled_date` / `ecode_date` / `doj` instead. Audit any other range filter still using `updated_at`.
 - **`head:true` on Supabase counts returns undefined** against the client this app pins. Use `select(col,{count:'exact'}).limit(1)` and read `.count`, and always handle the null case loudly.
-- ~~**Open-req grid period filter — undecided.**~~ DECIDED 17 Aug 2026 — Alex chose yes. Shipped in 236f48c, default on, with an All-open toggle; ageing scope settled in 080ff46. Net behaviour: "Open Reqs" on TA Pipeline means "open reqs raised in the period", while Critical &gt;45d, the aging strip and the Plat/Gold alert always span all open reqs. Do not "align" the two — they are deliberately different scopes.
+- ~~**Open-req grid period filter — undecided.**~~ SETTLED 17 Aug 2026 across 236f48c → 080ff46 → **4a81388 (final)**. Final behaviour: KPIs are split into two labelled rows — Open Pipeline (stock, always all open reqs) and Activity (flow, always the period). The grid chip narrows **only** the grid and defaults off. Do not merge the rows or make a KPI follow the chip; that mixture is exactly what produced "Critical 52 of Open Reqs 46".
+- **Stock vs flow is the house pattern for pipeline tabs.** Anything measuring a standing backlog belongs in a stock row that ignores the period bar; anything measuring movement belongs in a period-scoped flow row. Worth applying to Hiring Report and RMG Workspace if they grow KPI rows.
+- **Filled and Joined must not be paired as a funnel** anywhere. They are different cohorts within any single window. A real funnel requires cohort tracking (reqs filled in the window → those specific hires' DOJ), which does not exist yet.
 - **Period bar coverage:** `_setOvPreset()` notifies Overview, Ops Review, L&D, HRBP, TA Pipeline and Hiring Report. Any tab added later must be wired in there explicitly — there is no generic broadcast, which is exactly how TA Pipeline and Hiring Report ended up ignoring the bar.
 - **Jan–Mar 2026 candidate gap (permanent):** ta_candidates has no ecode_date before 2026-04-02. ZingHR's ~3-month download limit means it cannot be backfilled from ZingHR. Only recoverable from Super Employee Master if ever needed.
 - **17 Aug candidate data not in DB:** ta_candidates still holds only the 10 Jul batch (426 rows). Needs a re-upload of the 17 Aug candidate transactional file on the fixed build (commit 2f6fdfb). Failures are now loud (red banner names the column/error).
