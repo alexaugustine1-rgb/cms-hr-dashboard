@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.26.0 | **Last updated:** 17 Aug 2026 — Hiring Report and TA Pipeline now driven by the period bar; candidate upload 0-row fix; ZingHR 3-month export limit documented.
+**Version:** 3.26.1 | **Last updated:** 17 Aug 2026 — TA Pipeline period switching actually works (closures scoped on filled_date, not updated_at); Hiring Report driven by the period bar; candidate upload 0-row fix; ZingHR 3-month export limit documented.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,18 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 17 Aug 2026 — TA Pipeline period switching still did nothing; two follow-up bugs (commit 3e4927f)
+- **Reported by:** Alex, after ac3dab2 shipped — "in TA pipeline tab while switching this month and last month filters, I do not see any change in data". Confirmed he was on the new build (`total_pipeline` cached as 389, the post-`getRowsAuto` row count, not the old 514), so this was not a stale deploy.
+- **Bug 1 — closures scoped on `updated_at`.** `loadTAClosedMTD()` filtered `req_tracker` on `updated_at`, which is the row's **last-write timestamp, not the closure date**. Every TAT upload rewrites it. Actual distribution: 849 of 856 Closed rows carry `updated_at = 2026-08-17`, the remaining 7 carry 2026-06-22. The period filter therefore returned all 298 attributed closures for This Month and exactly 0 for Last Month — never the reqs actually filled in the window.
+  - **Fix:** scope on `filled_date` (`.not('filled_date','is',null)` + gte/lte), matching `loadTAFilledForPeriod()`. Real distribution there: **Aug 18, Jul 80** across 293 rows with a populated `filled_date`.
+  - **General rule — do not use `updated_at` as an event date on any bulk-upserted table.** It records when the parser last touched the row. `req_tracker.filled_date`, `ta_candidates.ecode_date` and `employee_master.doj` are the real event columns.
+- **Bug 2 — the card never repainted.** `loadEMJoinerCounts()` is the async load that populates `_emWeekJoiners`, which the Filled → Joined card reads, but it repainted only `tab-overview`. On the TA Pipeline the card kept its pre-load fallback, so even correct data never reached the screen. Now repaints `tab-tapipeline` as well.
+- **Bug 3 — YTD recount silently no-oped.** The recount added in 2f6fdfb used `select('application_id',{count:'exact',head:true})`, which returns an **undefined count** against this Supabase client. `total_joined_ytd` stayed at the file-derived 0 while `ta_candidates` held 299 joiners YTD. Switched to `count:'exact'` without `head` plus `.limit(1)`; the failure path now logs a warning instead of passing silently. Existing `data_cache.ta_cand_summary` corrected to 299 via SQL.
+- **Candidate re-upload (Alex, 17 Aug 04:06 UTC) — worked.** `CandTx_2026-08-17`: 200 rows, 106 with employee codes, ECode range 6 May → 13 Aug. Prior `CandTx_2026-07-10` batch (313 rows) retained, confirming the accumulate-by-`application_id` behaviour. 513 rows total.
+- **What does and does not follow the period bar on TA Pipeline** (recorded so it is not "fixed" later): Filled → Joined, Avg Fill Speed and the recruiter closures / Avg TAT columns DO. Open Reqs, Critical &gt;45d, Plat/Gold Open and the open-req grid do NOT — they count what is open *now*. **Open question with Alex:** whether the open-req grid should additionally filter by `req_raised_date` within the window; that would turn "Open Reqs" into "reqs raised this period", a different metric. Not built pending his decision.
+- **Verified:** local browser run, no console errors; `renderTAPipeline()` emits different markup and labels per window ("Filled → Joined (1 Aug – 17 Aug)" 18→40 vs "(1 Jul – 31 Jul)" 80→92).
+- Files touched: `index.html` (16,878 → 16,897 lines); `data_cache.ta_cand_summary` (one field corrected via SQL). No schema change.
 
 ### 17 Aug 2026 — Hiring Report + TA Pipeline driven by the period bar (commit ac3dab2)
 - **Reported by:** Alex — (1) the Hiring Report waits for a cycle to be created before it shows anything, "which is not the right way"; it should follow This Month / Last Month / This Week / Last Week / Custom like other tabs. (2) Changing the period bar on the TA Pipeline changed nothing.
@@ -1128,6 +1140,9 @@ unchanged) → Vercel team setup with custom domain → GitHub repo transfer.
 ---
 
 ## Known Debt — Carry Forward
+- **`updated_at` is not an event date.** On every bulk-upserted table it records when the parser last touched the row, so date-range filters on it return "all" or "nothing". 849 of 856 `req_tracker` Closed rows share one `updated_at`. Use `filled_date` / `ecode_date` / `doj` instead. Audit any other range filter still using `updated_at`.
+- **`head:true` on Supabase counts returns undefined** against the client this app pins. Use `select(col,{count:'exact'}).limit(1)` and read `.count`, and always handle the null case loudly.
+- **Open-req grid period filter — undecided.** Whether TA Pipeline's grid should filter by `req_raised_date` within the selected window is an open question with Alex; it would change "Open Reqs" from a live snapshot into a per-period metric.
 - **Period bar coverage:** `_setOvPreset()` notifies Overview, Ops Review, L&D, HRBP, TA Pipeline and Hiring Report. Any tab added later must be wired in there explicitly — there is no generic broadcast, which is exactly how TA Pipeline and Hiring Report ended up ignoring the bar.
 - **Jan–Mar 2026 candidate gap (permanent):** ta_candidates has no ecode_date before 2026-04-02. ZingHR's ~3-month download limit means it cannot be backfilled from ZingHR. Only recoverable from Super Employee Master if ever needed.
 - **17 Aug candidate data not in DB:** ta_candidates still holds only the 10 Jul batch (426 rows). Needs a re-upload of the 17 Aug candidate transactional file on the fixed build (commit 2f6fdfb). Failures are now loud (red banner names the column/error).
