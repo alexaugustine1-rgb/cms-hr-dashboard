@@ -5054,6 +5054,39 @@ function getRows(ws) {
   return rows;
 }
 
+// Header-row-aware variant of getRows. ZingHR exports put a report title in row 0
+// and the real header row 2-3 rows down; getRows() assumes row 0, so every row
+// comes back with one junk key and every column lookup silently returns undefined.
+// Scan the first 8 rows for the first with >5 non-empty cells and use that.
+function getRowsAuto(ws) {
+  const range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
+  let hdrR=range.s.r;
+  for(let r=range.s.r;r<=Math.min(range.s.r+7,range.e.r);r++){
+    let n=0;
+    for(let c=range.s.c;c<=range.e.c;c++){
+      const cell=ws[XLSX.utils.encode_cell({r,c})];
+      if(cell&&cell.v!=null&&String(cell.v).trim())n++;
+    }
+    if(n>5){hdrR=r;break;}
+  }
+  const headers={};
+  for(let c=range.s.c;c<=range.e.c;c++){
+    const cell=ws[XLSX.utils.encode_cell({r:hdrR,c})];
+    if(cell&&cell.v!=null&&String(cell.v).trim())headers[String(cell.v).trim()]=c;
+  }
+  const rows=[];
+  for(let r=hdrR+1;r<=range.e.r;r++){
+    const row={};let any=false;
+    for(const [h,c] of Object.entries(headers)){
+      const cell=ws[XLSX.utils.encode_cell({r,c})];
+      row[h]=cell?cell.v:null;
+      if(cell&&cell.v!=null&&String(cell.v).trim())any=true;
+    }
+    if(any)rows.push(row);
+  }
+  return rows;
+}
+
 function parseDate(v) {
   if(!v)return null;
   if(v instanceof Date)return v;
@@ -10017,9 +10050,12 @@ async function loadTAClosedMTD() {
 async function loadTACandMap() {
   if (!_sb) return;
   try {
+    // Explicit limit — PostgREST caps unbounded selects at 1000 rows, which would
+    // silently truncate the stage map and make MAX(data_as_of) read stale.
     var {data,error} = await _sb.from('ta_candidates')
       .select('req_id,application_stage,interview_reached,offer_date,data_as_of')
-      .neq('req_id','');
+      .neq('req_id','')
+      .limit(50000);
     if (error || !data || !data.length) return;
     // Compute MAX(data_as_of) for header date display
     var _maxAsOf = null;
@@ -12334,8 +12370,11 @@ function taEffectiveStage(r) {
 
 async function processCandidate(wb) {
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = getRows(ws);
+  const rows = getRowsAuto(ws);
   log(rows.length+' candidate rows found','info');
+  if (!rows.length || !Object.keys(rows[0]||{}).some(function(h){return /employee code|offer status/i.test(h);}))
+    log('Candidate file: could not see Employee Code / Offer Status columns — joiner and '
+      +'prospective-joiner counts will read 0. Check the export column set.','warn');
   
   const REF = new Date(); // today — dynamic TAT calculation // March 25 2026
   const TA_NORMALIZED = {
@@ -12363,6 +12402,10 @@ async function processCandidate(wb) {
   }
   function parseEDate(v) {
     if (!v) return null;
+    // XLSX.read runs with cellDates:true, so date columns arrive as Date objects.
+    // Without this guard they fell through to the "DD MMM YYYY" split and parsed
+    // as Invalid Date — every joiner count came out 0.
+    if (v instanceof Date) return isNaN(v) ? null : v;
     const s = String(v).trim();
     const parts = s.split(' ');
     if (parts.length >= 3) {
@@ -12455,14 +12498,14 @@ async function processCandidate(wb) {
     TA_SUMMARY.cand_as_of = _candAsOf;
     TA_SUMMARY.cand_as_of_iso = _candAsOfIso;
   }
-  // Persist candidate summary fields so they survive page reload
-  try {
-    await _sb.from('data_cache').upsert({
-      id:'ta_cand_summary',
-      data:{cand_as_of:_candAsOf, cand_as_of_iso:_candAsOfIso, mar_joined:marJoined, total_pipeline:rows.length, total_joined_ytd:totalJoined},
-      row_count:1, uploaded_at:new Date().toISOString()
-    },{onConflict:'id'});
-  } catch(e){ console.warn('[processCandidate] summary persist:',e.message); }
+  // Candidate summary cache is persisted ONLY after ta_candidates rows actually
+  // land — see the end of this function. Stamping cand_as_of here meant a failed
+  // row write still advanced the header date, so the dashboard claimed a fresh
+  // candidate file while the DB still held the previous upload.
+  var _candSummaryPending = {
+    cand_as_of:_candAsOf, cand_as_of_iso:_candAsOfIso, mar_joined:marJoined,
+    total_pipeline:rows.length, total_joined_ytd:totalJoined
+  };
 // ADDITION to processCandidate — gender pipeline tracking
 // Insert after the TA_SUMMARY update block
 
@@ -12508,7 +12551,16 @@ async function processCandidate(wb) {
     var _pr = rows[_pi];
     var _pStatus = ss(_pr['Offer Status']||'');
     var _pHasCode = !!ss(_pr['Employee Code']||'');
-    var _pDojRaw = ss(_pr['Tentative Date Of Joining']||_pr['Final Date of Joining']||_pr['Final DOJ']||_pr['Expected DOJ']||'');
+    var _pDojVal = _pr['Tentative Date Of Joining']||_pr['Final Date of Joining']||_pr['Final DOJ']||_pr['Expected DOJ']||'';
+    // cellDates:true hands back Date objects. String()-ing one gives
+    // "Wed Jul 01 2026 …", which the DD-MMM-YYYY splitter below turns into a
+    // nonsense date and Postgres then rejects. Normalise here, in local time —
+    // toISOString() would shift IST midnight back a day.
+    var _pDojRaw = (_pDojVal instanceof Date)
+      ? (isNaN(_pDojVal) ? '' : _pDojVal.getFullYear()+'-'
+          +String(_pDojVal.getMonth()+1).padStart(2,'0')+'-'
+          +String(_pDojVal.getDate()).padStart(2,'0'))
+      : ss(_pDojVal);
     var _pDoj = (function(s){
       if (!s) return '';
       // Already YYYY-MM-DD
@@ -12541,7 +12593,7 @@ async function processCandidate(wb) {
         customer:       _pCustShort,
         account_tier:   (function(c){var cu=(c||'').toUpperCase().trim();if(CUSTOMER_TIER_MAP[cu])return CUSTOMER_TIER_MAP[cu];var ks=Object.keys(CUSTOMER_TIER_MAP);for(var _ti=0;_ti<ks.length;_ti++){var k=ks[_ti];if(k.length>5&&(cu.indexOf(k)>=0||k.indexOf(cu)>=0))return CUSTOMER_TIER_MAP[k];}return ss(_pr['Account Tier']||'Regular');})(_pCustShort),
         region:         ss(_pr['Region']||''),
-        doj:            _pDoj,
+        doj:            _pDoj || null,   // '' is not a valid date literal
         recruiter_name: _pRecs[0]||'',
         resume_source:  ss(_pr['Resume Source']||''),
         req_id:         ss(_pr['Req ID']||_pr['Requisition ID']||''),
@@ -12652,8 +12704,25 @@ async function processCandidate(wb) {
     if (_tcHdrIdx < 0) { log('ta_candidates: could not find header row','warn'); }
     else {
       var _tcHdrs = _tcRaw[_tcHdrIdx].map(function(h){return String(h||'').trim();});
-      function _tcIdx(name){ return _tcHdrs.indexOf(name); }
-      function _tcVal(row, name){ var i=_tcIdx(name); return i>=0?String(row[i]||'').trim():''; }
+      // Normalised, alias-tolerant column lookup. ZingHR re-spells headers between
+      // exports ('ApplicationID' → 'Application ID', 'Req ID' → 'Requisition ID'),
+      // and an exact indexOf() match silently dropped every row when that happened.
+      var _tcNorm = {};
+      _tcHdrs.forEach(function(h,i){
+        var k = h.toLowerCase().replace(/[^a-z0-9]/g,'');
+        if (k && _tcNorm[k]===undefined) _tcNorm[k]=i;
+      });
+      function _tcIdx(){
+        for (var _a=0; _a<arguments.length; _a++){
+          var i = _tcNorm[String(arguments[_a]||'').toLowerCase().replace(/[^a-z0-9]/g,'')];
+          if (i!==undefined) return i;
+        }
+        return -1;
+      }
+      function _tcVal(row){
+        var i = _tcIdx.apply(null, [].slice.call(arguments,1));
+        return i>=0 ? String(row[i]||'').trim() : '';
+      }
       function _tcDate(raw){
         if (!raw) return null;
         var s = String(raw).trim();
@@ -12683,8 +12752,26 @@ async function processCandidate(wb) {
         return String(raw).replace(/\([^)]+\)/g,'').replace(/^(Mr\.|Ms\.|Mrs\.)\s*/i,'').replace(/\s+/g,' ').trim();
       }
 
+      // Anchor the row filter on ApplicationID / Candidate Name, not on column A.
+      // Column A is 'Recruiter Name' — rows with no recruiter assigned were being
+      // dropped, and any column reorder in the export dropped every row.
+      var _tcAppCol  = _tcIdx('ApplicationID','Application ID','ApplicationId','Application_Id');
+      var _tcNameCol = _tcIdx('Candidate Name','CandidateName','Name');
+      if (_tcAppCol<0 || _tcNameCol<0) {
+        var _tcMiss = (_tcAppCol<0?'ApplicationID ':'')+(_tcNameCol<0?'Candidate Name':'');
+        var _tcMissEl = document.getElementById('uploadStatus');
+        if (_tcMissEl) _tcMissEl.innerHTML='<div style="background:#fee2e2;border:2px solid #ef4444;color:#b91c1c;'
+          +'padding:10px 14px;border-radius:6px;margin-top:8px;font-size:13px;font-weight:600">'
+          +'⚠ Upload failed: ta_candidates — missing column(s): '+_tcMiss
+          +'<br><span style="font-weight:400;font-size:11px">Header row '+(_tcHdrIdx+1)+' reads: '
+          +_tcHdrs.slice(0,12).filter(Boolean).join(' · ')+'…</span></div>';
+        log('ta_candidates: missing required column(s): '+_tcMiss+' — no rows written','err');
+      }
       var _tcDataRows = _tcRaw.slice(_tcHdrIdx+1).filter(function(r){
-        return r && String(r[0]||'').trim();
+        if (!r) return false;
+        if (_tcAppCol>=0 && String(r[_tcAppCol]||'').trim()) return true;
+        if (_tcNameCol>=0 && String(r[_tcNameCol]||'').trim()) return true;
+        return (_tcAppCol<0 && _tcNameCol<0) ? !!String(r[0]||'').trim() : false;
       });
       log(_tcDataRows.length+' rows found for ta_candidates','info');
 
@@ -12710,9 +12797,9 @@ async function processCandidate(wb) {
           _tcDate(_tcVal(r,'Technical Round 2 Date'))
         ].filter(Boolean);
         return {
-          application_id:       _tcVal(r,'ApplicationID'),
-          candidate_name:       _tcVal(r,'Candidate Name'),
-          req_id:               _tcVal(r,'Requisition ID'),
+          application_id:       _tcVal(r,'ApplicationID','Application ID','ApplicationId','Application_Id'),
+          candidate_name:       _tcVal(r,'Candidate Name','CandidateName','Name'),
+          req_id:               _tcVal(r,'Requisition ID','RequisitionID','Req ID','ReqID'),
           req_title:            _tcVal(r,'Requisition Title'),
           req_status:           _tcVal(r,'Requisition Status'),
           req_date:             _tcDate(_tcVal(r,'Requisition Date')),
@@ -12738,29 +12825,77 @@ async function processCandidate(wb) {
       });
       var _tcSkipped = _tcUpsertRows.filter(function(r){ return !r.application_id; }).length;
       _tcUpsertRows = _tcUpsertRows.filter(function(r){ return r.candidate_name && r.application_id; });
+      // Collapse duplicate ApplicationIDs (last row wins). Two rows sharing an ID
+      // inside one chunk make Postgres reject the ENTIRE chunk with "ON CONFLICT DO
+      // UPDATE cannot affect row a second time" — which used to abort the upload.
+      var _tcSeen = {}, _tcDeduped = [];
+      for (var _tcd=_tcUpsertRows.length-1; _tcd>=0; _tcd--) {
+        var _tcDr = _tcUpsertRows[_tcd];
+        if (_tcSeen[_tcDr.application_id]) continue;
+        _tcSeen[_tcDr.application_id] = 1;
+        _tcDeduped.unshift(_tcDr);
+      }
+      var _tcDupes = _tcUpsertRows.length - _tcDeduped.length;
+      _tcUpsertRows = _tcDeduped;
+      if (_tcDupes) log('ta_candidates: '+_tcDupes+' duplicate ApplicationID row(s) collapsed','info');
       var _tcInterviewCnt = _tcUpsertRows.filter(function(r){ return taEffectiveStage(r)==='Interview'; }).length;
 
       if (_tcUpsertRows.length) {
         // One-time legacy purge: rows without application_id are pre-upsert era orphans
         await _sb.from('ta_candidates').delete().is('application_id', null);
         // Upsert in chunks of 50 — idempotent by application_id
-        var _tcChunk=50, _tcInserted=0, _tcErrMsg='';
+        var _tcChunk=50, _tcInserted=0, _tcErrMsg='', _tcFailed=0;
         for (var _tck=0; _tck<_tcUpsertRows.length; _tck+=_tcChunk) {
           var chunk = _tcUpsertRows.slice(_tck, _tck+_tcChunk);
           var {error:_tcUpsErr} = await _sb.from('ta_candidates').upsert(chunk, {onConflict:'application_id'});
-          if (_tcUpsErr) { _tcErrMsg=_tcUpsErr.message; log('ta_candidates upsert error: '+_tcUpsErr.message,'warn'); break; }
+          // Carry on past a bad chunk — one rejected batch must not discard the rest.
+          if (_tcUpsErr) {
+            if (!_tcErrMsg) _tcErrMsg = _tcUpsErr.message;
+            _tcFailed += chunk.length;
+            log('ta_candidates chunk error ('+chunk.length+' rows): '+_tcUpsErr.message,'warn');
+            continue;
+          }
           _tcInserted += chunk.length;
         }
         if (_tcErrMsg || _tcInserted===0) {
           var _tcErrEl = document.getElementById('uploadStatus');
           if (_tcErrEl) _tcErrEl.innerHTML='<div style="background:#fee2e2;border:2px solid #ef4444;color:#b91c1c;'
             +'padding:10px 14px;border-radius:6px;margin-top:8px;font-size:13px;font-weight:600">'
-            +'⚠ Upload failed: ta_candidates — '+(_tcErrMsg||'0 rows written')
+            +'⚠ ta_candidates: '+_tcFailed+' of '+_tcUpsertRows.length+' rows rejected — '+(_tcErrMsg||'0 rows written')
             +'<br><span style="font-weight:400;font-size:11px">Check ApplicationID column and Supabase RLS policy.</span></div>';
         } else {
           if (typeof showToast==='function') showToast('✓ '+_tcInserted+' candidate rows written · '+_tcInterviewCnt+' at Interview · '+_tcSkipped+' skipped (no ApplicationID)','success',4000);
         }
-        log('✓ ta_candidates: '+_tcInserted+' rows written, '+_tcSkipped+' skipped ('+_tcBatch+')','ok');
+        log('✓ ta_candidates: '+_tcInserted+' rows written, '+_tcFailed+' rejected, '+_tcSkipped+' skipped ('+_tcBatch+')', _tcInserted?'ok':'err');
+        // Stamp the header date and the summary cache only now that rows are in the DB.
+        if (_tcInserted > 0) {
+          _taCandDbDate = _tcToday;
+          // Report the export's actual coverage — ZingHR caps backdated candidate
+          // downloads at ~3 months, so a single file can never carry the full year.
+          var _tcEc = _tcUpsertRows.map(function(r){return r.ecode_date;}).filter(Boolean).sort();
+          if (_tcEc.length) log('Candidate file covers joiners '+_tcEc[0]+' → '+_tcEc[_tcEc.length-1]
+            +' — earlier months come from previously uploaded batches, not this file','info');
+          // total_joined_ytd from the file alone under-reports for the same reason.
+          // ta_candidates accumulates across uploads (upsert by application_id, no
+          // delete), so count YTD off the table rather than off this one export.
+          try {
+            var {count:_ytdCount} = await _sb.from('ta_candidates')
+              .select('application_id',{count:'exact',head:true})
+              .gte('ecode_date', new Date().getFullYear()+'-01-01');
+            if (typeof _ytdCount==='number') {
+              _candSummaryPending.total_joined_ytd = _ytdCount;
+              _candSummaryPending.ytd_source = 'ta_candidates';
+              if (typeof TA_SUMMARY!=='undefined') TA_SUMMARY.total_joined_ytd = _ytdCount;
+              log('✓ YTD joiners recounted from ta_candidates: '+_ytdCount,'ok');
+            }
+          } catch(_ytdE){ console.warn('[processCandidate] ytd recount:',_ytdE.message); }
+          try {
+            await _sb.from('data_cache').upsert({
+              id:'ta_cand_summary', data:_candSummaryPending,
+              row_count:1, uploaded_at:new Date().toISOString()
+            },{onConflict:'id'});
+          } catch(_csE){ console.warn('[processCandidate] summary persist:',_csE.message); }
+        }
         try { await _sb.rpc('sync_filled_date_from_candidates'); log('✓ req_tracker filled_date synced from candidates','ok'); }
         catch(e){ console.warn('filled_date sync failed', e); }
 
@@ -12852,7 +12987,14 @@ async function processCandidate(wb) {
         }
       } catch(_pjSyncE){ log('Prospective Joiners sync error: '+_pjSyncE.message,'err'); }
       } else {
-        log('ta_candidates: no valid rows extracted — check header row detection','warn');
+        var _tcZeroEl = document.getElementById('uploadStatus');
+        if (_tcZeroEl) _tcZeroEl.innerHTML='<div style="background:#fee2e2;border:2px solid #ef4444;color:#b91c1c;'
+          +'padding:10px 14px;border-radius:6px;margin-top:8px;font-size:13px;font-weight:600">'
+          +'⚠ ta_candidates: 0 rows extracted from '+_tcDataRows.length+' data rows — nothing written'
+          +'<br><span style="font-weight:400;font-size:11px">Header row '+(_tcHdrIdx+1)+' reads: '
+          +_tcHdrs.slice(0,12).filter(Boolean).join(' · ')+'…</span></div>';
+        log('ta_candidates: no valid rows extracted from '+_tcDataRows.length
+          +' data rows — header row '+(_tcHdrIdx+1)+': '+_tcHdrs.slice(0,10).filter(Boolean).join(' | '),'err');
       }
     }
   } catch(_tcE){ log('ta_candidates error: '+_tcE.message,'err'); }
@@ -15789,7 +15931,7 @@ async function processWIEsep(wb) {
 async function processWICandidate(wb) {
   // Compute: TA sourced/offered/joined by month, resume source stats
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = getRows(ws);
+  const rows = getRowsAuto(ws);
   const g = (r, ...keys) => { for (const k of keys) { const v = r[k]; if (v !== undefined && String(v).trim()) return String(v).trim(); } return ''; };
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
