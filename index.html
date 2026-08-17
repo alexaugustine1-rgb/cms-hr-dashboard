@@ -10021,6 +10021,12 @@ async function loadEMJoinerCounts() {
     }
     var _ovEl = document.getElementById('tab-overview');
     if (_ovEl && _ovEl.classList.contains('active') && typeof render === 'function') render();
+    // TA Pipeline reads _emWeekJoiners for the Filled → Joined card. This load is
+    // async, so without repainting here the card kept the pre-load fallback and
+    // the tab looked unresponsive to the period bar.
+    var _taEl = document.getElementById('tab-tapipeline');
+    if (_taEl && _taEl.classList.contains('active') && typeof renderTAPipeline === 'function')
+      _taEl.innerHTML = renderTAPipeline();
   } catch(e){ console.warn('[loadEMJoinerCounts]',e.message); }
 }
 
@@ -10098,11 +10104,16 @@ async function loadTAClosedMTD() {
   if (!_sb) return;
   try {
     if (!_ovFrom || !_ovTo) _initOvRange();
+    // Scope on filled_date, NOT updated_at. updated_at is the row's last-write
+    // timestamp: every TAT upload rewrites it, so 849 of 856 Closed rows carry
+    // the same date and the period filter returned "everything" or "nothing"
+    // rather than the reqs actually filled in the window.
     var {data:_closed} = await _sb.from('req_tracker')
       .select('primary_recruiter,tat')
       .eq('status','Closed')
-      .gte('updated_at', _ovFrom+'T00:00:00')
-      .lte('updated_at', _ovTo+'T23:59:59')
+      .not('filled_date','is',null)
+      .gte('filled_date', _ovFrom)
+      .lte('filled_date', _ovTo)
       .gt('primary_recruiter','');
     // Empty is a real result, not a no-op — clear the map so a period with no
     // closures does not keep showing the previous period's numbers.
@@ -12981,16 +12992,24 @@ async function processCandidate(wb) {
           // ta_candidates accumulates across uploads (upsert by application_id, no
           // delete), so count YTD off the table rather than off this one export.
           try {
-            var {count:_ytdCount} = await _sb.from('ta_candidates')
-              .select('application_id',{count:'exact',head:true})
-              .gte('ecode_date', new Date().getFullYear()+'-01-01');
-            if (typeof _ytdCount==='number') {
+            // count:'exact' WITHOUT head:true — the head variant returned an
+            // undefined count against this client, so the recount silently no-oped
+            // and the cache kept the file-derived 0.
+            var _ytdRes = await _sb.from('ta_candidates')
+              .select('application_id',{count:'exact'})
+              .gte('ecode_date', new Date().getFullYear()+'-01-01')
+              .limit(1);
+            var _ytdCount = (_ytdRes && typeof _ytdRes.count==='number') ? _ytdRes.count : null;
+            if (_ytdCount===null) {
+              log('YTD recount unavailable (count not returned) — total_joined_ytd '
+                +'left at the file-derived '+_candSummaryPending.total_joined_ytd,'warn');
+            } else {
               _candSummaryPending.total_joined_ytd = _ytdCount;
               _candSummaryPending.ytd_source = 'ta_candidates';
               if (typeof TA_SUMMARY!=='undefined') TA_SUMMARY.total_joined_ytd = _ytdCount;
               log('✓ YTD joiners recounted from ta_candidates: '+_ytdCount,'ok');
             }
-          } catch(_ytdE){ console.warn('[processCandidate] ytd recount:',_ytdE.message); }
+          } catch(_ytdE){ log('YTD recount failed: '+_ytdE.message,'warn'); }
           try {
             await _sb.from('data_cache').upsert({
               id:'ta_cand_summary', data:_candSummaryPending,
