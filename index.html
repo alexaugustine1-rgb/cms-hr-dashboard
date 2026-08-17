@@ -10964,8 +10964,13 @@ async function submitRMGNewPosition(){
     in_elah:         !!elahId.trim(),
     backfill_emp_code: bfEmp.trim()||null,
     notes:           notes.trim()||null,
-    req_status:      'Open',
-    req_age_days:    0,
+    // 17 Aug 2026: leave req_status NULL so _rmgEffStatus() renders this as
+    // 'Not in ZingHR' until the TAT upload confirms the req. Hardcoding 'Open'
+    // here made RMG Open (127) disagree with TA Pipeline Open (125) for every
+    // req raised after the last export. req_status is owned by
+    // sync_positions_from_req_tracker() — the manual field is `status`.
+    req_status:      null,
+    req_age_days:    null,
     raised_by:       user,
     raised_by_id:    (_sbUser&&_sbUser.id)||null,
     updated_by:      user,
@@ -15355,13 +15360,22 @@ async function processEmployeeMaster(wb) {
       }
       return 'Regular';
     }
+    var _unknownEmpTypes = {};
     function getEmpType(r) {
       // Check EmpType (col CK) first, then Employment Type (col E), then other fallbacks
       var t = String(r['EmpType']||r['Emp Type']||r['EmployeeType']||r['Employee Type']||r['Employment Type']||r['Grade']||r['grade']||'').trim().toUpperCase();
       if (t==='ATE') return 'ATE';
       if (t==='FTC'||t.includes('FIXED TERM')) return 'FTC';
       if (t==='CONSULTANT'||t==='CONSULTANCY') return 'Consultant';
-      if (t==='CONTRACT') return 'CONTRACT';
+      // 17 Aug 2026: Contract fell from 89 to 0 because ZingHR stopped writing the
+      // exact string 'CONTRACT'. Match on substring so renamed variants such as
+      // CONTRACTUAL, CONTRACT STAFF or SUB-CONTRACTOR are caught. FTC is tested
+      // above, so 'FIXED TERM CONTRACT' cannot be swallowed here.
+      if (t.indexOf('CONTRACT')!==-1) return 'CONTRACT';
+      // Record anything unrecognised so a future rename fails loudly, not silently.
+      if (t && t!=='FTE' && t!=='GENERAL' && t!=='PERMANENT') {
+        _unknownEmpTypes[t] = (_unknownEmpTypes[t]||0) + 1;
+      }
       return null; // skip other grades (FTE, General, etc.)
     }
     function getCust(r) {
@@ -15543,6 +15557,10 @@ async function processEmployeeMaster(wb) {
     var cwRows    = activeRows.filter(function(r){ if(isATE(r)) return false; var t=getEmpType(r); return t==='FTC'||t==='Consultant'||t==='CONTRACT'; });
 
     log('ATE: '+ateRows.length+' · FTC: '+cwRows.filter(function(r){return getEmpType(r)==='FTC';}).length+' · Consultant: '+cwRows.filter(function(r){return getEmpType(r)==='Consultant';}).length+' · Contract: '+cwRows.filter(function(r){return getEmpType(r)==='CONTRACT';}).length);
+    var _uetKeys = Object.keys(_unknownEmpTypes).sort(function(a,b){return _unknownEmpTypes[b]-_unknownEmpTypes[a];});
+    if (_uetKeys.length) {
+      log('\u26a0 Unrecognised EmpType values skipped: '+_uetKeys.slice(0,8).join(' \u00b7 ')+(_uetKeys.length>8?' \u00b7 +'+(_uetKeys.length-8)+' more':''),'err');
+    }
 
     // ── 1. ATE → ate_tracker ─────────────────────────────────────────────
     if (ateRows.length) {
