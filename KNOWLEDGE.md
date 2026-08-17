@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.24.3 | **Last updated:** 13 Aug 2026 — Fix null account_name crash on Link Req / No Backfill; password resets for Salma &amp; Somasri.
+**Version:** 3.25.0 | **Last updated:** 17 Aug 2026 — Fix candidate upload writing 0 rows while stamping a fresh cand_as_of date; getRowsAuto() header detection; ZingHR 3-month export limit documented.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,40 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 17 Aug 2026 — Candidate upload wrote 0 rows but stamped a fresh date (commit 2f6fdfb)
+- **Reported by:** Alex — TA Pipeline header read "Candidate file: 10 Jul 2026 (summary newer than DB — last DB write may have failed)" while the TAT file showed Live (17 Aug).
+- **Diagnosis (from live DB, not from logs):**
+  - `ta_candidates`: 426 rows, **all** `data_as_of = 2026-07-10`, single batch `CandTx_2026-07-10`.
+  - `data_cache.ta_cand_summary`: written **17 Aug 03:27:57**, `cand_as_of = 17 Aug 2026`, `total_pipeline: 514`, `total_joined_ytd: 0`, `mar_joined: 0`.
+  - `prospective_joiners`: nothing newer than 10 Jul. `workforce_intel`: written 17 Aug 03:28:00.
+  - `processWICandidate` runs immediately after `processCandidate` in the same try — workforce_intel updating proves `processCandidate` did **not** throw. It ran to completion and still wrote nothing. Only 3.4s elapsed, far too short for 11 upsert round-trips, so the `ta_candidates` block bailed *before* writing rather than erroring mid-way.
+- **Root cause A — ordering:** `ta_cand_summary` was upserted at the top of `processCandidate`, ~300 lines before the `ta_candidates` row write. A failed write still advanced the header date. The amber warning is the symptom-detector added later; it fires correctly but after the damage.
+- **Root cause B — three silent-failure modes in the extractor:**
+  1. `_tcDataRows` filtered on column A (`Recruiter Name`) being non-empty — dropped rows with no recruiter, and any column reorder in the export dropped **every** row.
+  2. `ApplicationID` / `Candidate Name` matched by exact `indexOf()` — a ZingHR re-spelling (`Application ID`) zeroes the upload.
+  3. The chunk loop `break`s on the first error, discarding all remaining rows. A duplicate `ApplicationID` inside one chunk makes Postgres reject the **whole** chunk (`ON CONFLICT DO UPDATE cannot affect row a second time`) — alone enough to explain 0 rows from a 514-row file.
+- **Root cause C — separate, long-standing:** `getRows()` reads headers from `range.s.r` (row 0), but the ZingHR candidate export has its report title in row 0 and the real header row in **row 4** (verified by unzipping the June file: `DIMENSION A1:PG63`, row 1 = title, row 4 = 423 headers). Every `rows['Employee Code']` lookup returned `undefined` — which is why `total_joined_ytd` and `mar_joined` cached as 0 and the `prospective` extraction had not run since 14 Apr (last `Candidate_*` batch in `prospective_joiners`).
+- **Fixes:**
+  - New `getRowsAuto()` (33 lines) — scans the first 8 rows for the first with >5 non-empty cells and uses that as the header row; skips fully-blank rows. Used by `processCandidate` and `processWICandidate`.
+  - `ta_cand_summary` / `cand_as_of` persisted **only** after `_tcInserted > 0`; `_taCandDbDate` set at the same point so the header updates without a reload.
+  - Alias-tolerant column lookup (normalised lowercase-alphanumeric): `ApplicationID` / `Application ID` / `ApplicationId`, `Candidate Name` / `CandidateName` / `Name`, `Requisition ID` / `ReqID` / `Req ID`.
+  - Row filter anchored on ApplicationID or Candidate Name, not column A.
+  - Duplicate ApplicationIDs collapsed before upsert (last row wins); chunk errors `continue` instead of `break`.
+  - Silent failures replaced with a red `uploadStatus` banner naming the missing column and printing the detected header row.
+  - `Date` guards in `parseEDate` and the prospective-joiner DOJ parser. `XLSX.read` runs with `cellDates:true`, so date columns arrive as `Date` objects; `String()`-ing one gives "Wed Jul 01 2026 …", which the DD-MMM-YYYY splitter turned into `2001-07-0Wed`. Harmless while the header bug kept that path dead — a live bug the moment `getRowsAuto` fixed it. Normalised in **local** time; `toISOString()` shifts IST midnight back a day. Also `doj: _pDoj || null` (`''` is not a valid date literal).
+  - `loadTACandMap` given an explicit `.limit(50000)` — PostgREST silently caps unbounded selects at 1000, which would truncate the stage map and make `MAX(data_as_of)` read stale.
+- **Verified:** unique index `ta_candidates_application_id_key` **does** exist — the `onConflict:'application_id'` upsert was always valid. Pending item "application_id UNIQUE constraint" is already done.
+- **Not recovered by the fix:** the 17 Aug candidate data. `ta_candidates` stays at the 10 Jul batch until Alex re-uploads. Failures are now loud.
+- Files touched: `index.html` only (16,634 → 16,776 lines, all additive). No schema change.
+
+### 17 Aug 2026 — ZingHR only exports ~3 months back (confirmed)
+- **Raised by:** Alex during the above session — "ZingHR is allowing download of candidate and other reports backdated only for 3 months, could that be a problem?"
+- **Confirmed in data:** `ecode_date` in `ta_candidates` spans **2026-04-02 → 2026-07-09** only. Nothing earlier. `req_date` reaches back to 2025-10-28 (a req raised in Oct can still have a candidate transaction inside the window), but actual ECode creations are windowed.
+- **Why it mostly holds together:** the `ta_candidates` upsert is keyed on `application_id` and **never deletes** (only `delete().is('application_id', null)`, a legacy purge). The table therefore *accumulates* coverage across uploads — each month's file tops up the previous. `WI.ta_monthly` is merged with `Object.assign`, so months outside the window keep their prior values.
+- **Where it bites:** anything computed from a *single* candidate file is rolling-3-month, not YTD. `total_joined_ytd` is now recounted from the `ta_candidates` table (`count` where `ecode_date >= Jan 1`), with `ytd_source: 'ta_candidates'` stamped into the cache. MTD joiners are unaffected — already sourced from Super Employee Master (`joined_source: 'super_emp_master'`).
+- **Permanent gap:** Jan–Mar 2026 candidate-level data was never captured while uploads were working. Only recoverable from Super Employee Master, not from ZingHR.
+- **Operational implication:** candidate/TAT uploads must run at least quarterly or coverage develops holes that cannot be backfilled.
 
 ### 13 Aug 2026 — Fix null account_name crash on Link Req / No Backfill (commit 6e59bb8)
 - **Reported by:** Pruthvi's team — "Link Req" for Aviral Agarwal (SUTHERLAND row visible in screenshot) threw: `null value in column "account_name" of relation "account_positions_log" violates not-null constraint`.
@@ -880,6 +914,31 @@ _reqMap from TA_ACTIVE_REQS. _unlinked flag on unmatched candidates. processReqT
 now upserts req_tracker directly (live source). Candidate upload at "Offer Accepted"
 should auto-create a prospective_joiner record.
 
+**Sheet layout — read this before touching the candidate parser.** The candidate
+transactional export has its report title in row 0 and the real header row in
+**row 4** (verified: `DIMENSION A1:PG63`, 423 header cells). Use `getRowsAuto(ws)`,
+never `getRows(ws)` — the latter assumes headers in row 0 and silently returns rows
+with one junk key and `undefined` for every column. `XLSX.read` runs with
+`cellDates:true`, so date columns arrive as `Date` objects; guard for that before
+any string date parsing, and format in local time (`toISOString()` shifts IST
+midnight back a day).
+
+**ta_candidates write contract (17 Aug 2026):**
+- Upsert keyed on `application_id` (unique index `ta_candidates_application_id_key`).
+  **Never deletes** except the legacy `application_id IS NULL` purge — the table
+  accumulates coverage across uploads, which is what makes YTD counts possible.
+- Duplicate ApplicationIDs are collapsed before upsert. Two rows sharing an ID in
+  one chunk make Postgres reject the entire chunk.
+- Chunk errors `continue`, never `break` — one bad batch must not discard the rest.
+- `data_cache.ta_cand_summary` (`cand_as_of`) is written **only after** rows land.
+  Do not move it earlier: the TA Pipeline header date is derived from it, and
+  stamping it on a failed write makes the dashboard claim a file it does not have.
+- Column lookup is alias-tolerant (normalised lowercase-alphanumeric). Add new
+  spellings to the alias lists rather than renaming, ZingHR re-spells headers.
+- **~3-month export limit:** ZingHR only allows backdated downloads ~3 months, so
+  no single file carries a full year. Anything labelled YTD must be counted off the
+  accumulated table, not off the file. See the 17 Aug 2026 session log entry.
+
 ### ATE Advance Upload (Sheetal — monthly)
 File detection: ate_advance or ate_dbt. Two sheets: "Advance Paid" + "Recovery".
 Header auto-detect (scans first 5 rows). processATEAdvance(wb) — LIVE.
@@ -1051,6 +1110,10 @@ unchanged) → Vercel team setup with custom domain → GitHub repo transfer.
 ---
 
 ## Known Debt — Carry Forward
+- **Jan–Mar 2026 candidate gap (permanent):** ta_candidates has no ecode_date before 2026-04-02. ZingHR's ~3-month download limit means it cannot be backfilled from ZingHR. Only recoverable from Super Employee Master if ever needed.
+- **17 Aug candidate data not in DB:** ta_candidates still holds only the 10 Jul batch (426 rows). Needs a re-upload of the 17 Aug candidate transactional file on the fixed build (commit 2f6fdfb). Failures are now loud (red banner names the column/error).
+- **Stale candidate stages:** _taCandMap is built from the accumulated ta_candidates table, and rows never age out. A candidate who has since dropped out but fell outside the export window keeps its last-known stage forever. Affects stage badges and the phantom-req filter. No fix designed.
+- **getRows() row-0 assumption:** still used by parsers other than the two candidate ones. Any ZingHR export that gains a title row will silently zero out. Consider migrating the rest to getRowsAuto() when each is next touched.
 - Header row leak: req_tracker contains req_id = "Requisition Wise TAT Report" (ZingHR report title parsed as data row). Cosmetically harmless — no customer match, enrich ignores it. Fix: add `if (!rec.req_id || !/^\d+$/.test(rec.req_id)) continue;` in processReqTAT loop.
 - ATE stale records: ate_tracker has 61 Active but Super Emp shows 27. Cleanup awaiting Ramesh headcount confirmation.
 - contract_workforce: ~50 ATE rows that should not be there. Cleanup pending.
