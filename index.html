@@ -9582,17 +9582,27 @@ function renderTAPipeline(){
     });
     _taPeriodHidden = _taPeriodTotal - allData.length;
   }
-  var data = allData.slice();
-  if(_taRegion!=='All') data=data.filter(function(r){return r.region===_taRegion;});
-  if(_taTier!=='All') data=data.filter(function(r){return r.tier===_taTier;});
-  if(_taPosType!=='All') data=data.filter(function(r){return r.pos_type===_taPosType;});
-  if(_taBilling!=='All') data=data.filter(function(r){return r.billing_type===_taBilling;});
-  window._taLiveCounts=_taBuildRecCounts(data);
-  if(_taRecruiterFilter!=='All') data=data.filter(function(r){
-    return _taOwner(r).toLowerCase().split(' ')[0]===_taRecruiterFilter.toLowerCase().split(' ')[0];
-  });
-  if(_taCustomerFilter!=='All') data=data.filter(function(r){return _normCustomer(r.customer)===_taCustomerFilter;});
+  // Every filter EXCEPT the period one. Shared so the grid and the aging views
+  // agree on region/tier/type/billing/recruiter/customer and differ only on period.
+  function _taApplyFilters(arr, setLiveCounts) {
+    var out = arr.slice();
+    if(_taRegion!=='All') out=out.filter(function(r){return r.region===_taRegion;});
+    if(_taTier!=='All') out=out.filter(function(r){return r.tier===_taTier;});
+    if(_taPosType!=='All') out=out.filter(function(r){return r.pos_type===_taPosType;});
+    if(_taBilling!=='All') out=out.filter(function(r){return r.billing_type===_taBilling;});
+    if(setLiveCounts) window._taLiveCounts=_taBuildRecCounts(out);
+    if(_taRecruiterFilter!=='All') out=out.filter(function(r){
+      return _taOwner(r).toLowerCase().split(' ')[0]===_taRecruiterFilter.toLowerCase().split(' ')[0];
+    });
+    if(_taCustomerFilter!=='All') out=out.filter(function(r){return _normCustomer(r.customer)===_taCustomerFilter;});
+    return out;
+  }
+  var data = _taApplyFilters(allData, true);
   data.sort(function(a,b){return b.tat-a.tat;});
+  // Aging and backlog metrics deliberately IGNORE the period filter (Alex, 17 Aug).
+  // A req raised this month cannot be >45d old, so a period-scoped Critical count
+  // reads 0 by arithmetic and hides the real backlog. These always span all open reqs.
+  var agingData = _taPeriodFilter ? _taApplyFilters(TA_ACTIVE_REQS.slice(), false) : data;
 
   var TAT_DATE=(TA_SUMMARY&&TA_SUMMARY.tat_as_of)||'—';
   // Candidate date: prefer MAX(data_as_of) from DB (set by loadTACandMap), fall back to cache
@@ -9653,14 +9663,13 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     return '<div style="font-size:9px;color:var(--muted2);margin-top:3px">raised '
       +esc(_ovLabelSafe())+(extra||'')+'</div>';
   }
-  // A req raised inside a window shorter than 45 days cannot yet be >45d old, so
-  // Critical reads 0 by arithmetic, not because the backlog cleared. Flag it.
-  var _winDays = (_ovFrom&&_ovTo) ? Math.round((new Date(_ovTo)-new Date(_ovFrom))/86400000)+1 : 999;
-  var _critCaveat = (_taPeriodFilter && _winDays<=45)
-    ? '<div style="font-size:9px;color:var(--amber);margin-top:1px">window &lt;45d — see All open reqs</div>' : '';
+  // Critical is an aging metric: always all open reqs, never the period slice.
+  var _agingNote = _taPeriodFilter
+    ? '<div style="font-size:9px;color:var(--muted2);margin-top:3px">all open reqs</div>'
+    : asof(TAT_DATE);
   var kpiCards=[
     {label:'Open Reqs',     val:data.length,           color:'var(--accent)',  note:scopeNote()},
-    {label:'Critical >45d', val:data.filter(function(r){return r.tat>45;}).length, color:'var(--red)', note:scopeNote()+_critCaveat},
+    {label:'Critical >45d', val:agingData.filter(function(r){return r.tat>45;}).length, color:'var(--red)', note:_agingNote},
     {label:'Plat/Gold Open',val:data.filter(function(r){return r.tier==='Platinum'||r.tier==='Gold';}).length, color:'#a78bfa', note:scopeNote()},
     {label:'Avg Fill Speed', val:(S.avg_closed_tat||31)+'d', color:'var(--amber)', note:'<div style="font-size:9px;color:var(--muted2);margin-top:3px">Req→ECode · '+asof(CAND_DATE).replace('<div style="font-size:9px;color:var(--muted2);margin-top:3px">','').replace('</div>','')+'</div>'},
   ];
@@ -9705,23 +9714,26 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
   // ── Aging strip ─────────────────────────────────────────────────────────
   var agBands=[['0-15','var(--green)'],['16-30','#64748b'],['31-45','var(--amber)'],['46-60','#f97316'],['61-90','var(--red)'],['90+','#dc2626']];
   var agCounts={'0-15':0,'16-30':0,'31-45':0,'46-60':0,'61-90':0,'90+':0};
-  data.forEach(function(r){
+  agingData.forEach(function(r){
     var t=r.tat;
     if(t<=15)agCounts['0-15']++;else if(t<=30)agCounts['16-30']++;else if(t<=45)agCounts['31-45']++;
     else if(t<=60)agCounts['46-60']++;else if(t<=90)agCounts['61-90']++;else agCounts['90+']++;
   });
   var agHTML='<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:11px 14px;margin-bottom:12px">'
-    +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Req Aging (days since raised in ZingHR)</div>'
+    +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Req Aging (days since raised in ZingHR)'
+    +(_taPeriodFilter?'<span style="color:var(--muted2);text-transform:none;letter-spacing:0"> — all '+agingData.length+' open reqs, not the period slice</span>':'')
+    +'</div>'
     +'<div style="display:flex;gap:6px">'
     +agBands.map(function(b){
-      var cnt=agCounts[b[0]]||0,pct=Math.round(cnt/(data.length||1)*100);
+      var cnt=agCounts[b[0]]||0,pct=Math.round(cnt/(agingData.length||1)*100);
       return'<div style="flex:1;text-align:center"><div style="font-family:Bebas_Neue,sans-serif;font-size:22px;color:'+b[1]+';line-height:1">'+cnt+'</div>'
         +'<div style="font-size:9px;color:var(--muted)">'+b[0]+'d</div>'
         +'<div style="font-size:9px;color:var(--muted2)">'+pct+'%</div></div>';
     }).join('')+'</div></div>';
 
   // ── Plat/Gold critical alert (deduplicated by customer) ─────────────────
-  var pgCrit=data.filter(function(r){return(r.tier==='Platinum'||r.tier==='Gold')&&r.tat>45;});
+  // Also an aging alert — spans all open reqs, not the period slice.
+  var pgCrit=agingData.filter(function(r){return(r.tier==='Platinum'||r.tier==='Gold')&&r.tat>45;});
   var pgByCust={};
   pgCrit.forEach(function(r){if(!pgByCust[r.customer])pgByCust[r.customer]={count:0,tat:0,tier:r.tier};pgByCust[r.customer].count++;if(r.tat>pgByCust[r.customer].tat)pgByCust[r.customer].tat=r.tat;});
   var filledUnclosed=allData.filter(function(r){return r.balance==='0'||r.balance===0;}).length;
