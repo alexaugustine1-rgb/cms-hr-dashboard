@@ -4849,7 +4849,16 @@ function switchTab(id, btn) {
       if(_odMk) loadWFHODActions(_odMk,_odVt);
     }
   }
-  else if(id==='tapipeline'){const mc=document.getElementById('tab-tapipeline');if(mc)mc.innerHTML=renderTAPipeline();}
+  else if(id==='tapipeline'){
+    const mc=document.getElementById('tab-tapipeline');
+    if(mc){
+      mc.innerHTML=renderTAPipeline();
+      // Refresh the period-scoped numbers on entry — they may have been loaded
+      // for a different period while the tab was closed.
+      if(typeof loadTAClosedMTD==='function') loadTAClosedMTD();
+      if(typeof loadTAFilledForPeriod==='function') loadTAFilledForPeriod();
+    }
+  }
   else if(id==='rmg'){var mc=document.getElementById('tab-rmg');if(mc){ mc.innerHTML=renderRMGShell(); loadRMGTab(); }}
   else if(id==='opsreview'){var mc=document.getElementById('tab-opsreview');if(mc){ mc.innerHTML=''; loadOpsReview(); }}
   else if(id==='fnf'){const mc=document.getElementById('tab-fnf');if(mc)mc.innerHTML=renderFnF();}
@@ -5257,21 +5266,42 @@ async function loadProspectiveJoiners() {
 
 // ── HIRING REPORT ─────────────────────────────────────────────────────────
 var _hrCycles = [];        // all cycles from Supabase
-var _hrCycleId = null;     // currently selected cycle id
+var _hrCycleId = null;     // currently selected cycle id (only used when _hrRangeMode==='cycle')
 var _hrCycleData = null;   // {cycle, joiners, byRegion, byAccount, criticalAging, nextPipeline}
 var _hrLoaded = false;
+// 'period' = follow the top period bar (This Month / Last Month / This Week / …),
+// 'cycle'  = pinned to a saved hiring_cycles row. Period is the default: the tab
+// used to dead-end on "create a cycle" before it would show anything.
+var _hrRangeMode = 'period';
+
+// The window the report is built for, as a cycle-shaped object so the render and
+// data-load paths stay identical for both modes.
+function _hrWindow() {
+  if (_hrRangeMode === 'cycle' && _hrCycleId) {
+    var c = _hrCycles.find(function(x){return x.id===_hrCycleId;});
+    if (c) return {id:c.id, name:c.name, label:c.label, cycle_from:c.cycle_from, cycle_to:c.cycle_to};
+  }
+  if (!_ovFrom || !_ovTo) _initOvRange();
+  var PRESET_NAMES = {month:'This Month', lastmonth:'Last Month', week:'This Week',
+                      lastweek:'Last Week', custom:'Custom'};
+  return {id:'__period__', name:PRESET_NAMES[_ovPreset]||'This Month',
+          label:_ovLabelSafe(), cycle_from:_ovFrom, cycle_to:_ovTo};
+}
 
 async function loadHiringReport(el) {
   if (!el) el = document.getElementById('tab-hiringreport');
   if (!el) return;
-  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Loading hiring cycles…</div>';
+  el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Loading hiring report…</div>';
   try {
-    var {data:cycles, error:cycErr} = await _sb.from('hiring_cycles')
-      .select('*').order('cycle_from', {ascending:false});
-    if (cycErr) throw new Error(cycErr.message);
-    _hrCycles = cycles || [];
-    if (!_hrCycleId && _hrCycles.length) _hrCycleId = _hrCycles[0].id;
-    if (_hrCycleId) await _loadHRCycleData(_hrCycleId);
+    // Saved cycles are optional now — a failure to load them must not block the
+    // period-driven report, so this is best-effort rather than fatal.
+    try {
+      var {data:cycles} = await _sb.from('hiring_cycles')
+        .select('*').order('cycle_from', {ascending:false});
+      _hrCycles = cycles || [];
+    } catch(_cyE){ _hrCycles = []; }
+    if (_hrRangeMode === 'cycle' && !_hrCycleId && _hrCycles.length) _hrCycleId = _hrCycles[0].id;
+    await _loadHRCycleData(_hrWindow());
     renderHiringReport(el);
   } catch(e) {
     el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--red)">Error loading hiring report: '+esc(e.message)+'</div>';
@@ -5290,9 +5320,13 @@ function _lookupTier(custName) {
   return 'Regular';
 }
 
-async function _loadHRCycleData(cycleId) {
-  var cycle = _hrCycles.find(function(c){return c.id===cycleId;});
-  if (!cycle) return;
+// Accepts a window object from _hrWindow(). Still tolerates a bare cycle id so any
+// older call site keeps working.
+async function _loadHRCycleData(win) {
+  var cycle = (win && typeof win === 'object')
+    ? win
+    : _hrCycles.find(function(c){return c.id===win;});
+  if (!cycle || !cycle.cycle_from || !cycle.cycle_to) { _hrCycleData = null; return; }
   var from = cycle.cycle_from;
   var to   = cycle.cycle_to;
   try {
@@ -5409,6 +5443,13 @@ async function _loadHRCycleData(cycleId) {
   }
 }
 
+function _hrSelectRange(val) {
+  if (val === '__period__') { _hrRangeMode = 'period'; }
+  else { _hrRangeMode = 'cycle'; _hrCycleId = val; }
+  _hrCycleData = null;
+  loadHiringReport();
+}
+
 function renderHiringReport(el) {
   if (!el) el = document.getElementById('tab-hiringreport');
   if (!el) return;
@@ -5429,14 +5470,23 @@ function renderHiringReport(el) {
   var cycle = d ? d.cycle : null;
 
   // ── Cycle selector ────────────────────────────────────────────────────
-  var cycleOpts = _hrCycles.map(function(c){
-    return '<option value="'+c.id+'"'+(c.id===_hrCycleId?' selected':'')+'>'+esc(c.name)+' — '+esc(c.label)+'</option>';
-  }).join('');
+  // Period bar first — that is the default source of the window. Saved cycles are
+  // an optional pin below it, not a precondition for seeing the report.
+  var _periodSel = _hrRangeMode==='period';
+  var cycleOpts = '<option value="__period__"'+(_periodSel?' selected':'')+'>'
+      +'Period bar — '+esc(_ovLabelSafe())+'</option>'
+    + _hrCycles.map(function(c){
+        return '<option value="'+c.id+'"'+(!_periodSel&&c.id===_hrCycleId?' selected':'')+'>'
+          +esc(c.name)+' — '+esc(c.label)+'</option>';
+      }).join('');
 
   var cycleSelector = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
-    +'<select onchange="_hrCycleId=this.value;_hrCycleData=null;loadHiringReport()" '
+    +'<select onchange="_hrSelectRange(this.value)" '
     +'style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;cursor:pointer">'
     +cycleOpts+'</select>'
+    +(_periodSel
+      ? '<span style="font-size:10px;color:var(--muted2)">follows the period bar above</span>'
+      : '<button onclick="_hrSelectRange(\'__period__\')" style="padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:none;color:var(--muted);font-size:11px;cursor:pointer">↺ Back to period bar</button>')
     +(canEdit?'<button onclick="_hrShowNewCycle=!_hrShowNewCycle;renderHiringReport()" '
     +'style="padding:6px 14px;border:1px solid var(--accent);border-radius:6px;background:none;color:var(--accent);font-size:11px;cursor:pointer">+ New Cycle</button>':'')
     +'</div>';
@@ -5463,8 +5513,11 @@ function renderHiringReport(el) {
       +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:4px">Talent Acquisition</div>'
       +'<div style="font-family:Bebas_Neue,sans-serif;font-size:24px;letter-spacing:1px;color:var(--text);margin-bottom:16px">Hiring Report</div>'
       +cycleSelector+newCycleForm
-      +'<div style="margin-top:32px;text-align:center;color:var(--muted)">No cycle data available. Select a cycle or create one above.</div>'
-      +'</div>';
+      +'<div style="margin-top:32px;text-align:center;color:var(--muted)">'
+      +(_hrRangeMode==='period'
+        ? 'Could not load data for '+esc(_ovLabelSafe())+'. Try another period from the bar above.'
+        : 'No data for the selected cycle. Switch back to the period bar or pick another cycle.')
+      +'</div></div>';
     return;
   }
 
@@ -5544,7 +5597,7 @@ function renderHiringReport(el) {
     +'<div style="display:flex;align-items:center;gap:16px;margin:18px 0;flex-wrap:wrap">'
       +'<div style="background:var(--surface2);border:1px solid var(--border);border-top:3px solid var(--green);border-radius:8px;padding:12px 20px;text-align:center;min-width:100px">'
         +'<div style="font-family:Bebas_Neue,sans-serif;font-size:36px;color:var(--green);line-height:1">'+totalJoined+'</div>'
-        +'<div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:4px">Joined This Cycle</div>'
+        +'<div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin-top:4px">Joined · '+esc(cycle.label||'')+'</div>'
       +'</div>'
       +regionCards
     +'</div>'
@@ -5595,7 +5648,7 @@ function renderHiringReport(el) {
 
     +(d.pipeline.length?
       '<div style="margin-bottom:20px">'
-        +secHdr('Next Cycle Pipeline — Upcoming Joiners', d.pipeline.length)
+        +secHdr('Upcoming Joiners — offer accepted, DOJ after period end', d.pipeline.length)
         +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden">'
           +tblHdr(['Candidate','Account','Rgn','DOJ','Recruiter'],'160px 160px 65px 80px 120px')
           +pipeRows
@@ -5619,8 +5672,9 @@ async function saveHiringCycle() {
   if (error) { showToast('Save failed: '+error.message,'err'); return; }
   _hrCycles.unshift(data);
   _hrCycleId = data.id;
+  _hrRangeMode = 'cycle';   // saving a cycle pins the report to it
   _hrShowNewCycle = false;
-  await _loadHRCycleData(_hrCycleId);
+  await _loadHRCycleData(_hrWindow());
   renderHiringReport(document.getElementById('tab-hiringreport'));
   showToast('Cycle saved ✓','ok');
 }
@@ -9575,8 +9629,12 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     {label:'Plat/Gold Open',val:data.filter(function(r){return r.tier==='Platinum'||r.tier==='Gold';}).length, color:'#a78bfa', note:asof(TAT_DATE)},
     {label:'Avg Fill Speed', val:(S.avg_closed_tat||31)+'d', color:'var(--amber)', note:'<div style="font-size:9px;color:var(--muted2);margin-top:3px">Req→ECode · '+asof(CAND_DATE).replace('<div style="font-size:9px;color:var(--muted2);margin-top:3px">','').replace('</div>','')+'</div>'},
   ];
-  var _filled = S.mar_fulfilled||S.mar_closed||0;
-  var _joined = (_emMTDJoiners!==null)?_emMTDJoiners:(S.mar_joined||0);
+  // Filled → Joined follows the period bar. _taPeriodFilled / _emWeekJoiners are
+  // both scoped to _ovFrom.._ovTo; the MTD globals are the pre-period fallback.
+  var _periodLbl = _ovLabelSafe();
+  var _filled = (_taPeriodFilled!==null) ? _taPeriodFilled : (S.mar_fulfilled||S.mar_closed||0);
+  var _joined = (_emWeekJoiners!==null) ? _emWeekJoiners
+              : (_emMTDJoiners!==null) ? _emMTDJoiners : (S.mar_joined||0);
   var _pending = Math.max(0, _filled - _joined);
   var _filledJoinedCard = '<div style="background:var(--surface2);border:1px solid var(--border);'
     +'border-top:3px solid var(--green);border-radius:8px;padding:12px;text-align:center">'
@@ -9586,7 +9644,7 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
       +'<span style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:#34d399">'+_joined+'</span>'
     +'</div>'
     +'<div style="font-family:DM_Mono,monospace;font-size:9px;letter-spacing:.7px;text-transform:uppercase;'
-      +'color:var(--muted);margin-top:3px">Filled → Joined (MTD)</div>'
+      +'color:var(--muted);margin-top:3px">Filled → Joined ('+esc(_periodLbl)+')</div>'
     +(_pending>0
       ? '<div style="font-size:9px;color:var(--amber);margin-top:2px">'+_pending+' pending joining</div>'
       : '<div style="font-size:9px;color:var(--green);margin-top:2px">all joined ✓</div>')
@@ -9827,7 +9885,7 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
             +_kc(_recData.length,'Open Reqs','var(--text)')
             +_kc(_recCritical,'Critical >45d','var(--red)')
             +_kc(_recPlatGold,'Plat/Gold','#a78bfa')
-            +_kc(_recClosedMTD,'Closed MTD','var(--green)')
+            +_kc(_recClosedMTD,'Closed · '+_ovLabelSafe(),'var(--green)')
             +_kc(Math.round(_recAvgTAT)+'d','Avg TAT','var(--accent)')
             +'<div style="text-align:center;padding:0 16px">'
               +'<div style="font-family:Bebas_Neue,sans-serif;font-size:28px;color:var(--amber);line-height:1">'+(_recScore?(_recScore.dropouts||0):0)+'</div>'
@@ -9870,7 +9928,7 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:7px">Recruiter Scorecard — Sourced By attribution · as of '+TAT_DATE+'</div>'
     +'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'
     +'<div style="display:grid;grid-template-columns:150px 50px 50px 65px 50px 55px 60px 55px 55px;padding:6px 12px;background:var(--surface3);border-bottom:1px solid var(--border)">'
-    +['Recruiter','Active','Crit','Backlog','P/G','Pipeline','Closed MTD','Avg TAT','Conv%'].map(function(h){
+    +['Recruiter','Active','Crit','Backlog','P/G','Pipeline','Closed','Avg TAT','Conv%'].map(function(h){
       return'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--muted2)" title="'+({'BacklogAge':'Avg age of open backlog (how long reqs have been sitting)','FillSpd':'Avg Req Date → ECode Date for joined candidates'}[h]||'')+'">'+h+'</div>';
     }).join('')+'</div>'+scoreRows+'</div>'
     +'<div style="font-family:DM_Mono,monospace;font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:7px">Source Effectiveness — Conv% = Joined ÷ Pipeline · Blue bar = share of total pipeline</div>'
@@ -9884,7 +9942,8 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
 }
 var _taRegion='All',_taTier='All',_taPosType='All',_taBilling='All',_taPhantom=false,_taRecruiterFilter='All',_taCustomerFilter='All';
 var _taCandMap = {}; // {req_id: {count,stage,rank,lastActDays}} loaded from ta_candidates
-var _taClosedMTDMap = {}; // {firstName: closedCount} for current month from req_tracker
+var _taClosedMTDMap = {}; // {firstName: closedCount} for the selected period from req_tracker
+var _taPeriodFilled = null; // req_tracker Closed with filled_date inside the selected period
 var _emWeekJoiners = null;
 var _emMTDJoiners  = null;
 var _taCandDbDate  = null; // MAX(data_as_of) from ta_candidates at boot (YYYY-MM-DD)
@@ -9924,6 +9983,13 @@ function _ovLabel() {
   var MONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function _fmt(s){ if(!s)return''; var p=s.split('-'); return parseInt(p[2])+' '+MONS[parseInt(p[1])-1]; }
   return _ovFrom===_ovTo ? _fmt(_ovFrom) : _fmt(_ovFrom)+' – '+_fmt(_ovTo);
+}
+
+// Period label that is safe to call from any render path, including ones that run
+// before _initOvRange() has been triggered by a data load.
+function _ovLabelSafe() {
+  if (!_ovFrom || !_ovTo) _initOvRange();
+  return _ovLabel();
 }
 
 async function loadEMJoinerCounts() {
@@ -9983,8 +10049,21 @@ function _setOvPreset(preset, customFrom, customTo) {
   } else {
     _initOvRange();
   }
-  _emWeekJoiners = null; _emMTDJoiners = null;
+  _emWeekJoiners = null; _emMTDJoiners = null; _taPeriodFilled = null;
   loadEMJoinerCounts();
+  // TA Pipeline: reload the period-scoped closures and filled counts, then repaint.
+  // Without this the tab ignored the period bar entirely.
+  var _tat=document.getElementById('tab-tapipeline');
+  if(_tat&&_tat.classList.contains('active')){
+    if(typeof loadTAClosedMTD==='function') loadTAClosedMTD();
+    if(typeof loadTAFilledForPeriod==='function') loadTAFilledForPeriod();
+    if(typeof renderTAPipeline==='function') _tat.innerHTML=renderTAPipeline();
+  }
+  // Hiring Report: rebuild for the new window unless pinned to a saved cycle.
+  var _hrt=document.getElementById('tab-hiringreport');
+  if(_hrt&&_hrt.classList.contains('active')&&_hrRangeMode==='period'&&typeof loadHiringReport==='function'){
+    _hrCycleData=null; loadHiringReport(_hrt);
+  }
   var _ort=document.getElementById('tab-opsreview');
   if(_ort&&_ort.style.display!=='none') loadOpsReview();
   var _ldt=document.getElementById('tab-ld');
@@ -10013,19 +10092,26 @@ function _setOvPreset(preset, customFrom, customTo) {
   }
 }
 
+// Closures per recruiter for the period selected in the top bar (was hardcoded to
+// the calendar month, so the TA Pipeline never responded to This Week / Last Month).
 async function loadTAClosedMTD() {
   if (!_sb) return;
   try {
-    var _now2 = new Date();
-    var _monStart = new Date(_now2.getFullYear(), _now2.getMonth(), 1).toISOString();
-    var _monEnd   = new Date(_now2.getFullYear(), _now2.getMonth()+1, 0, 23, 59, 59).toISOString();
+    if (!_ovFrom || !_ovTo) _initOvRange();
     var {data:_closed} = await _sb.from('req_tracker')
       .select('primary_recruiter,tat')
       .eq('status','Closed')
-      .gte('updated_at', _monStart)
-      .lte('updated_at', _monEnd)
+      .gte('updated_at', _ovFrom+'T00:00:00')
+      .lte('updated_at', _ovTo+'T23:59:59')
       .gt('primary_recruiter','');
-    if (!_closed || !_closed.length) return;
+    // Empty is a real result, not a no-op — clear the map so a period with no
+    // closures does not keep showing the previous period's numbers.
+    if (!_closed || !_closed.length) {
+      _taClosedMTDMap = {};
+      var _elC = document.getElementById('tab-tapipeline');
+      if (_elC && _elC.classList.contains('active')) _elC.innerHTML = renderTAPipeline();
+      return;
+    }
     var map = {};
     var tatMap = {};
     _closed.forEach(function(r){
@@ -10045,6 +10131,22 @@ async function loadTAClosedMTD() {
     var el = document.getElementById('tab-tapipeline');
     if (el && el.classList.contains('active')) el.innerHTML = renderTAPipeline();
   } catch(e){ console.warn('[loadTAClosedMTD]',e.message); }
+}
+
+// Reqs filled inside the selected period, so the Filled → Joined card matches the
+// period bar instead of always reporting month-to-date.
+async function loadTAFilledForPeriod() {
+  if (!_sb) return;
+  try {
+    if (!_ovFrom || !_ovTo) _initOvRange();
+    var {data:_fRows} = await _sb.from('req_tracker')
+      .select('req_id').eq('status','Closed')
+      .not('filled_date','is',null)
+      .gte('filled_date', _ovFrom).lte('filled_date', _ovTo);
+    _taPeriodFilled = _fRows ? _fRows.length : null;
+    var el = document.getElementById('tab-tapipeline');
+    if (el && el.classList.contains('active')) el.innerHTML = renderTAPipeline();
+  } catch(e){ console.warn('[loadTAFilledForPeriod]',e.message); }
 }
 
 async function loadTACandMap() {
@@ -14186,7 +14288,7 @@ async function sbBoot(user){
           console.log('[sbBoot] TA_ACTIVE_REQS:',row.row_count,'rows');
         }
         if (row.id==='ta_scorecard'    && row.data) { TA_SCORECARD.length=0; row.data.forEach(function(r){TA_SCORECARD.push(r);}); console.log('[sbBoot] TA_SCORECARD:',row.data.length,'recruiters'); }
-        if (row.id==='ta_reqs'         && row.data) { setTimeout(loadTACandMap, 300); setTimeout(loadTAClosedMTD, 400); }
+        if (row.id==='ta_reqs'         && row.data) { setTimeout(loadTACandMap, 300); setTimeout(loadTAClosedMTD, 400); setTimeout(loadTAFilledForPeriod, 450); }
         if (row.id==='account_hc'      && row.data) { _initOvRange(); setTimeout(loadEMJoinerCounts, 500); }
         if (row.id==='ta_reqs_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY req summary restored'); }
         if (row.id==='ta_cand_summary' && row.data) { Object.assign(TA_SUMMARY, row.data); console.log('[sbBoot] TA_SUMMARY candidate fields restored'); }
