@@ -9570,6 +9570,18 @@ function renderTAPipeline(){
   }
   var S = TA_SUMMARY;
   var allData = TA_ACTIVE_REQS.slice();
+  // ── Period filter: reqs RAISED inside the window from the top bar ───────
+  // Applied to allData (not just data) so the unassigned alert, phantom count
+  // and KPI cards all describe the same set as the grid.
+  var _taPeriodTotal = allData.length, _taPeriodHidden = 0;
+  if (_taPeriodFilter) {
+    if (!_ovFrom || !_ovTo) _initOvRange();
+    allData = allData.filter(function(r){
+      var d = r.req_raised_date ? String(r.req_raised_date).substring(0,10) : '';
+      return d && d >= _ovFrom && d <= _ovTo;
+    });
+    _taPeriodHidden = _taPeriodTotal - allData.length;
+  }
   var data = allData.slice();
   if(_taRegion!=='All') data=data.filter(function(r){return r.region===_taRegion;});
   if(_taTier!=='All') data=data.filter(function(r){return r.tier===_taTier;});
@@ -9601,6 +9613,17 @@ function renderTAPipeline(){
   var tf=['All','Platinum','Gold','Regular'].map(function(v){return fbtn(v,_taTier===v,"_taTier='"+v+"';document.getElementById('tab-tapipeline').innerHTML=renderTAPipeline()");}).join('');
   var pf=['All','New','Replacement'].map(function(v){return fbtn(v,_taPosType===v,"_taPosType='"+v+"';document.getElementById('tab-tapipeline').innerHTML=renderTAPipeline()");}).join('');
   var bf=['All','T&M','MS'].map(function(v){return fbtn(v,_taBilling===v,"_taBilling='"+v+"';document.getElementById('tab-tapipeline').innerHTML=renderTAPipeline()");}).join('');
+  var periodBtn='<button onclick="_taPeriodFilter=!_taPeriodFilter;document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline()" '
+    +'title="Filters the grid to reqs raised inside the selected period. Turn off to see the full open pipeline." '
+    +'style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(_taPeriodFilter?700:500)+';'
+    +'border:1px solid '+(_taPeriodFilter?'var(--accent)':'var(--border)')+';'
+    +'background:'+(_taPeriodFilter?'rgba(96,165,250,.15)':'none')+';'
+    +'color:'+(_taPeriodFilter?'var(--accent)':'var(--muted)')+';cursor:pointer">'
+    +(_taPeriodFilter?'&#x1F4C5; Raised '+esc(_ovLabelSafe()):'&#x1F4C5; All open reqs')
+    +'</button>'
+    +(_taPeriodFilter&&_taPeriodHidden>0
+      ? '<span style="font-size:10px;color:var(--muted2);margin-left:2px">'+_taPeriodHidden+' raised earlier hidden</span>'
+      : '');
   var phantomBtn='<button onclick="_taPhantom=!_taPhantom;document.getElementById(\'tab-tapipeline\').innerHTML=renderTAPipeline()" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:'+(_taPhantom?700:500)+';border:1px solid '+(_taPhantom?'var(--red)':'var(--border)')+';background:'+(_taPhantom?'rgba(248,113,113,.15)':'none')+';color:'+(_taPhantom?'var(--red)':'var(--muted)')+';cursor:pointer">⚠ Phantom only</button>';
 var _HRBP_DD=['suhail','somasri','ayush','abhishek','priya paul','shambhavi'];
 var _ddNames=['All'].concat(
@@ -9623,10 +9646,22 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
   function asof(dt,col){return '<div style="font-size:9px;color:'+(col||'var(--muted2)')+';margin-top:3px">as of '+dt+'</div>';}
 
   // ── KPI cards ───────────────────────────────────────────────────────────
+  // These three describe whatever set the grid is showing. With the period filter
+  // on that is "reqs raised in the window", so say so rather than "as of Live".
+  function scopeNote(extra){
+    if (!_taPeriodFilter) return asof(TAT_DATE);
+    return '<div style="font-size:9px;color:var(--muted2);margin-top:3px">raised '
+      +esc(_ovLabelSafe())+(extra||'')+'</div>';
+  }
+  // A req raised inside a window shorter than 45 days cannot yet be >45d old, so
+  // Critical reads 0 by arithmetic, not because the backlog cleared. Flag it.
+  var _winDays = (_ovFrom&&_ovTo) ? Math.round((new Date(_ovTo)-new Date(_ovFrom))/86400000)+1 : 999;
+  var _critCaveat = (_taPeriodFilter && _winDays<=45)
+    ? '<div style="font-size:9px;color:var(--amber);margin-top:1px">window &lt;45d — see All open reqs</div>' : '';
   var kpiCards=[
-    {label:'Open Reqs',     val:data.length,           color:'var(--accent)',  note:asof(TAT_DATE)},
-    {label:'Critical >45d', val:data.filter(function(r){return r.tat>45;}).length, color:'var(--red)', note:asof(TAT_DATE)},
-    {label:'Plat/Gold Open',val:data.filter(function(r){return r.tier==='Platinum'||r.tier==='Gold';}).length, color:'#a78bfa', note:asof(TAT_DATE)},
+    {label:'Open Reqs',     val:data.length,           color:'var(--accent)',  note:scopeNote()},
+    {label:'Critical >45d', val:data.filter(function(r){return r.tat>45;}).length, color:'var(--red)', note:scopeNote()+_critCaveat},
+    {label:'Plat/Gold Open',val:data.filter(function(r){return r.tier==='Platinum'||r.tier==='Gold';}).length, color:'#a78bfa', note:scopeNote()},
     {label:'Avg Fill Speed', val:(S.avg_closed_tat||31)+'d', color:'var(--amber)', note:'<div style="font-size:9px;color:var(--muted2);margin-top:3px">Req→ECode · '+asof(CAND_DATE).replace('<div style="font-size:9px;color:var(--muted2);margin-top:3px">','').replace('</div>','')+'</div>'},
   ];
   // Filled → Joined follows the period bar. _taPeriodFilled / _emWeekJoiners are
@@ -9905,6 +9940,8 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
     +'<span style="font-size:11px;color:var(--muted)">Billing:</span>'+bf
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
+    +periodBtn
+    +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px"></span>'
     +phantomBtn
     +'<span style="width:1px;height:16px;background:var(--border);margin:0 4px;display:inline-block"></span>'
     +'<span style="font-size:11px;color:var(--muted)">Recruiter:</span> '+recDropdown
@@ -9941,6 +9978,9 @@ var recDropdown='<select onchange="_taRecruiterFilter=this.value;document.getEle
     +'</div>';
 }
 var _taRegion='All',_taTier='All',_taPosType='All',_taBilling='All',_taPhantom=false,_taRecruiterFilter='All',_taCustomerFilter='All';
+// Scope the open-req grid (and the KPIs derived from it) to reqs RAISED inside the
+// period bar's window. Toggleable — the full open pipeline is still one click away.
+var _taPeriodFilter = true;
 var _taCandMap = {}; // {req_id: {count,stage,rank,lastActDays}} loaded from ta_candidates
 var _taClosedMTDMap = {}; // {firstName: closedCount} for the selected period from req_tracker
 var _taPeriodFilled = null; // req_tracker Closed with filled_date inside the selected period
