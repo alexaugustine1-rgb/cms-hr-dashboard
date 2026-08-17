@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.25.0 | **Last updated:** 17 Aug 2026 — Fix candidate upload writing 0 rows while stamping a fresh cand_as_of date; getRowsAuto() header detection; ZingHR 3-month export limit documented.
+**Version:** 3.26.0 | **Last updated:** 17 Aug 2026 — Hiring Report and TA Pipeline now driven by the period bar; candidate upload 0-row fix; ZingHR 3-month export limit documented.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,24 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 17 Aug 2026 — Hiring Report + TA Pipeline driven by the period bar (commit ac3dab2)
+- **Reported by:** Alex — (1) the Hiring Report waits for a cycle to be created before it shows anything, "which is not the right way"; it should follow This Month / Last Month / This Week / Last Week / Custom like other tabs. (2) Changing the period bar on the TA Pipeline changed nothing.
+- **Root cause 1 (Hiring Report):** `loadHiringReport()` only loaded data `if (_hrCycleId)`, and `_hrCycleId` was only ever set from existing `hiring_cycles` rows. With no cycle the tab rendered the dead-end "No cycle data available. Select a cycle or create one above." The report had no connection to `_ovFrom`/`_ovTo` at all.
+- **Root cause 2 (TA Pipeline):** `_setOvPreset()` re-rendered Overview, Ops Review, L&D and HRBP but had **no branch for `tapipeline` or `hiringreport`** — neither tab was ever told the period changed. Separately `loadTAClosedMTD()` was hardcoded to `_monStart`/`_monEnd` (calendar month), so even a forced repaint would have shown month figures.
+- **Hiring Report fixes:**
+  - New `_hrWindow()` builds the reporting window from `_ovFrom`/`_ovTo`, shaped like a cycle row (`{id,name,label,cycle_from,cycle_to}`) so the data-load and render paths stay identical for both modes.
+  - New `_hrRangeMode` — `'period'` (default) or `'cycle'`. Saved cycles are now an optional pin, selected from the dropdown where "Period bar — &lt;label&gt;" is the first option; a "↺ Back to period bar" button appears when pinned. `saveHiringCycle()` pins to the new cycle.
+  - `_loadHRCycleData()` takes a window object (still accepts a bare cycle id for older call sites). The `hiring_cycles` fetch is best-effort — a failure there no longer blocks the period-driven report.
+  - Labels carry the real window ("Joined · 1 Aug – 17 Aug", "Upcoming Joiners — offer accepted, DOJ after period end"); the no-data message no longer tells the user to create a cycle.
+- **TA Pipeline fixes:**
+  - `_setOvPreset()` reloads and repaints both tabs when active; `switchTab('tapipeline')` refreshes the period-scoped loaders on entry.
+  - `loadTAClosedMTD()` uses the selected window, and **clears** `_taClosedMTDMap` when a period has no closures. It previously early-returned on an empty result, so a quiet period kept showing the previous period's numbers.
+  - New `loadTAFilledForPeriod()` / `_taPeriodFilled` so the Filled → Joined card pairs a period-scoped filled count with the period joiners (`_emWeekJoiners`). Card relabelled from "(MTD)" to the live period; scorecard column "Closed MTD" → "Closed", recruiter card shows "Closed · &lt;period&gt;".
+  - New `_ovLabelSafe()` — period label callable from render paths that can run before `_initOvRange()` has been triggered by a data load.
+- **Deliberately NOT period-scoped:** Open Reqs, Critical &gt;45d, Plat/Gold Open. These are point-in-time counts of what is open *now* and are already labelled "as of Live". Expect them not to move when the period changes — that is correct, not a bug.
+- **Verified:** served locally and driven in a browser — no console errors, all new functions defined, window mapping correct across all four presets (month 1–17 Aug, lastmonth 1–31 Jul, week 17 Aug, lastweek 10–16 Aug), Hiring Report renders with the period label and its no-data path no longer mentions creating a cycle. Supabase-backed numbers not exercised (no login).
+- Files touched: `index.html` only (16,776 → 16,878 lines). No schema change. `hiring_cycles` table retained and still usable.
 
 ### 17 Aug 2026 — Candidate upload wrote 0 rows but stamped a fresh date (commit 2f6fdfb)
 - **Reported by:** Alex — TA Pipeline header read "Candidate file: 10 Jul 2026 (summary newer than DB — last DB write may have failed)" while the TAT file showed Live (17 Aug).
@@ -1110,6 +1128,7 @@ unchanged) → Vercel team setup with custom domain → GitHub repo transfer.
 ---
 
 ## Known Debt — Carry Forward
+- **Period bar coverage:** `_setOvPreset()` notifies Overview, Ops Review, L&D, HRBP, TA Pipeline and Hiring Report. Any tab added later must be wired in there explicitly — there is no generic broadcast, which is exactly how TA Pipeline and Hiring Report ended up ignoring the bar.
 - **Jan–Mar 2026 candidate gap (permanent):** ta_candidates has no ecode_date before 2026-04-02. ZingHR's ~3-month download limit means it cannot be backfilled from ZingHR. Only recoverable from Super Employee Master if ever needed.
 - **17 Aug candidate data not in DB:** ta_candidates still holds only the 10 Jul batch (426 rows). Needs a re-upload of the 17 Aug candidate transactional file on the fixed build (commit 2f6fdfb). Failures are now loud (red banner names the column/error).
 - **Stale candidate stages:** _taCandMap is built from the accumulated ta_candidates table, and rows never age out. A candidate who has since dropped out but fell outside the export window keeps its last-known stage forever. Affects stage badges and the phantom-req filter. No fix designed.
