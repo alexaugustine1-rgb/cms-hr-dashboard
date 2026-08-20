@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.28.0 | **Last updated:** 17 Aug 2026 — TA Pipeline reframed as Open Pipeline (stock) + Activity (flow) rows, Filled and Joined split; Hiring Report driven by the period bar; candidate upload 0-row fix.
+**Version:** 3.29.0 | **Last updated:** 20 Aug 2026 — ate_tracker and the monthly joiner trend now reconcile from employee_master on every Super Emp upload; emp_code re-issue identified as the reason an ATE separation cannot be inferred from a missing code alone.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -11,7 +11,48 @@
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
 
-### 17 Aug 2026 (session 2) — Headcount sync counted stale rows; getEmpType lost Contract (migration + index.html, COMMIT PENDING)
+### 20 Aug 2026 — ATE reconciliation + live monthly joiner trend (3 migrations + index.html, commit 9ef7030, PUSHED)
+
+**Trigger.** Two long-standing gaps, both diagnosed before the session: `ate_tracker` had no database-side reconciliation of any kind (Active only ever grew — 61 in June, 81 by 18 Aug, nothing flipped to Separated since 9 Jun), and `workforce_intel.data.joiners_by_month` was a one-time manual backfill `{Jan:90,Feb:80,Mar:93,Apr:2}` never wired into the weekly upload.
+
+**THE FINDING THAT MATTERS — CMS re-issues `emp_code`, so a missing code does NOT mean the person left.**
+The specified separation rule was "Active ATE whose emp_code is absent from the latest batch → Separated". Built exactly as specified it flipped **10** rows. Checking those 10 against `employee_master` **by name** showed **7 were still employed under a new emp_code**:
+- **5 real conversions** — `22007515 → 11016292`, `22007516 → 11016293`, `22007527 → 11016375`, `22007532 → 11016376`, `22007572 → 11016432`. All now designated "Executive - Desktop support". ATE → FTE, not separations.
+- **2 re-badges** — `11016355 → 22007627`, `11016356 → 22007626`. Still "Associate Trainee Engineer", still Active. The re-code runs in *both* directions; do not assume a `22007xxx → 11016xxx` shape.
+- **3 genuine separations** — Saurabh Kumar Shukla, Suraj Ulhas Chavhan, Seeralan. No trace in the file under any code or name.
+All 10 were rolled back and the function rewritten. `Separated` is terminal and never revisited, so the naive rule would have written **7 permanent errors**. **Any future rule that infers a leaver from an absent key on this table must veto on name as well.**
+
+**`reconcile_ate_from_employee_master()`** — migrations `add_reconcile_ate_from_employee_master_20260820` then `fix_reconcile_ate_emp_code_reissue_20260820`. `RETURNS integer`, SECURITY DEFINER, `SET search_path = public`. Same `v_cut = max(uploaded_at) - interval '6 hours'` window and `<500`-row guard as `sync_headcount_from_employee_master()`. Three passes, **order is load-bearing**:
+1. Convert on an explicit `fte_emp_code` present in the batch as `Existing`.
+2. Convert on an inferred emp_code re-issue — fires only when the ATE's own code is gone, **exactly one** batch row carries their normalised name, and that row's designation does **not** match `%TRAIN%`. Writes the new code back into `fte_emp_code`, so the match is explicit from the next run on.
+3. Separate — requires **both** emp_code and name absent from the batch.
+Conversion must precede separation: a converted ATE's old code has already dropped out of the file, so separation would otherwise claim the row first and the conversion would be lost. Rows already `Separated` or `Converted to FTE` are never revisited. No HRBP-entered field (`action_notes`, `action_date`, `deployment_status`, `billing_*`) is touched by any pass — verified against the changed rows after the run.
+- **Name matching is a veto on separation, never an assertion on its own.** There are **45 duplicate normalised names** in the 2,628-row file. Pass 2 therefore demands a unique match; ambiguous rows fall through untouched rather than risk a wrong terminal status.
+- **Result:** Active **81 → 73** · Converted to FTE **9 → 14** · Separated **5 → 8**. Second run returned 0 (idempotent).
+
+**`reconcile_joiners_by_month()`** — migration `add_reconcile_joiners_by_month_20260820`. `RETURNS integer` (the YTD total), SECURITY INVOKER, `SET search_path = public`, same batch guard. Alex approved the `workforce_intel` write despite the OPS360 share — additive JSONB value change only, same keys, no schema or type change.
+- **Counts ALL `employee_master` rows, not just the current batch — deliberate, and Alex's explicit choice.** The table accumulates, so a batch-scoped count reports *retained* joiners (573 YTD) and silently rewrites history downward every week as people leave. Gross joiners (633) is what a joiner trend means.
+- Writes `joiners_by_month`, `joiners_ytd` and a `joiners_ytd_note` naming the source, replacing the seeded values outright — never merging, since the old Jan–Apr numbers were approximate *and* wrong (cached Jan 90 vs actual 64).
+- **Live values:** Jan 64 · Feb 77 · Mar 92 · Apr 73 · May 80 · Jun 95 · Jul 92 · Aug 60 = **633 YTD** (was 0). All 8 months verified against a manual `to_char(doj,'Mon')` count. Every month Jan–current is emitted even at zero, via `generate_series`.
+
+**`joiners_ytd` had a second, silent owner.** `processWISuperEmp()` patched it from `joiners_by_week`, which is built off the transient `emp_status='NewJoinee'` tag — which is why it read **0**. Since `processEmployeeMaster()` runs first (`index.html:5036`), that patch would have clobbered the new value seconds later. Removed from the patch object; the RPC now owns the field. **Nothing in index.html reads `joiners_ytd`** — it was write-only. `joiners_by_week` is retained; it still drives `weekly_reports.ta_closed`.
+
+**Advisor / grants — `REVOKE ... FROM anon` is not enough.** The two functions initially raised 4 new warnings. Postgres grants `EXECUTE` to **PUBLIC** by default on every new function and PUBLIC includes `anon`, so revoking `anon` alone changed nothing. The working pattern is `REVOKE EXECUTE ... FROM PUBLIC` followed by an explicit `GRANT TO authenticated, service_role` (migration `revoke_public_execute_reconcile_ate_20260820`). Net: **1** new warning, down from 4.
+- **`reconcile_ate` must stay SECURITY DEFINER.** Ramesh uploads as role `hrops`, and `ate_tracker`'s `ate_write_authenticated` policy admits only `admin` / `executive` / `hrbp`. Under INVOKER the UPDATEs would match zero rows and **return 0 silently** — no error — the worst possible failure mode for a weekly sync. The one remaining warning (`authenticated` can call a SECURITY DEFINER function) is intentional and is strictly tighter than the precedent `sync_positions_from_req_tracker()` already sets.
+- **`reconcile_joiners_by_month` needs no elevation** — `hrops` *is* in `wi_write_hrops` — so it is SECURITY INVOKER and raises nothing.
+- Neither function appears in `function_search_path_mutable`; that list is unchanged at 9.
+
+**Correction to a long-standing note:** `sync_headcount_from_employee_master()` is **SECURITY INVOKER with no `search_path`**, not SECURITY DEFINER. It has been described as DEFINER in prompts and hand-offs; it is not. Only `sync_positions_from_req_tracker()` and the new `reconcile_ate_from_employee_master()` are DEFINER.
+
+**The June "Super Emp shows 27" figure is dead.** The 18 Aug batch holds **82** Associate Trainee Engineers (81 plus one "Assosiate Trainee Engineer" misspelling). At 73 Active, `ate_tracker` is now **under**-counting by ~9, not over-counting. Do not use 27 as a target.
+
+**Monthly Trend chart — note the tab.** It lives in `renderWorkforce()` (Workforce Intelligence), **not** Overview, at ~line 3554; there is exactly one such section in the file. Its month filter is `(attrition[m].exits>0 || rate>0) || joiners[m] > 2`. Replayed against live data: it previously rendered `Jan Feb Mar Jun Jul Aug Sep Oct` — **April and May were dropped entirely**, April because the cached value was 2 and the test is `>2`. It now renders `Jan–Aug` with real bars. Sep and Oct still appear with **0** joiners because `workforce_intel.attrition` carries 2025 months — pre-existing, not caused by this work, but newly visible.
+
+**index.html:** 16,982 → 16,992 lines (+13 / −3, two hunks, no rewrite). `node --check` clean on both inline script blocks. All four overwrite-prevention greps positive (saveODAction 3, loadWFHODActions 8, _wfhOdActions 7, multiBadge 2). Pushed to origin/main; `raw.githubusercontent.com` and `cms-hr-dashboard.vercel.app` both byte-identical to `HEAD:index.html` (1,402,219 bytes / 16,992 lines).
+
+**Open with Ramesh / Sheetal:** confirm the 5 inferred conversions (terminal status — a wrong one needs manual SQL), and get the real current ATE headcount to explain the 82-vs-73 gap.
+
+### 17 Aug 2026 (session 2) — Headcount sync counted stale rows; getEmpType lost Contract (migration + index.html, commit c858e68)
 
 **Trigger.** Alex uploaded `cmsitn_super employee master_1782026094149.xlsx` (2,628 active rows) and asked for the log to be checked. Two real defects fell out, plus the joiner gap closed.
 
@@ -985,6 +1026,29 @@ planned_leaves, employee_account_mapping (not yet built), account_positions_log.
   Fuzzy-matches prospective_joiners against employee_master using pg_trgm similarity + DOJ window.
   Updates matched rows to status='Joined'. Returns count of rows updated.
   Called in processEmployeeMaster after the exact-name auto-reconcile pass.
+- sync_headcount_from_employee_master() → integer. Writes customer_accounts.headcount.
+  **SECURITY INVOKER, no search_path** — despite repeated descriptions to the contrary,
+  it is NOT SECURITY DEFINER. Owns the `v_cut = max(uploaded_at) - interval '6 hours'`
+  batch window and the `<500`-row safety guard that the two functions below copy.
+  Signature must stay `RETURNS integer` — changing it needs a DROP, and OPS360 may call it.
+- reconcile_ate_from_employee_master() → integer (migrations: add_reconcile_ate_from_employee_master_20260820,
+  fix_reconcile_ate_emp_code_reissue_20260820, revoke_public_execute_reconcile_ate_20260820). 20 Aug 2026.
+  **SECURITY DEFINER + `SET search_path = public`.** DEFINER is mandatory: Ramesh uploads as
+  role `hrops` and ate_tracker's `ate_write_authenticated` policy admits only admin/executive/hrbp,
+  so under INVOKER every UPDATE would match zero rows and return 0 **silently**.
+  EXECUTE revoked from PUBLIC (which is what actually exposes a function to `anon`);
+  granted only to authenticated + service_role.
+  Three passes — convert on explicit fte_emp_code, convert on inferred emp_code re-issue,
+  then separate. **Separation requires both emp_code AND name absent** — see the
+  emp_code re-issue debt item. Returns rows changed. Called in processEmployeeMaster
+  immediately after sync_headcount_from_employee_master().
+- reconcile_joiners_by_month() → integer (migration: add_reconcile_joiners_by_month_20260820). 20 Aug 2026.
+  SECURITY INVOKER + `SET search_path = public` — no elevation needed, `hrops` is in `wi_write_hrops`.
+  Rebuilds workforce_intel.data->joiners_by_month / joiners_ytd / joiners_ytd_note from
+  employee_master.doj for the current calendar year. Counts **all rows, not the batch**
+  (gross joiners, not retained). Returns the YTD total. Called immediately after
+  reconcile_ate_from_employee_master(). **workforce_intel is shared with OPS360** — this
+  writes values into existing keys only, no schema change.
 
 ---
 
@@ -995,6 +1059,15 @@ planned_leaves, employee_account_mapping (not yet built), account_positions_log.
 - Populates: _acctHC (composite ACCOUNTNAME|||REGION + flat keys), workforce_intel, ate_tracker.
 - ATE identified by Grade (col CM) = 'ATE' via isATE(r) — NOT EmpType (col CK). FTC/Consultant/CONTRACT remain EmpType-based.
 - ATE reconciliation pass: auto-confirms fte_emp_code against active FTE rows; flags missing ATEs.
+- **Three RPCs fire in order after the employee_master upsert** (processEmployeeMaster, ~line 15445):
+  `sync_headcount_from_employee_master()` → `reconcile_ate_from_employee_master()` →
+  `reconcile_joiners_by_month()`. Each logs its own green line with a row count; a failure logs
+  red and does not abort the remaining upload. Anything else keyed off the weekly batch belongs
+  here too — add it to the chain rather than inventing a new call site.
+- **processWISuperEmp() runs immediately after processEmployeeMaster()** (`index.html:5036`) and
+  patches workforce_intel via `_mergeWI()`, a shallow Object.assign. **Any key it patches will
+  overwrite whatever an RPC just wrote.** This is how `joiners_ytd` stayed at 0. Before having an
+  RPC write a workforce_intel key, check it is not also in that patch object.
 - HC filter: uses col 3 "Employee Status" (Existing/NewJoinee/FnF), NOT col 7 "EmployeeStatus" (Active/Inactive).
 - Attrition DOL: header is 'DOL' (added first in lookup). Without it attrition reads 0.
 - Error handling: try-catch wrapper logs "Super Emp upload error: [message]" and exits cleanly.
@@ -1051,6 +1124,17 @@ Parser NOT YET BUILT. Filename prefix TBC from Ramesh.
 ---
 
 ## ATE Management
+- **Reconciliation is automatic as of 20 Aug 2026** via `reconcile_ate_from_employee_master()`,
+  called on every Super Emp Master upload. Do not hand-reconcile ate_tracker any more —
+  check the upload log line instead. Rows it touches carry `updated_by='ate_sync'`.
+- **Status counts after the first run (20 Aug 2026):** Active **73** · Converted to FTE **14**
+  · Separated **8** · Conversion Initiated **5**. Was 81 / 9 / 5 / 5.
+- **Super Emp Master holds 82 Associate Trainee Engineers** in the 18 Aug batch, against 73
+  Active in the tracker — ate_tracker now **under**-counts by ~9. The old "Super Emp shows 27"
+  figure from June is wrong and must not be used as a target.
+- **`fte_emp_code` is populated on 1 of 100 rows.** The precise conversion rule can therefore
+  almost never fire; conversions are currently detected by the emp_code re-issue heuristic.
+  Getting HRBPs to fill this field is the real fix.
 - **NATS formula:** ROUND(region_fte_hc × 0.10) per region — dynamic from workforce_intel.
 - **DBT flow:** DBT goes directly govt → employee bank. CMS never receives it. CMS exposure = advance paid − recovered. Sheetal logs advance (Sheet 1) and recovery after DBT intimation (Sheet 2).
 - **ate_tracker reconciliation (09 Jun):** 4 exited ATEs set Active → Separated. DO NOT TOUCH 22007479 Ashish Raj (Conversion Initiated ✓). 22003768 Divya Goel: tracker=Separated (13-Apr) but 09-Jun master=Existing+Grade ATE — confirm rejoin vs stale tag.
@@ -1069,6 +1153,11 @@ Vitech, Clix Capital. Deployment gap calc applies ONLY to T&M accounts.
 - Active HC: 2,749 (Super Emp Master, 09 Jun 2026). Account HC cache (activeRows): 2,709. Gap of 40 = FnF Initiated/transitional.
 - Region HC: North 502 / South 660 / East 502 / West 1,088.
 - Attrition (annualised): Jan 34.6% · Feb 20.5% · Mar 19.9% · Apr 1.2% · May 19.1%.
+- **Joiners by month (live from employee_master.doj, 20 Aug 2026):** Jan 64 · Feb 77 · Mar 92
+  · Apr 73 · May 80 · Jun 95 · Jul 92 · Aug 60 = **633 YTD**. Gross joiners (all rows), not
+  retained (which would read 573). Rebuilt on every Super Emp upload by
+  reconcile_joiners_by_month() — never hand-edit joiners_by_month or joiners_ytd again.
+  The old cache {Jan:90,Feb:80,Mar:93,Apr:2} with joiners_ytd 0 was a one-off manual backfill.
 - WI is a large hardcoded JS const (~line 845); Supabase patches it at boot. Attrition scoped to current year (2026).
 
 ---
@@ -1207,7 +1296,7 @@ unchanged) → Vercel team setup with custom domain → GitHub repo transfer.
 
 ## Known Debt — Carry Forward
 - **`employee_master` accumulates; it is not a snapshot.** The upsert is keyed on `emp_code` and never deletes, so leavers persist. On 17 Aug the table held 2,852 rows against 2,628 in that day's file. Anything counting headcount off this table **must** filter to the current batch via `uploaded_at`, as `sync_headcount_from_employee_master()` now does. A `batch_id` column stamped by the parser would be cleaner than a timestamp window — not built.
-- **`emp_status='NewJoinee'` is a transient ZingHR tag, not a durable fact.** Only 104-121 rows carry it at any time and one has a DOJ of Nov 2017. ZingHR flips people to `Existing` over time, so any joiner count over a window more than a few weeks old will silently under-report. `loadEMJoinerCounts()` (~10062) filters on it; `_loadHRCycleData()` (~5345) uses `.in(['NewJoinee','Existing'])`. **The two disagree by design and neither is right for custom date ranges** — count on `doj` alone across all rows. Blocks the custom-date reporting Alex asked for on 17 Aug.
+- **`emp_status='NewJoinee'` is a transient ZingHR tag, not a durable fact.** Only 104-121 rows carry it at any time and one has a DOJ of Nov 2017. ZingHR flips people to `Existing` over time, so any joiner count over a window more than a few weeks old will silently under-report. `loadEMJoinerCounts()` (~10062) filters on it; `_loadHRCycleData()` (~5345) uses `.in(['NewJoinee','Existing'])`. **The two disagree by design and neither is right for custom date ranges** — count on `doj` alone across all rows. Blocks the custom-date reporting Alex asked for on 17 Aug. **PARTIALLY RESOLVED 20 Aug 2026:** the monthly joiner trend now counts on `doj` via `reconcile_joiners_by_month()`, and `joiners_ytd` is no longer derived from the tag. `loadEMJoinerCounts()` and `_loadHRCycleData()` still filter on `emp_status` and are still wrong for anything older than a few weeks.
 - **`linkResignationReq()` may have the same `req_status` hardcode.** The insert at ~line 8890 sets `req_status:'Open', req_age_days:0` when creating an `account_positions_log` row for a resignation backfill. That is the same pattern fixed in `submitRMGNewPosition()` on 17 Aug, but it was left alone because a backfill req may be raised against an already-exported req, so the reasoning is not automatically identical. Worth checking whether it should also leave `req_status` null.
 - **`account_positions_log.status` is dead weight.** 428 rows read `req_status='Closed'` with `status='Open'`, because `status` sits at its column default and the Close action was never built. `_rmgEffStatus()` lets `req_status` win so nothing is visibly wrong today, but any filter or report built on `status` will be badly wrong. Either wire up Close or drop it from the UI.
 - **`updated_at` is not an event date.** On every bulk-upserted table it records when the parser last touched the row, so date-range filters on it return "all" or "nothing". 849 of 856 `req_tracker` Closed rows share one `updated_at`. Use `filled_date` / `ecode_date` / `doj` instead. Audit any other range filter still using `updated_at`.
@@ -1221,7 +1310,33 @@ unchanged) → Vercel team setup with custom domain → GitHub repo transfer.
 - **Stale candidate stages:** _taCandMap is built from the accumulated ta_candidates table, and rows never age out. A candidate who has since dropped out but fell outside the export window keeps its last-known stage forever. Affects stage badges and the phantom-req filter. No fix designed.
 - **getRows() row-0 assumption:** still used by parsers other than the two candidate ones. Any ZingHR export that gains a title row will silently zero out. Consider migrating the rest to getRowsAuto() when each is next touched.
 - Header row leak: req_tracker contains req_id = "Requisition Wise TAT Report" (ZingHR report title parsed as data row). Cosmetically harmless — no customer match, enrich ignores it. Fix: add `if (!rec.req_id || !/^\d+$/.test(rec.req_id)) continue;` in processReqTAT loop.
-- ATE stale records: ate_tracker has 61 Active but Super Emp shows 27. Cleanup awaiting Ramesh headcount confirmation.
+- ~~**ATE stale records.**~~ CLOSED 20 Aug 2026 (open since 18 Jun). `reconcile_ate_from_employee_master()`
+  now runs on every Super Emp upload. Active 81 → 73, Converted 9 → 14, Separated 5 → 8.
+  The debt line's "61 Active but Super Emp shows 27" was wrong on both halves by August —
+  Super Emp actually carries 82 ATEs. Superseded by the two items below.
+- **`emp_code` is RE-ISSUED on ATE conversion and on re-badging — in both directions.**
+  `22007515 → 11016292` (ATE→FTE, designation becomes "Executive - Desktop support") and
+  `11016355 → 22007627` (still an ATE). **A missing emp_code therefore does NOT mean the
+  person left**: the naive rule mis-classified 7 of 10 rows as Separated, which is a terminal
+  status. Any reconciliation on any table that infers a leaver from an absent key must veto on
+  name as well. Note there are 45 duplicate normalised names in a 2,628-row file, so a name
+  match is safe as a veto but NOT as an assertion.
+- **`ate_tracker.fte_emp_code` is empty on 99 of 100 rows**, so the precise conversion rule
+  in `reconcile_ate_from_employee_master()` can essentially never fire and conversions fall to
+  the re-issue heuristic. **5 conversions inferred on 20 Aug need confirming with Ramesh/Sheetal**
+  — 22007515, 22007516, 22007527, 22007532, 22007572. Status is terminal; a wrong one needs
+  manual SQL. Real fix: get HRBPs to fill fte_emp_code at conversion time.
+- **ate_tracker under-counts by ~9.** Super Emp holds 82 Associate Trainee Engineers, the tracker
+  73 Active. New ATEs reach the tracker only via the ATE Advance upload / manual entry, not from
+  the Super Emp file. Worth a fourth pass that INSERTs unknown ATE-designated rows — not built.
+- **`workforce_intel.attrition` is not year-scoped** despite this file previously claiming it is.
+  It carries Sep and Oct rows from 2025, so the Monthly Trend chart in `renderWorkforce()` renders
+  those two months with exits against 0 joiners. Pre-existing; became visible once joiners_by_month
+  went live. Fix belongs in the eSep parser, not the joiner sync.
+- **`REVOKE EXECUTE ... FROM anon` does nothing on its own.** Postgres grants EXECUTE to PUBLIC by
+  default on every new function and PUBLIC includes anon. Revoke from PUBLIC, then GRANT explicitly.
+  `sync_positions_from_req_tracker()` still carries the anon-callable SECURITY DEFINER warning for
+  exactly this reason — same one-line fix if it is ever tidied.
 - contract_workforce: ~50 ATE rows that should not be there. Cleanup pending.
 - Resignation Past LWD: 211 already-left employees in main table. Design pending (collapsed vs escalation panel, Phase 8B).
 - Account Health last visit: _hrbpSVCache has no region field — last visit is pan-account.
