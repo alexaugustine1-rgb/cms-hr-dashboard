@@ -15443,6 +15443,16 @@ async function processEmployeeMaster(wb) {
       }
       log('✓ employee_master: '+_emInserted+' active employees persisted','ok');
       try { await _sb.rpc('sync_headcount_from_employee_master'); log('✓ customer_accounts headcount synced','ok'); } catch(e){ console.warn('hc sync failed', e); }
+      try {
+        var _ateRes = await _sb.rpc('reconcile_ate_from_employee_master');
+        if (_ateRes.error) throw _ateRes.error;
+        log('✓ ate_tracker reconciled — ' + (_ateRes.data||0) + ' rows changed (converted / separated)','ok');
+      } catch(e){ log('ATE reconcile failed: ' + e.message,'err'); }
+      try {
+        var _joinRes = await _sb.rpc('reconcile_joiners_by_month');
+        if (_joinRes.error) throw _joinRes.error;
+        log('✓ joiners_by_month rebuilt from employee_master.doj — ' + (_joinRes.data||0) + ' joiners YTD','ok');
+      } catch(e){ log('Joiner trend reconcile failed: ' + e.message,'err'); }
 
       // ── Compute MTD joiners from NewJoinee rows ──────────────────────────
       var _nowRef2 = new Date();
@@ -15916,14 +15926,14 @@ async function processWISuperEmp(wb) {
     else ctc_brackets['<2.5L'] += cnt; // ATE, CON etc
   });
 
-  // Compute YTD joiners and exiters from the Super Emp data
-  const joiners_ytd = Object.values(joiners_by_week).reduce((s,v)=>s+v,0);
+  // joiners_ytd is NOT patched here. It was summed from joiners_by_week, which is
+  // built off the transient emp_status='NewJoinee' tag and read 0. It is owned by
+  // reconcile_joiners_by_month() (employee_master.doj) as of 20 Aug 2026.
   const curYear = new Date().getFullYear();
 
   const patch = {
     active_hc: active,
     active_hc_current: active,
-    joiners_ytd,
     exiters_ytd: Object.values(attrByMonth).reduce((s,m)=>s+(m.exits||0),0),
     joiners_by_week, joiners_by_week_region,
     female_count: female,
