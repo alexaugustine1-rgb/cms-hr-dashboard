@@ -3686,7 +3686,9 @@ function renderWorkforce() {
   });
   o+='<div style="font-size:10px;color:var(--muted);margin-top:6px">'
     +(totalTE>0
-      ? 'Total voluntary exits &middot; '+_wiPeriodLabel+': '+totalTE
+      ? 'Tenure known for '+totalTE+' of '+q1x+' voluntary exits &middot; '+_wiPeriodLabel
+        +(totalTE<q1x?' <span style="color:var(--amber)">('+(q1x-totalTE)
+          +' without a joining date &mdash; shares below exclude them)</span>':'')
       : '<span style="color:var(--amber)">No tenure-at-exit data. Needs DateOfJoining from the eSep '
         +'export &mdash; populates on the next upload.</span>')+'</div>';
   o+='</div></div>';
@@ -16083,22 +16085,38 @@ async function processWIEsep(wb) {
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   // ── Voluntary exit classification ──────────────────────────────────────
-  // Only count: FinalStatus=Approved AND ResignationType is voluntary
-  // Exclude-list, NOT an allow-list. The previous allow-list of two exact
-  // ResignationType strings matched zero rows on the 18 Aug file and silently
-  // zeroed tenure, region and reasons. ZingHR re-spells these values, so treat
-  // anything unrecognised as voluntary and NAME it in the log instead.
+  // Calibrated 22 Aug 2026 against the 08 Jun archive (13,750 rows, Jun 2021 –
+  // Aug 2026). Rules, in order of how much trouble each one caused:
+  //
+  // 1. ZingHR appends " -M1" / " -HR" to name whoever actioned the record. It is
+  //    an ACTOR tag, not a separation type — 'Absconding' and 'Absconding -M1'
+  //    are the same thing. Strip it before comparing or the -M1 variants (1,792
+  //    Absconding -M1 against 210 Absconding) sail straight through as voluntary.
+  // 2. ResignationType and Reason are only loosely coupled: 'Absconding' appears
+  //    against reasons as innocuous as 'Higher Salary' and 'Family Issues', and
+  //    'Project End' appears against Self Initiation, Dismissal and blank. So a
+  //    row is involuntary if EITHER field says so. Testing one alone leaks.
+  // 3. Exclude-list, never an allow-list. The original allow-list of two exact
+  //    strings matched nothing on the 18 Aug file and silently zeroed tenure,
+  //    region and reasons. Unrecognised values count as voluntary and get NAMED
+  //    in the log so the next upload identifies them.
+  const _stripActor = function(v) {
+    v = String(v || '').trim();
+    ['-M1', '-HR'].forEach(function(sfx) {
+      if (v.slice(-sfx.length) === sfx) v = v.slice(0, -sfx.length).trim();
+    });
+    return v;
+  };
   const INVOLUNTARY_RES_TYPES = new Set([
-    'Company Initiated', 'Company Initiated Separation', 'Termination',
-    'Dismissal', 'Retirement', 'Contract End', 'Contract Completion'
+    'Absconding', 'Absorption (Conversion)', 'Joined and Left', 'Dismissal',
+    'Termination', 'Death', 'Superannuation', 'Retirement',
+    'Company Initiated', 'Company Initiated Separation',
+    'Contract End', 'Contract Completion'
   ]);
   const EXCLUDE_REASONS = new Set([
-    'Unauthorised Absenteeism -M1', 'Unauthorised Absenteeism -HR',
-    'Joined and Left', 'Joined and Left -M1',
-    'Absconding', 'Absconding -M1',
-    'Client Absorption', 'Absorption (Conversion)',
-    'Behavioural Issues', 'Performance Issues', 'Dismissal',
-    'Project End'
+    'Project End', 'Unauthorised Absenteeism', 'Joined and Left',
+    'Absorption (Conversion)', 'Client Absorption', 'Behavioural Issues',
+    'Performance Issues', 'Absconding', 'Dismissal', 'Termination'
   ]);
   const _resTypesSeen = {};
 
@@ -16141,11 +16159,11 @@ async function processWIEsep(wb) {
     if (final_st !== 'Approved') { excl_status++; return; }
 
     // Filter 2: Drop only recognised involuntary separation types
-    if (INVOLUNTARY_RES_TYPES.has(res_type)) { excl_type++; return; }
+    if (INVOLUNTARY_RES_TYPES.has(_stripActor(res_type))) { excl_type++; return; }
 
     // Filter 3: Involuntary reasons leave the voluntary rate but are still counted,
     // so the tab can show them alongside rather than appearing to lose people.
-    if (EXCLUDE_REASONS.has(reason)) {
+    if (EXCLUDE_REASONS.has(_stripActor(reason))) {
       excl_reason++;
       const _im = MONTHS[rel_date.getMonth()];
       invol_by_month[_im] = (invol_by_month[_im] || 0) + 1;
