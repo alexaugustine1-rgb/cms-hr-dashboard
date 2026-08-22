@@ -1052,6 +1052,50 @@ function extractAgingPositions(weekData) {
 
 // ─── RENDER OVERVIEW ──────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════
+// _wiDate() — tolerant date parser shared by the workforce_intel parsers.
+//
+// Why this exists. Both processWISuperEmp() and processWIEsep() read fields via
+// a g() accessor that does String(value).trim(). XLSX.read runs with
+// cellDates:true, so a date cell arrives as a JS Date and g() turns it into
+// "Sat Aug 21 2000 00:00:00 GMT+0530 (India Standard Time)". The old code then
+// did new Date(String(v).split(' ')[0]) — which parses the string "Sat", i.e.
+// Invalid Date, on EVERY row. Two consequences, both live until 22 Aug 2026:
+//   • age_dist and tenure_dist: NaN fails every < comparison, so all 2,629
+//     employees fell through to the final else — ">45" and ">10 yrs" read 100%.
+//   • processWIEsep: every row hit `if (isNaN(rel_date)) return;` and bailed, so
+//     attrition_by_region / _by_tenure / exit_reasons were written empty.
+// Accepts: Date objects, a stringified Date, Excel serials, DD/MM/YYYY and
+// DD-MM-YYYY (day first — the ZingHR convention), and ISO. Returns Date or null.
+// NEVER returns an Invalid Date: callers must be able to trust a non-null result.
+function _wiDate(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  var num = Number(v);
+  if (!isNaN(num) && num > 18000 && num < 110000) {
+    // Excel serial; epoch Dec 30 1899 UTC, which absorbs the 1900 leap-year bug.
+    // Rebuilt as a LOCAL date from the UTC parts: callers read .getMonth() etc,
+    // and a bare UTC instant lands on the previous day in any negative-offset zone.
+    var ed = new Date(Date.UTC(1899, 11, 30) + Math.round(num) * 86400000);
+    if (isNaN(ed.getTime())) return null;
+    return new Date(ed.getUTCFullYear(), ed.getUTCMonth(), ed.getUTCDate());
+  }
+  var str = String(v).trim();
+  if (!str) return null;
+  // A bare number outside the serial range is NOT a date. Without this,
+  // new Date("61") yields 1961-01-01 and new Date("1") yields 2001-01-01 —
+  // plausible-looking dates manufactured out of a stray numeric cell.
+  if (/^\d+(\.\d+)?$/.test(str)) return null;
+  var m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    var yr = m[3].length === 2 ? 2000 + parseInt(m[3], 10) : parseInt(m[3], 10);
+    var dd = new Date(yr, parseInt(m[2], 10) - 1, parseInt(m[1], 10));
+    return isNaN(dd.getTime()) ? null : dd;
+  }
+  var d = new Date(str);          // handles ISO and the full stringified Date
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // _attrWindow() — SINGLE SOURCE OF TRUTH for the annualised attrition window.
 // Read by BOTH renderOverview() and renderWorkforce(). Until 21 Aug 2026 the
 // same algorithm was copy-pasted into both (`_ytdMons`/`q1attr` here,
@@ -3686,9 +3730,12 @@ function renderWorkforce() {
   });
   o+='<div style="font-size:10px;color:var(--muted);margin-top:6px">'
     +(totalTE>0
-      ? 'Tenure known for '+totalTE+' of '+q1x+' voluntary exits &middot; '+_wiPeriodLabel
-        +(totalTE<q1x?' <span style="color:var(--amber)">('+(q1x-totalTE)
-          +' without a joining date &mdash; shares below exclude them)</span>':'')
+      ? (function(){
+          var ytd = W.exiters_ytd||0;
+          return 'Tenure at exit for '+totalTE+' completed voluntary exits, YTD'
+            +(ytd>totalTE?' <span style="color:var(--amber)">('+(ytd-totalTE)
+              +' of '+ytd+' have no joining date &mdash; shares below exclude them)</span>':'');
+        })()
       : '<span style="color:var(--amber)">No tenure-at-exit data. Needs DateOfJoining from the eSep '
         +'export &mdash; populates on the next upload.</span>')+'</div>';
   o+='</div></div>';
@@ -3739,10 +3786,13 @@ function renderWorkforce() {
   o+='<div class="wi-grid">';
   var ageBands=['<25','25-30','30-35','35-45','>45'];
   var ageData=W.age_dist||{};
-  var totalAge=ageBands.reduce(function(s,b){return s+(ageData[b]||0);},0)||1;
+  var _ageSum=ageBands.reduce(function(s,b){return s+(ageData[b]||0);},0);
+  var totalAge=_ageSum||1;
   o+='<div class="wi-card">';
   o+='<div class="wi-card-title">Age Distribution</div>';
-  ageBands.forEach(function(b){
+  if(!_ageSum) o+='<div style="font-size:10px;color:var(--amber);margin:6px 0">No date-of-birth data. '
+    +'Populates on the next Super Emp Master upload.</div>';
+  if(_ageSum) ageBands.forEach(function(b){
     var cnt=ageData[b]||0;
     var pct=Math.round(cnt/totalAge*100);
     o+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">';
@@ -3755,10 +3805,13 @@ function renderWorkforce() {
 
   var tenBands=['<6 months','6m-1yr','1-3 yrs','3-5 yrs','5-10 yrs','>10 yrs'];
   var tenData=W.tenure_dist||{};
-  var totalTen=tenBands.reduce(function(s,b){return s+(tenData[b]||0);},0)||1;
+  var _tenSum=tenBands.reduce(function(s,b){return s+(tenData[b]||0);},0);
+  var totalTen=_tenSum||1;
   o+='<div class="wi-card">';
   o+='<div class="wi-card-title">Tenure Distribution</div>';
-  tenBands.forEach(function(b){
+  if(!_tenSum) o+='<div style="font-size:10px;color:var(--amber);margin:6px 0">No joining-date data. '
+    +'Populates on the next Super Emp Master upload.</div>';
+  if(_tenSum) tenBands.forEach(function(b){
     var cnt=tenData[b]||0;
     var pct=Math.round(cnt/totalTen*100);
     var col=b==='<6 months'||b==='6m-1yr'?'var(--amber)':b==='1-3 yrs'?'var(--accent)':'var(--muted)';
@@ -3773,10 +3826,13 @@ function renderWorkforce() {
   // CTC brackets
   var ctcB=['<2.5L','2.5-4L','4-6L','6-10L','10-15L','>15L'];
   var ctcData=W.ctc_brackets||{};
-  var totalCTC=ctcB.reduce(function(s,b){return s+(ctcData[b]||0);},0)||1;
+  var _ctcSum=ctcB.reduce(function(s,b){return s+(ctcData[b]||0);},0);
+  var totalCTC=_ctcSum||1;
   o+='<div class="wi-card">';
   o+='<div class="wi-card-title">CTC Brackets</div>';
-  ctcB.forEach(function(b){
+  if(!_ctcSum) o+='<div style="font-size:10px;color:var(--amber);margin:6px 0">No grade data. '
+    +'Populates on the next Super Emp Master upload.</div>';
+  if(_ctcSum) ctcB.forEach(function(b){
     var cnt=ctcData[b]||0;
     var pct=Math.round(cnt/totalCTC*100);
     o+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">';
@@ -15876,6 +15932,10 @@ async function processWISuperEmp(wb) {
   const tenure_dist = {'<6 months':0,'6m-1yr':0,'1-3 yrs':0,'3-5 yrs':0,'5-10 yrs':0,'>10 yrs':0};
   const age_dist    = {'<25':0,'25-30':0,'30-35':0,'35-45':0,'>45':0};
   const grade_dist  = {};
+  const _badDates   = {tenure:0, age:0};
+  // g() stringifies, which destroys Date cells. gRaw() returns the value as-is
+  // so _wiDate() can see a real Date. Use it for EVERY date field.
+  const gRaw = (r, ...keys) => { for (const k of keys) { if (r[k] !== undefined && r[k] !== '') return r[k]; } return null; };
 
   log('Processing ' + rows.length + ' employee records…', 'info');
 
@@ -15940,8 +16000,9 @@ async function processWISuperEmp(wb) {
     const gender  = g(r, 'Gender');
     const region  = g(r, 'Region');
     const grade   = g(r, 'Grade');
-    const doj_raw = g(r, 'Date_Of_Joining', 'DateOfJoining', 'DOJ', 'Date Of Joining');
-    const dob_raw = g(r, 'Date_of_Birth', 'DOB', 'DateOfBirth', 'Date Of Birth', 'Date_of_Birth');
+    // Raw (un-stringified) so a Date cell stays a Date. See _wiDate().
+    const doj_raw = gRaw(r, 'Date_Of_Joining', 'DateOfJoining', 'DOJ', 'Date Of Joining');
+    const dob_raw = gRaw(r, 'Date_of_Birth', 'DOB', 'DateOfBirth', 'Date Of Birth');
 
     if (gender === 'Female') female++;
 
@@ -15952,32 +16013,32 @@ async function processWISuperEmp(wb) {
 
     grade_dist[grade] = (grade_dist[grade] || 0) + 1;
 
-    // Tenure
-    if (doj_raw) {
-      try {
-        const d = doj_raw instanceof Date ? doj_raw : new Date(String(doj_raw).split(' ')[0]);
-        const yrs = (today - d) / (365.25 * 86400000);
-        if (yrs < 0.5) tenure_dist['<6 months']++;
-        else if (yrs < 1) tenure_dist['6m-1yr']++;
-        else if (yrs < 3) tenure_dist['1-3 yrs']++;
-        else if (yrs < 5) tenure_dist['3-5 yrs']++;
-        else if (yrs < 10) tenure_dist['5-10 yrs']++;
-        else tenure_dist['>10 yrs']++;
-      } catch(e) {}
-    }
+    // Tenure. An unparseable date is SKIPPED and counted, never bucketed —
+    // NaN silently satisfies the final else and that is what put 100% of staff
+    // in '>10 yrs'.
+    const dojD = _wiDate(doj_raw);
+    if (dojD) {
+      const yrs = (today - dojD) / (365.25 * 86400000);
+      if (yrs < 0)        _badDates.tenure++;
+      else if (yrs < 0.5) tenure_dist['<6 months']++;
+      else if (yrs < 1)   tenure_dist['6m-1yr']++;
+      else if (yrs < 3)   tenure_dist['1-3 yrs']++;
+      else if (yrs < 5)   tenure_dist['3-5 yrs']++;
+      else if (yrs < 10)  tenure_dist['5-10 yrs']++;
+      else                tenure_dist['>10 yrs']++;
+    } else if (doj_raw) { _badDates.tenure++; }
 
     // Age
-    if (dob_raw) {
-      try {
-        const d = dob_raw instanceof Date ? dob_raw : new Date(String(dob_raw).split(' ')[0]);
-        const age = (today - d) / (365.25 * 86400000);
-        if (age < 25) age_dist['<25']++;
-        else if (age < 30) age_dist['25-30']++;
-        else if (age < 35) age_dist['30-35']++;
-        else if (age < 45) age_dist['35-45']++;
-        else age_dist['>45']++;
-      } catch(e) {}
-    }
+    const dobD = _wiDate(dob_raw);
+    if (dobD) {
+      const age = (today - dobD) / (365.25 * 86400000);
+      if (age < 15 || age > 80) _badDates.age++;   // implausible, do not bucket
+      else if (age < 25) age_dist['<25']++;
+      else if (age < 30) age_dist['25-30']++;
+      else if (age < 35) age_dist['30-35']++;
+      else if (age < 45) age_dist['35-45']++;
+      else age_dist['>45']++;
+    } else if (dob_raw) { _badDates.age++; }
   });
 
   // Build region objects
@@ -16081,6 +16142,8 @@ async function processWIEsep(wb) {
   }).filter(r => (r['EmployeeCode'] || r['Employee Code']));
 
   const g = (r, ...keys) => { for (const k of keys) { if (r[k] !== undefined && String(r[k]).trim()) return String(r[k]).trim(); } return ''; };
+  // g() stringifies, which destroys Date cells — use gRaw() + _wiDate() for dates.
+  const gRaw = (r, ...keys) => { for (const k of keys) { if (r[k] !== undefined && r[k] !== '') return r[k]; } return null; };
   const today = new Date();
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -16129,23 +16192,22 @@ async function processWIEsep(wb) {
   const tenure_exits = {'<3 months':0,'3m-1yr':0,'1-2 yrs':0,'2-5 yrs':0,'>5 yrs':0};
 
   let total_raw = 0, excl_status = 0, excl_type = 0, excl_reason = 0, excl_future = 0;
+  let _badRelDates = 0;
 
   log('Processing ' + rows.length + ' eSep records…', 'info');
 
   rows.forEach(r => {
-    const rel_raw  = g(r, 'Relieving Date', 'RelievingDate');
-    const doj_raw  = g(r, 'DateOfJoining', 'Date Of Joining');
+    const rel_raw  = gRaw(r, 'Relieving Date', 'RelievingDate');
+    const doj_raw  = gRaw(r, 'DateOfJoining', 'Date Of Joining');
     const region   = g(r, 'Region');
     const reason   = g(r, 'Reason');
     const final_st = g(r, 'FinalStatus', 'Final Status');
     const res_type = g(r, 'ResignationType', 'Resignation Type');
 
     if (!rel_raw) return;
-    let rel_date;
-    try {
-      rel_date = rel_raw instanceof Date ? rel_raw : new Date(String(rel_raw).split(' ')[0]);
-      if (isNaN(rel_date) || rel_date.getFullYear() !== today.getFullYear()) return;
-    } catch(e) { return; }
+    const rel_date = _wiDate(rel_raw);
+    if (!rel_date) { _badRelDates++; return; }
+    if (rel_date.getFullYear() !== today.getFullYear()) return;
 
     total_raw++;
     if (res_type) _resTypesSeen[res_type] = (_resTypesSeen[res_type] || 0) + 1;
@@ -16182,16 +16244,15 @@ async function processWIEsep(wb) {
     if (reason) reasons[reason] = (reasons[reason] || 0) + 1;
 
     // Tenure at exit
-    if (doj_raw) {
-      try {
-        const doj = doj_raw instanceof Date ? doj_raw : new Date(String(doj_raw).split(' ')[0]);
-        const yrs = (rel_date - doj) / (365.25 * 86400000);
-        if (yrs < 0.25) tenure_exits['<3 months']++;
-        else if (yrs < 1) tenure_exits['3m-1yr']++;
-        else if (yrs < 2) tenure_exits['1-2 yrs']++;
-        else if (yrs < 5) tenure_exits['2-5 yrs']++;
-        else tenure_exits['>5 yrs']++;
-      } catch(e) {}
+    const doj = _wiDate(doj_raw);
+    if (doj) {
+      const yrs = (rel_date - doj) / (365.25 * 86400000);
+      if (yrs < 0) { /* joining after leaving — bad row, do not bucket */ }
+      else if (yrs < 0.25) tenure_exits['<3 months']++;
+      else if (yrs < 1) tenure_exits['3m-1yr']++;
+      else if (yrs < 2) tenure_exits['1-2 yrs']++;
+      else if (yrs < 5) tenure_exits['2-5 yrs']++;
+      else tenure_exits['>5 yrs']++;
     }
   });
 
@@ -16200,6 +16261,7 @@ async function processWIEsep(wb) {
   log('Excluded \u2014 serving notice (future LWD): ' + excl_future
     + ' | not Approved: ' + excl_status
     + ' | involuntary type/reason: ' + (excl_type+excl_reason), 'ok');
+  if (_badRelDates) log('Rows skipped \u2014 unparseable Relieving Date: ' + _badRelDates, 'err');
   log('ResignationType values seen: ' + (Object.keys(_resTypesSeen).length
     ? JSON.stringify(_resTypesSeen) : '(column missing or blank)'),
     Object.keys(_resTypesSeen).length ? 'info' : 'err');
