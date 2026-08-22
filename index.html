@@ -1051,6 +1051,58 @@ function extractAgingPositions(weekData) {
 }
 
 // ─── RENDER OVERVIEW ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════
+// _attrWindow() — SINGLE SOURCE OF TRUTH for the annualised attrition window.
+// Read by BOTH renderOverview() and renderWorkforce(). Until 21 Aug 2026 the
+// same algorithm was copy-pasted into both (`_ytdMons`/`q1attr` here,
+// `_wiDynMons`/`ann` there), and the copies drifted: both walked BACKWARD from
+// last month with a `(cur-1-i+12)%12` index that wrapped past January into the
+// previous calendar year, so in August they picked up Oct/Sep/Aug and rendered
+// the period label "Aug–Jul YTD" over a 190-exit total that included staff who
+// had not left yet. Do not re-inline this into either tab.
+//
+// Window rule: January .. the last COMPLETE month of the current year. The month
+// in progress is excluded (a partial month understates and would drag the
+// annualised rate down), future months cannot appear at all, and it never wraps.
+function _attrWindow(W) {
+  var MONS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var A = (W && W.attrition) || {};
+  var now = new Date();
+  var curMon = now.getMonth();               // 0=Jan
+  var months = [];
+  for (var i = 0; i < curMon; i++) {
+    var m = MONS[i];
+    if (A[m]) months.push(m);
+  }
+  var fhc = (W && (W.active_hc_current || W.active_hc)) || 0;
+  var exits = 0, hcSum = 0, hcCount = 0;
+  months.forEach(function(m) {
+    exits  += A[m].exits || 0;
+    hcSum  += (A[m].active_hc > 0 ? A[m].active_hc : fhc) || 0;
+    hcCount++;
+  });
+  var hc = hcCount > 0 ? ((hcSum / hcCount) || fhc || 1) : (fhc || 1);
+  var rate = exits > 0 ? Math.round(exits / hc * (12 / (months.length || 1)) * 100 * 10) / 10 : 0;
+  var yr = now.getFullYear();
+  var label = months.length > 1  ? months[0] + '&ndash;' + months[months.length-1] + ' ' + yr
+            : months.length === 1 ? months[0] + ' ' + yr
+            : 'no complete month yet';
+  // Months held in WI.attrition that this window deliberately ignores, so the UI
+  // can say so rather than leaving the user to wonder where the number went.
+  var future = MONS.filter(function(m, i) { return i > curMon && A[m] && (A[m].exits||0) > 0; });
+  // Months of the current year with no data at all. Jan–May 2026 were destroyed by
+  // the rolling-export overwrite; say so rather than implying a complete year.
+  var missing = MONS.filter(function(m, i) { return i < curMon && !A[m]; });
+  // Involuntary exits (Project End, absorption, absconding, disciplinary) over the
+  // same months. Excluded from the voluntary rate, reported beside it so the
+  // people are never silently dropped from the picture.
+  var IV = (W && W.attrition_involuntary) || {};
+  var invol = months.reduce(function(t, m) { return t + (IV[m] || 0); }, 0);
+  return { months: months, count: months.length, label: label,
+           exits: exits, hc: hc, rate: rate, future: future, invol: invol,
+           missing: missing };
+}
+
 function renderOverview(w, pw) {
   if(!w) return '<div style="padding:60px;text-align:center;color:var(--muted)">No data loaded</div>';
   var S = CMS_SUMMARY || {};
@@ -1059,22 +1111,19 @@ function renderOverview(w, pw) {
   var wReg  = W.regions||{};
 
   // ── 1. COMMAND STRIP ──────────────────────────────────────────────────
-  // YTD: all complete months with exit data (no cap — gives full picture, not just trailing 3)
+  // Attrition window comes from the shared _attrWindow() helper — see its comment
+  // block. Do NOT re-inline the month walk here; that is what let this tab and
+  // Workforce Intelligence drift apart.
+  var _aw = _attrWindow(W);
   var _MONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var _curMon=new Date().getMonth(); // 0=Jan
-  var _ytdMons=[];
-  for(var _mi=0;_mi<12;_mi++){var _midx=(_curMon-1-_mi+12)%12;var _mn=_MONS[_midx];if(wAttr[_mn]&&(wAttr[_mn].exits||0)>0)_ytdMons.unshift(_mn);}
-  if(!_ytdMons.length){for(var _mi=0;_mi<3;_mi++)_ytdMons.unshift(_MONS[(_curMon-1-_mi+12)%12]);}
-  var _attrPeriodLabel=_ytdMons.length>1?_ytdMons[0]+'&ndash;'+_ytdMons[_ytdMons.length-1]+' YTD':(_ytdMons[0]||'YTD');
-  var _attrMonCount=_ytdMons.length||3;
-  var _fhc=(W&&(W.active_hc_current||W.active_hc))||2800;
-  var q1exits=_ytdMons.reduce(function(s,m){return s+(wAttr[m]&&wAttr[m].exits||0);},0);
-  var q1hc=(function(){var _s=0,_c=0;_ytdMons.forEach(function(m){_s+=(wAttr[m]&&wAttr[m].active_hc>0?wAttr[m].active_hc:_fhc);_c++;});return _c>0?(_s/_c)||1:_fhc||1;})();
-  var _ytdMonths=_MONS;
-  var _ytdExits=0;
-  _ytdMonths.slice(0,_curMon+1).forEach(function(m){_ytdExits+=(wAttr[m]&&wAttr[m].exits||0);});
-  // Voluntary attrition only — excludes Absorption (Conversion) and Dismissal types
-  var q1attr = q1exits>0 ? Math.round(q1exits/q1hc*(12/_attrMonCount)*100*10)/10 : 0;
+  var _ytdMons=_aw.months;
+  var _attrPeriodLabel=_aw.label;
+  var _attrMonCount=_aw.count||1;
+  var q1exits=_aw.exits;
+  var q1hc=_aw.hc;
+  var q1attr=_aw.rate;
+  var _ytdExits=q1exits;
   // Use live Supabase count if loaded, else fall back to static weekly_reports value
   var absCases = (typeof _absentCases!=='undefined'&&_absentCases.length>0)
     ? _absentCases.length
@@ -1101,10 +1150,10 @@ function renderOverview(w, pw) {
   }
 
   var cmdStrip = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">'
-    +cmdKpi('👥', ((W.active_hc_current||W.active_hc_mar||W.active_hc||0)).toLocaleString(), 'Total Headcount', 'var(--accent)', 'Active as on '+(W._super_emp_updated?new Date(W._super_emp_updated).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'latest upload'))
+    +cmdKpi('👥', ((W.active_hc_current||W.active_hc||0)).toLocaleString(), 'Total Headcount', 'var(--accent)', 'Active as on '+(W._super_emp_updated?new Date(W._super_emp_updated).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'latest upload'))
     +cmdKpi('📋', openReqs, 'Open Positions', openReqs>200?'var(--red)':'var(--amber)', critReqs+' critical (>45d)')
     +cmdKpi('✅', mJoiners, esc(_ovLabel()||'Joiners')+' Joiners', mJoiners>5?'var(--green)':'var(--muted)', 'MTD: '+_mtdJoiners+' · from Super Emp Master')
-    +cmdKpi('📈', q1attr+'%', 'Annualised Attrition', q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)', q1exits+' exits '+_attrPeriodLabel)
+    +cmdKpi('📈', q1attr+'%', 'Annualised Attrition', q1attr>15?'var(--red)':q1attr>10?'var(--amber)':'var(--green)', q1exits+' voluntary &middot; '+_attrPeriodLabel+(_aw.invol?' (+'+_aw.invol+' invol)':''))
     +cmdKpi('🚨', absCases, 'Long Absent Cases', absCases>20?'var(--red)':absCases>10?'var(--amber)':'var(--muted)', 'Pending action / no eSep')
     +'</div>';
 
@@ -1330,7 +1379,7 @@ function renderOverview(w, pw) {
     +'<div style="font-family:DM_Mono,monospace;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Workforce Health Indicators</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
     +healthChip('Annualised Attrition YTD', q1attr+'%', attrCol)
-    +healthChip('Active HC', (W.active_hc_mar||0).toLocaleString(), 'var(--accent)')
+    +healthChip('Active HC', (W.active_hc_current||W.active_hc||0).toLocaleString(), 'var(--accent)')
     +healthChip('Female %', (W.female_pct||0)+'%', 'var(--accent)')
     +healthChip('Absent >7d', absCases, absCases>20?'var(--red)':'var(--amber)')
     +healthChip('Plat Critical', plat_open, plat_open>3?'var(--red)':'var(--amber)')
@@ -3502,37 +3551,54 @@ function renderWorkforce() {
   o+='<div class="wi-card"><div class="wi-card-title">Active Headcount</div><div class="wi-val">'+_hcVal.toLocaleString()+'</div><div class="wi-sub">Active + Serving Notice Period</div></div>';
   o+='<div class="wi-card"><div class="wi-card-title">Annual Wage Bill</div><div class="wi-val" style="font-size:26px;color:var(--accent)">&#8377;'+W.total_wage_bill_cr+' Cr</div><div class="wi-sub">CTC snapshot</div></div>';
 
-  // Rolling attrition — last 3 complete months with data (same dynamic logic as Overview tab)
+  // Annualised attrition — from the shared _attrWindow() helper. Do NOT re-inline
+  // the month walk here; the copy that used to live in this function is exactly
+  // how this tab and Overview drifted into disagreeing.
+  var _aw = _attrWindow(W);
   var _wiMONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var _wiCurMon=new Date().getMonth();
-  var _wiDynMons=[];
-  for(var _wmi=0;_wmi<12;_wmi++){var _wmidx=(_wiCurMon-1-_wmi+12)%12;var _wmn=_wiMONS[_wmidx];if(W.attrition[_wmn]&&(W.attrition[_wmn].exits||0)>0)_wiDynMons.unshift(_wmn);}
-  if(!_wiDynMons.length){for(var _wmi=0;_wmi<3;_wmi++)_wiDynMons.unshift(_wiMONS[(_wiCurMon-1-_wmi+12)%12]);}
-  var _wiPeriodLabel=_wiDynMons.length>1?_wiDynMons[0]+'&ndash;'+_wiDynMons[_wiDynMons.length-1]+' YTD':(_wiDynMons[0]||'YTD');
-  var _wiMonCount=_wiDynMons.length||3;
-  var q1x=0,_q1hcSum=0,q1rCount=0;
-  var _fhc=(W&&(W.active_hc_current||W.active_hc))||0;
-  _wiDynMons.forEach(function(m){
-    if(W.attrition[m]){
-      q1x += W.attrition[m].exits||0;
-      _q1hcSum += (W.attrition[m].active_hc>0?W.attrition[m].active_hc:_fhc)||0;
-      q1rCount++;
-    }
-  });
-  var _q1hc = q1rCount>0 ? (_q1hcSum/q1rCount)||_fhc||1 : _fhc||1;
-  var ann = q1x>0 ? (Math.round(q1x/_q1hc*(12/_wiMonCount)*100*10)/10).toFixed(1) : '&mdash;';
+  var _wiDynMons=_aw.months;
+  var _wiPeriodLabel=_aw.label;
+  var q1x=_aw.exits;
+  var ann = q1x>0 ? _aw.rate.toFixed(1) : '&mdash;';
   var annCol = parseFloat(ann)>25?'var(--red)':parseFloat(ann)>15?'var(--amber)':'var(--green)';
-  o+='<div class="wi-card"><div class="wi-card-title">Annualised Attrition</div><div class="wi-val" style="color:'+annCol+'">'+ann+'%</div><div class="wi-sub">'+q1x+' voluntary exits '+_wiPeriodLabel+'</div></div>';
+  o+='<div class="wi-card"><div class="wi-card-title">Annualised Attrition</div><div class="wi-val" style="color:'+annCol+'">'+ann+'%</div>'
+    +'<div class="wi-sub">'+q1x+' voluntary exits &middot; '+_wiPeriodLabel
+    +(_aw.invol?' <span style="color:var(--muted2)">(+'+_aw.invol+' involuntary)</span>':'')
+    +(_aw.missing.length?'<br><span style="color:var(--amber);font-size:10px">no eSep data for '
+       +_aw.missing.join(', ')+' &mdash; rate covers '+_aw.count+' month(s) only</span>':'')
+    +'</div></div>';
 
-  // Gender diversity — stock vs hiring rate
+  // Serving notice (stock) — deliberately its OWN card, never folded into
+  // attrition. These people are still inside Active Headcount; counting them as
+  // exits put the same person on both sides of the ratio and is what produced the
+  // 190-exit / 17.3% reading on 18 Aug.
+  var _sn = W.serving_notice||null;
+  var _snTot = _sn ? (_sn.total||0) : null;
+  o+='<div class="wi-card"><div class="wi-card-title">Serving Notice</div>'
+    +'<div class="wi-val" style="font-size:24px;color:'+(_snTot>60?'var(--amber)':'var(--muted)')+'">'
+    +(_snTot===null?'&mdash;':_snTot)+'</div>'
+    +'<div class="wi-sub">'+(_snTot===null
+        ? 'awaiting next eSep upload'
+        : 'LWD ahead &middot; counted in headcount, not attrition')+'</div></div>';
+  o+='</div>';
+
+  // Gender diversity — stock vs hiring rate. ta_gender is written in-memory by the
+  // candidate upload and has never been persisted to workforce_intel, so it is
+  // normally absent. Show nothing rather than a fabricated "0% new hires".
   var _femStk = W.female_pct||0;
-  var _femHire = (W.ta_gender&&W.ta_gender.female_pct_pipeline)||0;
-  var _femDir = _femHire >= _femStk ? '▲' : '▼';
-  var _femDirCol = _femHire >= _femStk ? 'var(--green)' : 'var(--amber)';
+  var _femHire = (W.ta_gender&&W.ta_gender.female_pct_pipeline);
+  var _femSub;
+  if (_femHire === undefined || _femHire === null) {
+    _femSub = 'On rolls &nbsp;&bull;&nbsp; <span style="color:var(--muted2)">new-hire mix not available</span>';
+  } else {
+    var _femDir = _femHire >= _femStk ? '▲' : '▼';
+    var _femDirCol = _femHire >= _femStk ? 'var(--green)' : 'var(--amber)';
+    _femSub = 'On rolls &nbsp;&bull;&nbsp; <span style="color:'+_femDirCol+'">'+_femDir+' '+_femHire+'% new hires</span>';
+  }
+  o+='<div class="wi-grid" style="margin-top:12px">';
   o+='<div class="wi-card"><div class="wi-card-title">Female Representation</div>'
     +'<div class="wi-val" style="font-size:24px">'+_femStk+'%</div>'
-    +'<div class="wi-sub">On rolls &nbsp;&bull;&nbsp; '
-    +'<span style="color:'+_femDirCol+'">'+_femDir+' '+_femHire+'% new hires</span></div></div>';
+    +'<div class="wi-sub">'+_femSub+'</div></div>';
   o+='</div>';
 
   // ── TREND CHART — Joiners vs Exits with region toggle ────────────────
@@ -3618,7 +3684,11 @@ function renderWorkforce() {
     o+='<div style="min-width:60px;font-size:11px;color:var(--text);text-align:right">'+cnt+' <span style="color:var(--muted)">('+pct+'%)</span></div>';
     o+='</div>';
   });
-  o+='<div style="font-size:10px;color:var(--muted);margin-top:6px">Total voluntary exits Q1: '+totalTE+'</div>';
+  o+='<div style="font-size:10px;color:var(--muted);margin-top:6px">'
+    +(totalTE>0
+      ? 'Total voluntary exits &middot; '+_wiPeriodLabel+': '+totalTE
+      : '<span style="color:var(--amber)">No tenure-at-exit data. Needs DateOfJoining from the eSep '
+        +'export &mdash; populates on the next upload.</span>')+'</div>';
   o+='</div></div>';
 
   // Attrition rate card
@@ -3629,10 +3699,16 @@ function renderWorkforce() {
   var peakExit  = ((tenureExits['1-2 yrs']&&tenureExits['1-2 yrs'].total)||0);
   var peakPct   = totalTE>0?Math.round(peakExit/totalTE*100):0;
   o+='<div style="margin-top:10px">';
-  o+='<div style="font-size:22px;color:var(--amber);font-weight:700;margin-bottom:4px">'+earlyPct+'%</div>';
-  o+='<div style="font-size:11px;color:var(--muted)">exits within first year</div>';
-  o+='<div style="margin-top:12px;font-size:22px;color:var(--red);font-weight:700;margin-bottom:4px">'+peakPct+'%</div>';
-  o+='<div style="font-size:11px;color:var(--muted)">exits at 1–2 yr mark (peak churn)</div>';
+  if (totalTE > 0) {
+    o+='<div style="font-size:22px;color:var(--amber);font-weight:700;margin-bottom:4px">'+earlyPct+'%</div>';
+    o+='<div style="font-size:11px;color:var(--muted)">exits within first year</div>';
+    o+='<div style="margin-top:12px;font-size:22px;color:var(--red);font-weight:700;margin-bottom:4px">'+peakPct+'%</div>';
+    o+='<div style="font-size:11px;color:var(--muted)">exits at 1–2 yr mark (peak churn)</div>';
+  } else {
+    o+='<div style="font-size:22px;color:var(--muted);font-weight:700;margin-bottom:4px">&mdash;</div>';
+    o+='<div style="font-size:11px;color:var(--muted)">Early-exit and peak-churn shares need tenure-at-exit '
+      +'data, which is not in the current cache.</div>';
+  }
   o+='</div></div>';
   o+='</div>';
 
@@ -14318,10 +14394,12 @@ async function sbBoot(user){
   // Load Workforce Intel from Supabase — replaces hardcoded WI constant
   try {
     const{data:wiRow}=await _sb.from('workforce_intel').select('data').eq('id','current').single();
-    if(wiRow&&wiRow.data&&wiRow.data.active_hc_mar){
+    if(wiRow&&wiRow.data&&Object.keys(wiRow.data).length){
       // Merge with hardcoded WI — Supabase takes precedence
       Object.assign(WI, wiRow.data);
-      console.log('[sbBoot] WI loaded from Supabase, active_hc_mar:', WI.active_hc_mar);
+      console.log('[sbBoot] WI loaded from Supabase, active_hc:', WI.active_hc_current||WI.active_hc);
+    } else {
+      console.warn('[sbBoot] workforce_intel returned no data — dashboard is on the hardcoded fallback');
     }
   } catch(e){ console.warn('[sbBoot] WI fallback to hardcoded:', e.message); }
   // Load persisted upload data from data_cache
@@ -16006,24 +16084,33 @@ async function processWIEsep(wb) {
 
   // ── Voluntary exit classification ──────────────────────────────────────
   // Only count: FinalStatus=Approved AND ResignationType is voluntary
-  const VOLUNTARY_TYPES = new Set([
-    'Self Initiation',
-    'Employee Initiated resignation of portal'
+  // Exclude-list, NOT an allow-list. The previous allow-list of two exact
+  // ResignationType strings matched zero rows on the 18 Aug file and silently
+  // zeroed tenure, region and reasons. ZingHR re-spells these values, so treat
+  // anything unrecognised as voluntary and NAME it in the log instead.
+  const INVOLUNTARY_RES_TYPES = new Set([
+    'Company Initiated', 'Company Initiated Separation', 'Termination',
+    'Dismissal', 'Retirement', 'Contract End', 'Contract Completion'
   ]);
-  // Exclude these even if voluntary type matches
   const EXCLUDE_REASONS = new Set([
     'Unauthorised Absenteeism -M1', 'Unauthorised Absenteeism -HR',
     'Joined and Left', 'Joined and Left -M1',
-    'Absconding', 'Absconding -M1'
+    'Absconding', 'Absconding -M1',
+    'Client Absorption', 'Absorption (Conversion)',
+    'Behavioural Issues', 'Performance Issues', 'Dismissal',
+    'Project End'
   ]);
+  const _resTypesSeen = {};
 
-  const exits_by_month = {};          // {Jan: count}
+  const exits_by_month = {};          // {Jan: count} — VOLUNTARY only
+  const invol_by_month = {};          // {Jan: count} — involuntary, tracked not dropped
+  const months_in_file = {};          // {Jan: true} — months this export covers at all
   const exits_by_month_region = {};   // {Jan: {North:2, South:1}}
   const exits_by_region = {North:0, South:0, East:0, West:0};
   const reasons = {};
   const tenure_exits = {'<3 months':0,'3m-1yr':0,'1-2 yrs':0,'2-5 yrs':0,'>5 yrs':0};
 
-  let total_raw = 0, excl_status = 0, excl_type = 0, excl_reason = 0;
+  let total_raw = 0, excl_status = 0, excl_type = 0, excl_reason = 0, excl_future = 0;
 
   log('Processing ' + rows.length + ' eSep records…', 'info');
 
@@ -16043,15 +16130,27 @@ async function processWIEsep(wb) {
     } catch(e) { return; }
 
     total_raw++;
+    if (res_type) _resTypesSeen[res_type] = (_resTypesSeen[res_type] || 0) + 1;
+    if (rel_date <= today) months_in_file[MONTHS[rel_date.getMonth()]] = true;
+
+    // Filter 0: the relieving date must have PASSED. A future LWD means the person
+    // is serving notice — still on rolls, still inside Active Headcount, not an exit.
+    if (rel_date > today) { excl_future++; return; }
 
     // Filter 1: Must be Approved
     if (final_st !== 'Approved') { excl_status++; return; }
 
-    // Filter 2: Must be voluntary resignation type
-    if (!VOLUNTARY_TYPES.has(res_type)) { excl_type++; return; }
+    // Filter 2: Drop only recognised involuntary separation types
+    if (INVOLUNTARY_RES_TYPES.has(res_type)) { excl_type++; return; }
 
-    // Filter 3: Exclude specific involuntary reasons
-    if (EXCLUDE_REASONS.has(reason)) { excl_reason++; return; }
+    // Filter 3: Involuntary reasons leave the voluntary rate but are still counted,
+    // so the tab can show them alongside rather than appearing to lose people.
+    if (EXCLUDE_REASONS.has(reason)) {
+      excl_reason++;
+      const _im = MONTHS[rel_date.getMonth()];
+      invol_by_month[_im] = (invol_by_month[_im] || 0) + 1;
+      return;
+    }
 
     const mon = MONTHS[rel_date.getMonth()];
     exits_by_month[mon] = (exits_by_month[mon] || 0) + 1;
@@ -16078,8 +16177,18 @@ async function processWIEsep(wb) {
     }
   });
 
-  log('Voluntary approved exits: ' + Object.values(exits_by_month).reduce((s,v)=>s+v,0), 'ok');
-  log('Excluded (not Approved): ' + excl_status + ' | Involuntary/other: ' + (excl_type+excl_reason), 'ok');
+  const _volTotal = Object.values(exits_by_month).reduce((s,v)=>s+v,0);
+  log('Voluntary approved exits (LWD already passed): ' + _volTotal, 'ok');
+  log('Excluded \u2014 serving notice (future LWD): ' + excl_future
+    + ' | not Approved: ' + excl_status
+    + ' | involuntary type/reason: ' + (excl_type+excl_reason), 'ok');
+  log('ResignationType values seen: ' + (Object.keys(_resTypesSeen).length
+    ? JSON.stringify(_resTypesSeen) : '(column missing or blank)'),
+    Object.keys(_resTypesSeen).length ? 'info' : 'err');
+  if (!_volTotal && total_raw > 0) {
+    log('ATTRITION WROTE ZERO against ' + total_raw + ' dated rows \u2014 filters rejected everything. '
+      + 'Check the ResignationType / FinalStatus values named above before trusting the tab.', 'err');
+  }
 
   // ── Load monthly HC denominators from monthly_hc_snapshot ──────────────
   let hc_snap = {};
@@ -16095,9 +16204,24 @@ async function processWIEsep(wb) {
   const fallbackHC = (typeof WI !== 'undefined' && WI.active_hc) || 2830;
 
   // ── Build attrition object with correct per-month denominator ──────────
+  const _existingAttr = (typeof WI !== 'undefined' && WI.attrition) || {};
+  const _curMonIdx = today.getMonth();
   const attrition = {};
-  MONTHS.forEach(mon => {
-    if (!exits_by_month[mon]) return;
+  let _kept = 0, _dropped = 0;
+  MONTHS.forEach((mon, mi) => {
+    // Carry forward months this file does not cover, so a rolling export cannot
+    // erase history. Future months are dropped outright — nobody has left yet.
+    if (mi > _curMonIdx) { if (_existingAttr[mon]) _dropped++; return; }
+    if (!exits_by_month[mon]) {
+      // Covered by this export but nothing qualified → a genuine zero. Write it,
+      // do NOT fall through to carry-forward or the old figure comes back.
+      if (months_in_file[mon]) {
+        attrition[mon] = { exits: 0, active_hc: hc_snap[mon] || fallbackHC, rate: 0, region: {} };
+        return;
+      }
+      if (_existingAttr[mon]) { attrition[mon] = _existingAttr[mon]; _kept++; }
+      return;
+    }
     const ohc = hc_snap[mon] || fallbackHC;
     const rate = Math.round(exits_by_month[mon] / ohc * 12 * 1000) / 10; // annualised, 1dp
     attrition[mon] = {
@@ -16107,6 +16231,8 @@ async function processWIEsep(wb) {
       region: exits_by_month_region[mon] || {}
     };
   });
+  if (_kept)    log('Attrition: ' + _kept + ' earlier month(s) carried forward (not in this export)', 'info');
+  if (_dropped) log('Attrition: ' + _dropped + ' future-dated month(s) dropped \u2014 those are notice-period rows, not exits', 'info');
 
   const top_reasons = Object.entries(reasons)
     .sort((a,b) => b[1]-a[1]).slice(0,10)
@@ -16114,6 +16240,7 @@ async function processWIEsep(wb) {
 
   const patch = {
     attrition,
+    attrition_involuntary: invol_by_month,
     attrition_by_region: exits_by_region,
     attrition_by_tenure: Object.fromEntries(
       Object.entries(tenure_exits).map(([k,v]) => [k, {total: v}])
@@ -16532,45 +16659,42 @@ async function processResignationData(wb) {
 
   log('✓ Resignation: '+newRows.length+' records | R1 pending: '+r1_pending+' | LWD past: '+lwd_past,'ok');
 
-  // Compute attrition by month from eSep data and patch WI
+  // -- SERVING NOTICE (stock) — NOT attrition ------------------------
+  // This block used to overwrite WI.attrition with an unfiltered count of every
+  // resignation bucketed by LWD. It ran AFTER processWIEsep in the same upload,
+  // so it clobbered the filtered figure and counted people whose last day had not
+  // arrived: on 18 Aug it reported 190 exits when 78 people had actually left.
+  // Those staff are already inside Active Headcount ("Active + Serving Notice
+  // Period"), so counting them as exits put the same person on both sides of the
+  // ratio. Attrition is owned by processWIEsep alone. This now writes the
+  // forward-looking stock figure to its own key instead.
   try {
     const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const exitsByMonth = {};
-    const exitsByMonthRegion = {};
+    const _today0 = new Date(); _today0.setHours(0,0,0,0);
+    const noticeByMonth = {};
+    const noticeByRegion = {};
+    let noticeTotal = 0;
     newRows.forEach(function(r) {
-      // Use LWD as the exit date
       var lwdStr = r.lwd || '';
       if (!lwdStr) return;
       var lwd = new Date(lwdStr);
       if (isNaN(lwd)) return;
-      if (lwd.getFullYear() !== new Date().getFullYear()) return; // current year only
+      if (lwd < _today0) return;              // already gone: that is attrition, not notice
+      noticeTotal++;
       var mon = MONTHS[lwd.getMonth()];
-      exitsByMonth[mon] = (exitsByMonth[mon]||0) + 1;
-      if (!exitsByMonthRegion[mon]) exitsByMonthRegion[mon] = {};
+      noticeByMonth[mon] = (noticeByMonth[mon]||0) + 1;
       var reg = r.region || '';
-      if (reg) exitsByMonthRegion[mon][reg] = (exitsByMonthRegion[mon][reg]||0) + 1;
+      if (reg) noticeByRegion[reg] = (noticeByRegion[reg]||0) + 1;
     });
-    if (Object.keys(exitsByMonth).length > 0) {
-      // Merge with existing attrition data (preserve active_hc from WI)
-      var existingAttr = (WI && WI.attrition) || {};
-      var newAttr = {};
-      MONTHS.forEach(function(mon) {
-        if (!exitsByMonth[mon] && !existingAttr[mon]) return;
-        var exits = exitsByMonth[mon] || 0;
-        var hc = (existingAttr[mon] && existingAttr[mon].active_hc) || (WI && (WI.active_hc_current || WI.active_hc)) || 2800;
-        var rate = hc > 0 ? Math.round(exits / hc * 12 * 100 * 10) / 10 : 0;
-        newAttr[mon] = Object.assign({}, existingAttr[mon]||{}, {
-          exits: exits,
-          active_hc: hc,
-          rate: rate,
-          region: exitsByMonthRegion[mon] || (existingAttr[mon] && existingAttr[mon].region) || {}
-        });
-      });
-      await _mergeWI({ attrition: newAttr });
-      Object.assign(WI, { attrition: newAttr });
-      log('✓ Attrition by month updated: ' + JSON.stringify(Object.fromEntries(Object.entries(newAttr).map(([k,v])=>[k,v.exits+' exits']))), 'ok');
-    }
-  } catch(e) { console.warn('[attrition patch]', e.message); }
+    await _mergeWI({ serving_notice: {
+      total: noticeTotal,
+      by_month: noticeByMonth,
+      by_region: noticeByRegion,
+      as_of: new Date().toISOString().substring(0,10)
+    }});
+    log('✓ Serving notice (LWD still ahead): ' + noticeTotal + ' — '
+      + JSON.stringify(noticeByMonth) + '. Not counted as attrition.', 'ok');
+  } catch(e) { console.warn('[serving notice patch]', e.message); }
 
   postUploadRefresh('esep');
   const el = document.getElementById('tab-resignation');
