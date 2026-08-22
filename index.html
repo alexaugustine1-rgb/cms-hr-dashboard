@@ -3662,25 +3662,41 @@ function renderWorkforce() {
   var _treg = (typeof window!=='undefined'&&window._wiTrendReg)||'All';
   // Build MONTHS dynamically from actual attrition/joiner data — no hardcoded list
   var _joiners = W.joiners_by_month||{Jan:90,Feb:80,Mar:93,Apr:2};
+  var _joinersReg = W.joiners_by_month_region||{};   // written by reconcile_joiners_by_month()
   var _allMONS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var MONTHS=_allMONS.filter(function(m){return (W.attrition[m]&&((W.attrition[m].exits||0)>0||(W.attrition[m].rate||0)>0))||(_joiners[m]&&_joiners[m]>2);});
   if(!MONTHS.length)MONTHS=['Jan','Feb','Mar','Apr'];
+
+  // Per-region series. The exits bar always followed the region toggle, but the
+  // rate label read the pan-India W.attrition[m].rate, so selecting North showed
+  // North's bars under all-India percentages. Both now come from the same scope.
+  var _regHC = (_treg!=='All' && W.regions && W.regions[_treg] && W.regions[_treg].hc) || 0;
+  function _exOf(m){
+    var md = W.attrition[m];
+    if(!md) return 0;
+    return _treg==='All' ? (md.exits||0) : ((md.region&&md.region[_treg])||0);
+  }
+  function _joOf(m){
+    if(_treg==='All') return _joiners[m]||0;
+    return (_joinersReg[m]&&_joinersReg[m][_treg])||0;
+  }
+  function _rateOf(m){
+    if(_treg==='All') return (W.attrition[m]&&W.attrition[m].rate)||0;
+    // Annualised on the region's OWN headcount, not the national one.
+    if(!_regHC) return 0;
+    return Math.round(_exOf(m)/_regHC*12*100*10)/10;
+  }
+  var _hasRegJoiners = _treg==='All' || MONTHS.some(function(m){return _joOf(m)>0;});
+
   var _maxBar = 1;
-  MONTHS.forEach(function(m){
-    var ex = _treg==='All'
-      ? ((W.attrition[m]&&W.attrition[m].exits)||0)
-      : ((W.attrition[m]&&W.attrition[m].region&&W.attrition[m].region[_treg])||0);
-    var jo = _treg==='All' ? (_joiners[m]||0) : 0; // region joiners not available yet
-    _maxBar = Math.max(_maxBar, ex, jo);
-  });
+  MONTHS.forEach(function(m){ _maxBar = Math.max(_maxBar, _exOf(m), _hasRegJoiners?_joOf(m):0); });
 
   o+='<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">';
   o+='<div style="display:flex;align-items:flex-end;gap:16px;height:120px;padding:0 8px">';
   MONTHS.forEach(function(m){
-    var md = W.attrition[m]||{exits:0,rate:0};
-    var ex = _treg==='All' ? (md.exits||0) : ((md.region&&md.region[_treg])||0);
-    var jo = _treg==='All' ? (_joiners[m]||0) : 0;
-    var rate = md.rate||0;
+    var ex = _exOf(m);
+    var jo = _hasRegJoiners ? _joOf(m) : 0;
+    var rate = _rateOf(m);
     var exH = Math.max((ex/_maxBar)*100,2);
     var joH = Math.max((jo/_maxBar)*100,2);
     var isFut = (ex<=3 && jo<=3); // sparse/incomplete month — render lighter
@@ -3690,21 +3706,26 @@ function renderWorkforce() {
     o+='<div style="font-size:10px;font-weight:600;color:'+rateCol+';margin-bottom:2px">'+(rate>0?rate+'%':'')+'</div>';
     // Side-by-side bars
     o+='<div style="display:flex;gap:2px;align-items:flex-end;width:100%;height:90px">';
-    if(_treg==='All'){
+    if(_hasRegJoiners){
       o+='<div style="flex:1;height:'+joH+'px;background:rgba(52,211,153,.6);border-radius:2px 2px 0 0" title="Joiners: '+jo+'"></div>';
     }
     o+='<div style="flex:1;height:'+exH+'px;background:'+(isFut?'rgba(148,163,184,.3)':'rgba(248,113,113,.7)')+';border-radius:2px 2px 0 0" title="Exits: '+ex+'"></div>';
     o+='</div>';
     o+='<div style="font-size:10px;color:var(--muted);margin-top:3px">'+m+'</div>';
-    if(_treg==='All') o+='<div style="font-size:9px;color:rgba(52,211,153,.9)">'+jo+'↑</div>';
+    if(_hasRegJoiners) o+='<div style="font-size:9px;color:rgba(52,211,153,.9)">'+jo+'↑</div>';
     o+='<div style="font-size:9px;color:rgba(248,113,113,.9)">'+ex+'↓</div>';
     o+='</div>';
   });
   o+='</div>';
   o+='<div style="display:flex;gap:16px;margin-top:8px;padding:0 8px">';
-  if(_treg==='All') o+='<div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:rgba(52,211,153,.6);border-radius:2px"></div><span style="font-size:10px;color:var(--muted)">Joiners</span></div>';
+  if(_hasRegJoiners) o+='<div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:rgba(52,211,153,.6);border-radius:2px"></div><span style="font-size:10px;color:var(--muted)">Joiners</span></div>';
   o+='<div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:rgba(248,113,113,.7);border-radius:2px"></div><span style="font-size:10px;color:var(--muted)">Exits (voluntary)</span></div>';
-  o+='<div style="font-size:10px;color:var(--muted);margin-left:auto">% = annualised rate</div>';
+  o+='<div style="font-size:10px;color:var(--muted);margin-left:auto">% = annualised rate'
+    +(_treg==='All'
+       ? ' on national HC'
+       : (_regHC ? ' on '+_treg+' HC '+_regHC.toLocaleString()
+                 : ' \u2014 <span style="color:var(--amber)">'+_treg+' headcount unknown, rate suppressed</span>'))
+    +'</div>';
   o+='</div></div>';
 
   // ── ATTRITION BY TENURE ──────────────────────────────────────────────
