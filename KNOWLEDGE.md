@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.29.0 | **Last updated:** 20 Aug 2026 — ate_tracker and the monthly joiner trend now reconcile from employee_master on every Super Emp upload; emp_code re-issue identified as the reason an ATE separation cannot be inferred from a missing code alone.
+**Version:** 3.30.0 | **Last updated:** 22 Aug 2026 — attrition rebuilt end to end: notice-period staff no longer counted as exits, the pan-India/regional split fixed, Jan–Aug reconstructed from eSep archives, and the date parser that had silently broken three panels repaired.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,68 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 21–22 Aug 2026 — Attrition was wrong in five independent ways (commits b9eb920, d829dee, 3bdae38, 98a7831, all PUSHED)
+
+**Trigger.** Alex, on the Workforce Intelligence tab: "this tab has bugs, many missing data, double check on attrition computation in this tab as well as on overview, i also see duplication in these two tabs". The headline read **17.3% annualised, 190 voluntary exits Aug–Jul YTD**. Every part of that sentence was wrong, including the period label, which is not a period.
+
+**READ THIS FIRST — the one bug that caused three unrelated symptoms.**
+`processWISuperEmp()` and `processWIEsep()` both read fields through a `g()` accessor that does `String(value).trim()`. `XLSX.read` runs with `cellDates:true`, so a date cell arrives as a **JS Date**, and `g()` turns it into `"Sat Aug 21 2000 00:00:00 GMT+0530 (India Standard Time)"`. The code then did `new Date(String(v).split(' ')[0])` — which parses the string **`"Sat"`**. Invalid Date, on every row, in both parsers. Symptoms, which looked completely unrelated:
+- `age_dist` and `tenure_dist` read **100% in the top bucket** (">45", ">10 yrs"). `NaN` fails every `<` comparison in an if/else-if chain and lands in the final `else`. The panels were counting parse failures.
+- `processWIEsep()` bailed at `if (isNaN(rel_date)) return;` **before any classification ran**, so `attrition_by_region`, `attrition_by_tenure` and `exit_reasons` were written empty. The narrow ResignationType allow-list was a *second*, independent bug hiding behind it.
+- **The lesson:** an `else` at the end of a numeric if/else-if chain is a silent NaN sink. Never let an unparsed value reach it — validate and skip, and count what you skipped.
+New shared **`_wiDate()`** handles Date objects, stringified Dates, Excel serials, DD/MM/YYYY, DD-MM-YYYY and ISO, and **never returns an Invalid Date**. It also rejects bare numbers outside the serial range: `new Date("61")` was yielding **1961-01-01**, manufacturing a plausible date from a stray numeric cell. `gRaw()` added to both parsers so date fields skip the stringifying accessor. 13 cases verified in-browser, including the 1900 leap-year boundary (serial 61 → 1900-03-01) cross-checked against Python.
+
+**BUG 1 — the wrong function owned attrition, and it counted people who had not left.**
+An eSep upload runs `processEsep` → `processWIEsep` → `processResignationData`. The last two **both wrote `WI.attrition`**, and `processResignationData` ran last and won — with no FinalStatus filter, no voluntary filter, and no check that the LWD had passed. It bucketed every resignation by LWD month, so **101 staff still serving notice (Sep 53, Oct 48) were charted as exits** while also sitting inside Active Headcount, which is labelled "Active + Serving Notice Period". The same people were on both sides of the ratio. Of 190 charted, **78 had actually left and 61 were approved**.
+- That block now writes a `serving_notice` **stock** figure to its own key and never touches attrition. `processWIEsep` owns attrition alone.
+- **Stock vs flow again:** attrition is flow (what completed in the window), serving-notice is stock (what is pending now). Never the same row. Same house pattern as TA Pipeline.
+
+**BUG 2 — Jan–May had been destroyed, and it was recoverable.**
+`_mergeWI` is a shallow `Object.assign`, so `attrition` was replaced wholesale by each rolling eSep export. Now merges: months absent from the export are carried forward, months the export covers but which yield nothing are written as a **real zero** (not carried forward — that would resurrect the old figure), and future months are dropped.
+
+**BUG 3 — Overview and Workforce Intelligence held the same algorithm, copy-pasted.**
+`_ytdMons`/`q1attr` there, `_wiDynMons`/`ann` here. Both walked backward from last month with a `(cur-1-i+12)%12` index that **wrapped past January into the previous calendar year**, which is where "Aug–Jul YTD" came from and how Sep/Oct entered the rate. Replaced by one shared **`_attrWindow(W)`**. **Do not re-inline it into either tab.**
+
+**BUG 4 — the region filter changed the bars but not the percentages.**
+`var rate = md.rate||0` read the pan-India figure regardless of the selected region, so choosing North rendered North's exit counts (11, 8, 10, 7 …) underneath all-India percentages (30.2%, 17.7%, 28.8% …). The chart also **hid joiners entirely for any region** — the code carried "region joiners not available yet". `reconcile_joiners_by_month()` now also emits `joiners_by_month_region`, and `_exOf`/`_joOf`/`_rateOf` derive every series from one scope so bars, counts and percentage cannot disagree again. The legend names the denominator ("on North HC 480").
+
+**BUG 5 — `sbBoot` gated the entire Supabase WI load on `active_hc_mar`**, a legacy March key no parser writes. Drop or zero it and the whole dashboard silently reverts to the hardcoded May-era `WI` constant with no warning. Now gates on the row having any data, and warns when it does not. Overview was also showing **two different headcounts** on one screen — command strip 2,629 (`active_hc_current`) against the Workforce Health chip 2,979 (`active_hc_mar`).
+
+**ZingHR's ~3-month export limit does NOT apply to the eSep report.** `reports/cmsitn_e-sep_transaction_details_08062026.xlsx` holds **13,750 rows spanning Jun 2021 → Aug 2026**. The limit is real for the *candidate transactional* report (see the 17 Aug entry) but was wrongly generalised to every ZingHR export, and that is why the Jan–Mar attrition gap was recorded as permanent. It was not.
+
+**Jan–Aug 2026 rebuilt** from a union of the 08 Jun archive and Alex's 22 Aug export (906 rows), keyed on `EmployeeCode + DateOfResignation` so an LWD revision merges rather than double-counting. The 22 Aug file wins on shared keys (**77 rows had moved Pending → Approved, 63 LWDs revised**); the archive supplies Jan–Feb, which the 22 Aug export undercounts (Jan 55 vs 131).
+
+| | Jan | Feb | Mar | Apr | May | Jun | Jul | Aug |
+|---|---|---|---|---|---|---|---|---|
+| Voluntary | 75 | 45 | 74 | 70 | 51 | 59 | 44 | 22 |
+| Involuntary | 42 | 45 | 72 | 51 | 21 | 45 | 36 | 3 |
+| Opening HC | 2,979 | 3,045 | 3,080 | 3,104 | 3,071 | 2,749 | 2,690 | 2,629 |
+| Rate | 30.2% | 17.7% | 28.8% | 27.1% | 19.9% | 25.8% | 19.6% | 10.0% |
+
+**Denominators are MEASURED, never chained.** Chaining `opening + joiners − exits` drifted to **3,067** for August against a Super Emp Master reading of **2,629** — a 438-head error — because eSep does not capture every leaver and the snapshot population differs from the master's Active filter. Anchors: `monthly_hc_snapshot` Jan–Apr, April closing for May, Super Emp Master 2,749 (09 Jun) and 2,629 (18 Aug). Only July is interpolated. `monthly_hc_snapshot` extended to all eight months so the parser reads real denominators on the next upload.
+
+**Classifier calibrated against 13,750 archive rows.** Two rules that cost real accuracy:
+1. ZingHR appends **` -M1` / ` -HR`** to name whoever *actioned* the record. It is an actor tag, not a separation type — `Absconding` and `Absconding -M1` are the same thing, and the archive holds 1,792 of the latter against 210 of the former. Strip it before comparing (`_stripActor()`), or every `-M1` variant sails through as voluntary.
+2. `ResignationType` and `Reason` are **only loosely coupled**. `Absconding` appears against reasons as innocuous as "Higher Salary" and "Family Issues"; "Project End" appears against `Self Initiation`, `Dismissal` *and* blank. A row is involuntary if **either** field says so — testing one alone leaks both ways.
+**Alex's ruling (22 Aug): Absorption (Conversion) and Project End are involuntary.** Both already were; verified rather than assumed — of 755 completed separations, 315 are involuntary, led by **Project End (144)** and **Absorption/Client Absorption (53)**.
+
+**THE FORMULA — quote this, do not re-derive it.**
+- Per month (the % above each trend bar, already annualised):
+  `rate = voluntary_exits_in_month ÷ opening_headcount_of_month × 12 × 100`
+  January: `75 ÷ 2,979 × 12 × 100 = 30.2%`. The raw monthly figure is `75 ÷ 2,979 = 2.5%`.
+- Headline KPI (`_attrWindow`, both tabs):
+  `rate = Σ voluntary_exits ÷ mean(opening_headcount) × (12 ÷ months_counted) × 100`
+  Jan–Jul: `418 ÷ 2,960 × (12 ÷ 7) × 100 = **24.2%**`
+- Window = **January to the last complete month**. The month in progress is excluded (a partial month understates and drags the rate down). A month present with **zero** exits still counts in the denominator; a month with **no data** does not — no data is not zero.
+- Regional rate uses that region's **own** headcount: `regional_exits ÷ W.regions[reg].hc × 12 × 100`.
+- `voluntary` = Relieving Date passed **AND** FinalStatus Approved **AND** neither ResignationType nor Reason involuntary.
+
+**Data written:** `workforce_intel` (`esep_union_20260822`, `dist_fix_20260822`), `monthly_hc_snapshot` all 8 months. `tenure_dist` rebuilt from `employee_master.doj` — the real peak is **1–3 yrs at 33%**, not ">10 yrs at 100%". `age_dist` cleared: no DOB in the database, so it repopulates on the next Super Emp upload, and the panel now says so rather than rendering a grid of "0 (0%)" that reads as a finding.
+
+**index.html:** 16,992 → 17,217 lines across four commits. `node --check` clean after every edit; one failure (an orphaned `} catch` left by a removed `try`) was caught, context printed per the standing rule, and fixed. All four overwrite-prevention greps positive throughout. Verified in a local browser run each time: no console errors, regional exits and joiners sum to the national totals in all eight months, both empty-state and populated branches exercised.
+
+**Still open:** `ctc_brackets` reads 74% under ₹2.5L because unmapped grades fall into that bucket by default — check the grade list against the next upload. The TA Activity table still shows stale Jan–Mar data with a 127% March conversion.
 
 ### 20 Aug 2026 — ATE reconciliation + live monthly joiner trend (3 migrations + index.html, commit 9ef7030, PUSHED)
 
@@ -174,7 +236,7 @@ Conversion must precede separation: a converted ATE's old code has already dropp
 - **Not recovered by the fix:** the 17 Aug candidate data. `ta_candidates` stays at the 10 Jul batch until Alex re-uploads. Failures are now loud.
 - Files touched: `index.html` only (16,634 → 16,776 lines, all additive). No schema change.
 
-### 17 Aug 2026 — ZingHR only exports ~3 months back (confirmed)
+### 17 Aug 2026 — ZingHR only exports ~3 months back (confirmed for the CANDIDATE report only — see 22 Aug)
 - **Raised by:** Alex during the above session — "ZingHR is allowing download of candidate and other reports backdated only for 3 months, could that be a problem?"
 - **Confirmed in data:** `ecode_date` in `ta_candidates` spans **2026-04-02 → 2026-07-09** only. Nothing earlier. `req_date` reaches back to 2025-10-28 (a req raised in Oct can still have a candidate transaction inside the window), but actual ECode creations are windowed.
 - **Why it mostly holds together:** the `ta_candidates` upsert is keyed on `application_id` and **never deletes** (only `delete().is('application_id', null)`, a legacy purge). The table therefore *accumulates* coverage across uploads — each month's file tops up the previous. `WI.ta_monthly` is merged with `Object.assign`, so months outside the window keep their prior values.
@@ -696,6 +758,10 @@ if over 300 lines):
 - computeHRBPScore(): "function computeHRBPScore"
 - loadLDTab() / _loadLDSessions() / _loadLDPipeline(): L&D tab data loaders
 - switchTab(): TWO definitions — line ~3845 is DEAD; line ~4608/4668 is LIVE. New tab wiring goes in the live one.
+- _attrWindow(W): "function _attrWindow" — SINGLE source of the annualised attrition
+  window, read by BOTH renderOverview() and renderWorkforce(). Do not re-inline it.
+- _wiDate(v): "function _wiDate" — tolerant date parser for the workforce_intel parsers.
+  Returns a Date or null, never an Invalid Date. Pair it with each parser's gRaw().
 - Globals: CUSTOMER_LIST, TA_ACTIVE_REQS, _absentCases, WI (hardcoded ~line 845, overridden by Supabase at boot)
 
 ---
@@ -1042,13 +1108,19 @@ planned_leaves, employee_account_mapping (not yet built), account_positions_log.
   then separate. **Separation requires both emp_code AND name absent** — see the
   emp_code re-issue debt item. Returns rows changed. Called in processEmployeeMaster
   immediately after sync_headcount_from_employee_master().
-- reconcile_joiners_by_month() → integer (migration: add_reconcile_joiners_by_month_20260820). 20 Aug 2026.
+- reconcile_joiners_by_month() → integer (migrations: add_reconcile_joiners_by_month_20260820,
+  add_joiners_by_month_region_20260822). 20 Aug 2026, extended 22 Aug.
   SECURITY INVOKER + `SET search_path = public` — no elevation needed, `hrops` is in `wi_write_hrops`.
   Rebuilds workforce_intel.data->joiners_by_month / joiners_ytd / joiners_ytd_note from
   employee_master.doj for the current calendar year. Counts **all rows, not the batch**
   (gross joiners, not retained). Returns the YTD total. Called immediately after
   reconcile_ate_from_employee_master(). **workforce_intel is shared with OPS360** — this
   writes values into existing keys only, no schema change.
+  As of 22 Aug also emits `joiners_by_month_region` ({Mon: {Region: count}}) from
+  employee_master.region, which the Workforce Intelligence trend chart needs to show
+  joiners under a region filter. Rows with no region are absent from the regional
+  object rather than forced into a bucket, so the four regions sum to slightly under
+  the national total in months where region is blank.
 
 ---
 
@@ -1074,8 +1146,23 @@ planned_leaves, employee_account_mapping (not yet built), account_positions_log.
 - 09-Jun numbers: activeRows 2,709 · WI HC 2,749 · 380 HC cache keys · ATE 65 · FTC 106 · Consultant 324 · Contract 89.
 
 ### ZingHR eSep Transaction (Ramesh — monthly)
-Populates CMS_RES_DATA, workforce_intel attrition. HC denominator: hc_snap[mon] || 2830.
-Scoped to 2026 exits only. Excludes FnF Locked and revoked from CMS_RES_DATA (intentional).
+Populates CMS_RES_DATA, workforce_intel attrition. HC denominator: `monthly_hc_snapshot.opening_hc`
+for the month, falling back to current HC — keep that table populated or every month
+annualises on today's headcount.
+Runs three functions in order: `processEsep` → `processWIEsep` → `processResignationData`.
+- **`processWIEsep` OWNS `attrition`.** `processResignationData` used to overwrite it and
+  must never do so again — it writes `serving_notice` only. See the 21 Aug entry.
+- **Attrition counts a separation only when it is COMPLETE:** FinalStatus `Approved` AND
+  the Relieving Date has passed. A future LWD means the person is serving notice, is still
+  inside Active Headcount, and must not appear as an exit.
+- **Voluntary/involuntary is decided on BOTH `ResignationType` and `Reason`**, each with the
+  ` -M1` / ` -HR` actor suffix stripped first. Involuntary if either says so. `Absorption
+  (Conversion)` and `Project End` are involuntary (Alex, 22 Aug).
+- **Use `gRaw()` + `_wiDate()` for every date field.** The plain `g()` accessor stringifies,
+  which destroys Date cells and produced Invalid Date on every row for months.
+- Merge, never replace: months absent from a rolling export are carried forward; months the
+  export covers but which yield nothing are written as a real zero.
+Excludes FnF Locked and revoked from CMS_RES_DATA (intentional).
 
 ### ZingHR Req TAT / Candidate Transactional (Ramesh — weekly)
 normaliseCustomer() on every customer field. billing_type from customer_accounts.
@@ -1104,7 +1191,11 @@ midnight back a day).
   stamping it on a failed write makes the dashboard claim a file it does not have.
 - Column lookup is alias-tolerant (normalised lowercase-alphanumeric). Add new
   spellings to the alias lists rather than renaming, ZingHR re-spells headers.
-- **~3-month export limit:** ZingHR only allows backdated downloads ~3 months, so
+- **~3-month export limit (CANDIDATE report only):** verified for the candidate
+  transactional export. It does **NOT** hold for eSep — `cmsitn_e-sep_transaction_details_08062026.xlsx`
+  carries 13,750 rows back to Jun 2021. Do not generalise the limit to other ZingHR
+  reports without checking; that assumption is what recorded the Jan–Mar attrition
+  gap as permanent when it was recoverable. For the candidate report,
   no single file carries a full year. Anything labelled YTD must be counted off the
   accumulated table, not off the file. See the 17 Aug 2026 session log entry.
 
@@ -1152,7 +1243,18 @@ Vitech, Clix Capital. Deployment gap calc applies ONLY to T&M accounts.
 ## Workforce Intelligence — Current Numbers
 - Active HC: 2,749 (Super Emp Master, 09 Jun 2026). Account HC cache (activeRows): 2,709. Gap of 40 = FnF Initiated/transitional.
 - Region HC: North 502 / South 660 / East 502 / West 1,088.
-- Attrition (annualised): Jan 34.6% · Feb 20.5% · Mar 19.9% · Apr 1.2% · May 19.1%.
+- **Attrition (annualised, VOLUNTARY, rebuilt 22 Aug 2026 from eSep):** Jan 30.2% · Feb 17.7%
+  · Mar 28.8% · Apr 27.1% · May 19.9% · Jun 25.8% · Jul 19.6% · Aug 10.0% (in progress).
+  Voluntary exits 75/45/74/70/51/59/44/22; involuntary 42/45/72/51/21/45/36/3.
+  **Headline: 24.2% annualised across Jan–Jul** (418 voluntary ÷ mean opening HC 2,960 × 12/7).
+  Opening HC by month: 2,979 / 3,045 / 3,080 / 3,104 / 3,071 / 2,749 / 2,690 / 2,629 — MEASURED,
+  never chained (see the 22 Aug session entry for why chaining is a 438-head error).
+  The older figures on this line (Jan 34.6% · Apr 1.2%) were total-exit or partial counts
+  from `monthly_hc_snapshot` as at 14 Apr and should not be quoted.
+- **Serving notice: 112** (LWD ahead — Aug 8, Sep 53, Oct 51). Inside Active Headcount,
+  NOT in attrition. Counting them as exits is the bug fixed on 21 Aug.
+- Exit reasons YTD (voluntary): Higher Salary 167 · Job Role Change 98 · Family Issues 90.
+  Tenure at exit peaks at **1–2 yrs (148 of 440)**; 28% leave inside the first year.
 - **Joiners by month (live from employee_master.doj, 20 Aug 2026):** Jan 64 · Feb 77 · Mar 92
   · Apr 73 · May 80 · Jun 95 · Jul 92 · Aug 60 = **633 YTD**. Gross joiners (all rows), not
   retained (which would read 573). Rebuilt on every Super Emp upload by
@@ -1295,17 +1397,47 @@ unchanged) → Vercel team setup with custom domain → GitHub repo transfer.
 ---
 
 ## Known Debt — Carry Forward
+- **`g()` stringifies, which destroys Date cells — this pattern is still live elsewhere.**
+  `String(dateObject)` gives "Sat Aug 21 2000 …", and any code doing
+  `new Date(String(v).split(' ')[0])` parses **"Sat"** and gets Invalid Date. Fixed in
+  `processWISuperEmp` and `processWIEsep` on 22 Aug via `gRaw()` + `_wiDate()`. **Other
+  parsers still use the same `g()` accessor** — audit each one that touches a date before
+  trusting its output. Symptom to watch for: a distribution reading 100% in its top bucket.
+- **A trailing `else` in a numeric if/else-if chain is a silent NaN sink.** `NaN` fails
+  every `<` comparison, so an unparsed value lands in the last bucket and looks like a
+  finding. This produced ">45 = 100%" and ">10 yrs = 100%" for months. Validate and skip,
+  count the skips, and never let an unvalidated number reach the final `else`.
+- **`ctc_brackets` reads 74% under ₹2.5L.** The grade→bracket map ends with
+  `else ctc_brackets['<2.5L'] += cnt`, so every unmapped grade lands in the cheapest
+  bucket. Check the actual grade list against the next Super Emp upload before quoting
+  any wage-distribution number.
+- **`age_dist` is empty until the next Super Emp upload.** There is no DOB in
+  `employee_master`, so it cannot be rebuilt from the database. The panel says so rather
+  than rendering zeros.
+- **TA Activity table is stale.** Still showing Jan–Mar only, with a 127% March conversion
+  rate (joined 51 against offered 50). `ta_monthly` comes from the hardcoded WI fallback,
+  not from a parser. Not investigated.
+- **`monthly_hc_snapshot` must stay populated.** `processWIEsep` reads `opening_hc` from it
+  as the attrition denominator and falls back to *current* headcount when a month is
+  missing — which silently annualises historical months on today's HC. Populated for
+  Jan–Aug 2026 on 22 Aug; extend it each January.
 - **`employee_master` accumulates; it is not a snapshot.** The upsert is keyed on `emp_code` and never deletes, so leavers persist. On 17 Aug the table held 2,852 rows against 2,628 in that day's file. Anything counting headcount off this table **must** filter to the current batch via `uploaded_at`, as `sync_headcount_from_employee_master()` now does. A `batch_id` column stamped by the parser would be cleaner than a timestamp window — not built.
 - **`emp_status='NewJoinee'` is a transient ZingHR tag, not a durable fact.** Only 104-121 rows carry it at any time and one has a DOJ of Nov 2017. ZingHR flips people to `Existing` over time, so any joiner count over a window more than a few weeks old will silently under-report. `loadEMJoinerCounts()` (~10062) filters on it; `_loadHRCycleData()` (~5345) uses `.in(['NewJoinee','Existing'])`. **The two disagree by design and neither is right for custom date ranges** — count on `doj` alone across all rows. Blocks the custom-date reporting Alex asked for on 17 Aug. **PARTIALLY RESOLVED 20 Aug 2026:** the monthly joiner trend now counts on `doj` via `reconcile_joiners_by_month()`, and `joiners_ytd` is no longer derived from the tag. `loadEMJoinerCounts()` and `_loadHRCycleData()` still filter on `emp_status` and are still wrong for anything older than a few weeks.
 - **`linkResignationReq()` may have the same `req_status` hardcode.** The insert at ~line 8890 sets `req_status:'Open', req_age_days:0` when creating an `account_positions_log` row for a resignation backfill. That is the same pattern fixed in `submitRMGNewPosition()` on 17 Aug, but it was left alone because a backfill req may be raised against an already-exported req, so the reasoning is not automatically identical. Worth checking whether it should also leave `req_status` null.
 - **`account_positions_log.status` is dead weight.** 428 rows read `req_status='Closed'` with `status='Open'`, because `status` sits at its column default and the Close action was never built. `_rmgEffStatus()` lets `req_status` win so nothing is visibly wrong today, but any filter or report built on `status` will be badly wrong. Either wire up Close or drop it from the UI.
+- ~~**Attrition counted notice-period staff as exits.**~~ CLOSED 21 Aug 2026. `attrition` is
+  owned by `processWIEsep` alone; `processResignationData` writes `serving_notice` instead.
+  Attrition requires FinalStatus Approved AND a Relieving Date that has passed.
+- ~~**Overview and Workforce Intelligence disagreed on attrition.**~~ CLOSED 21 Aug 2026 —
+  one shared `_attrWindow()`. The copies had drifted into a year-wrapping month walk that
+  produced the impossible label "Aug–Jul YTD".
 - **`updated_at` is not an event date.** On every bulk-upserted table it records when the parser last touched the row, so date-range filters on it return "all" or "nothing". 849 of 856 `req_tracker` Closed rows share one `updated_at`. Use `filled_date` / `ecode_date` / `doj` instead. Audit any other range filter still using `updated_at`.
 - **`head:true` on Supabase counts returns undefined** against the client this app pins. Use `select(col,{count:'exact'}).limit(1)` and read `.count`, and always handle the null case loudly.
 - ~~**Open-req grid period filter — undecided.**~~ SETTLED 17 Aug 2026 across 236f48c → 080ff46 → **4a81388 (final)**. Final behaviour: KPIs are split into two labelled rows — Open Pipeline (stock, always all open reqs) and Activity (flow, always the period). The grid chip narrows **only** the grid and defaults off. Do not merge the rows or make a KPI follow the chip; that mixture is exactly what produced "Critical 52 of Open Reqs 46".
 - **Stock vs flow is the house pattern for pipeline tabs.** Anything measuring a standing backlog belongs in a stock row that ignores the period bar; anything measuring movement belongs in a period-scoped flow row. Worth applying to Hiring Report and RMG Workspace if they grow KPI rows.
 - **Filled and Joined must not be paired as a funnel** anywhere. They are different cohorts within any single window. A real funnel requires cohort tracking (reqs filled in the window → those specific hires' DOJ), which does not exist yet.
 - **Period bar coverage:** `_setOvPreset()` notifies Overview, Ops Review, L&D, HRBP, TA Pipeline and Hiring Report. Any tab added later must be wired in there explicitly — there is no generic broadcast, which is exactly how TA Pipeline and Hiring Report ended up ignoring the bar.
-- **Jan–Mar 2026 candidate gap (permanent):** ta_candidates has no ecode_date before 2026-04-02. ZingHR's ~3-month download limit means it cannot be backfilled from ZingHR. Only recoverable from Super Employee Master if ever needed.
+- **Jan–Mar 2026 candidate gap (permanent):** ta_candidates has no ecode_date before 2026-04-02. The ~3-month download limit applies to the *candidate* report specifically, so it cannot be backfilled from ZingHR. Only recoverable from Super Employee Master if ever needed. **Note the limit is report-specific** — eSep exports 5 years, and assuming otherwise cost an unnecessary "permanent gap" on attrition (22 Aug).
 - **17 Aug candidate data not in DB:** ta_candidates still holds only the 10 Jul batch (426 rows). Needs a re-upload of the 17 Aug candidate transactional file on the fixed build (commit 2f6fdfb). Failures are now loud (red banner names the column/error).
 - **Stale candidate stages:** _taCandMap is built from the accumulated ta_candidates table, and rows never age out. A candidate who has since dropped out but fell outside the export window keeps its last-known stage forever. Affects stage badges and the phantom-req filter. No fix designed.
 - **getRows() row-0 assumption:** still used by parsers other than the two candidate ones. Any ZingHR export that gains a title row will silently zero out. Consider migrating the rest to getRowsAuto() when each is next touched.
