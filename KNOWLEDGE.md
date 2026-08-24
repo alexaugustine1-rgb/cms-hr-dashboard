@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.30.0 | **Last updated:** 22 Aug 2026 — attrition rebuilt end to end: notice-period staff no longer counted as exits, the pan-India/regional split fixed, Jan–Aug reconstructed from eSep archives, and the date parser that had silently broken three panels repaired.
+**Version:** 3.30.1 | **Last updated:** 24 Aug 2026 — Weekly Report week-key/label mismatch fixed: `weekKeyForDate()` and `getCurrentWeekLabel()` used different week boundaries (Sun–Sat vs Mon–Sun), corrupting the W34/W35 labels in `weekly_reports` and hiding the "17 Aug – 21 Aug" tile from the submit form.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,16 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 24 Aug 2026 — Weekly Report week-key/label mismatch hid the "17 Aug – 21 Aug" tile (commit 1961ae2, PUSHED)
+
+**Trigger.** Priya Paul (HRBP, South), via the app: "I was trying to fill up the report from 17th to 21st Aug but it is not showing in the command centre."
+
+**Root cause.** Two different functions bucket dates into weeks and they disagreed. `weekKeyForDate()` split weeks **Sun–Sat** using a static day-of-month map; `getCurrentWeekLabel()` split weeks **Mon–Sun**. A submission made near a week boundary could get a `week_key` from one scheme and have its display label stamped from the other. This corrupted two consecutive `weekly_reports` rows: **W34** and **W35** both carried labels that duplicated/overlapped earlier weeks (`"03 Aug – 07 Aug"` and `"10 Aug – 14 Aug"` respectively, instead of `"10 Aug – 14 Aug"` and `"17 Aug – 21 Aug"`). No tile anywhere read "17 Aug – 21 Aug", even though the W35 row existed in the DB with real submissions under it — Priya's target week was invisible, not missing.
+
+**Fix.** `weekKeyForDate()` (~line 6510) now derives the key from a fixed Monday anchor (03 Aug 2026 = W33, both Mon-start) for any date on/after the anchor; the old Sun–Sat static map is retained only for historical dates before it. New `weekLabelForKey(key)` derives the Mon–Fri label straight from the key, so key and label can never drift apart again — every render site that used to trust `WEEKS_DATA[k].label` now tries `weekLabelForKey(k)` first. Also corrected the already-corrupted DB rows directly: `weekly_reports.label` W34 → `"10 Aug – 14 Aug"`, W35 → `"17 Aug – 21 Aug"`.
+
+**Lesson — same house pattern as the attrition bug (21–22 Aug, below):** two independently-written functions computing the "same" thing (a week boundary) with different rules is a silent-drift bug waiting for a boundary case. Prefer deriving one from the other, as `weekLabelForKey()` now does, over keeping them as parallel implementations.
 
 ### 21–22 Aug 2026 — Attrition was wrong in five independent ways (commits b9eb920, d829dee, 3bdae38, 98a7831, all PUSHED)
 
