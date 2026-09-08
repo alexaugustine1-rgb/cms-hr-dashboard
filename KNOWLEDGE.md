@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.30.1 | **Last updated:** 24 Aug 2026 — Weekly Report week-key/label mismatch fixed: `weekKeyForDate()` and `getCurrentWeekLabel()` used different week boundaries (Sun–Sat vs Mon–Sun), corrupting the W34/W35 labels in `weekly_reports` and hiding the "17 Aug – 21 Aug" tile from the submit form.
+**Version:** 3.30.2 | **Last updated:** 08 Sep 2026 — Long Absenteeism tab wasn't refreshing after eSep / Super Emp / Attendance uploads: `postUploadRefresh()`'s 'absent' handler targeted a nonexistent element and called a nonexistent function, so it silently did nothing.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,20 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 08 Sep 2026 — Long Absenteeism tab not refreshing after uploads (commit d25ef39, PUSHED)
+
+**Trigger.** Alex, on the Long Absenteeism tab: "The Long Absenteeism tab is not getting refreshed."
+
+**Root cause.** `postUploadRefresh(type)` force-refreshes a fixed set of tabs after each upload type finishes processing. Its `'absent'` entry in `_tabMap` had two independent bugs that made it a no-op: it looked up `document.getElementById('tab-absent')`, but the tab's real element id is `tab-absenteeism`; and even if that element had been found, it called `loadLongAbsent()`, a function that does not exist anywhere in the codebase (the real loader is `loadAbsentCases()`). Because the lookup silently returned `null`, the `if(e){...}` guard never ran and no error was ever thrown — the bug was invisible in the console.
+
+Separately, `_refreshMap['esep']` and `_refreshMap['super_emp']` reset `_absentLoaded = false` (correctly invalidating the tab's cached data, since both uploads change the eSep-verification and active-employee cross-references `loadAbsentCases()` uses) but never listed `'absent'` as a tab to actively re-render. So if you were sitting on the Long Absenteeism tab at the moment either file finished uploading, the eSep-verified/unverified flags and the active-employee filter would not update until you navigated away and back.
+
+Note: the Attendance Consolidation upload path itself (`processAttendanceAbsence()`) was NOT affected — it calls `loadAbsentCases()` directly right after the upsert loop, independent of `postUploadRefresh`. The bug only affected the *secondary* refresh trigger, and only for the eSep/Super Emp upload types, or when `postUploadRefresh('attendance')`'s own (also broken) handler was the only thing that would have refreshed the view.
+
+**Fix.** `_tabMap['absent']` now targets `tab-absenteeism` and calls `loadAbsentCases()`. `_refreshMap['esep']` and `_refreshMap['super_emp']` both now include `'absent'`.
+
+**Lesson.** A `document.getElementById(...)` typo or a call to a renamed/never-existed function inside an `if(el){...}` guard fails silently — no console error, no visible symptom beyond "this thing feels stale." When a tab is reported as not refreshing, check the upload-time refresh wiring (`postUploadRefresh`'s `_tabMap`/`_refreshMap`) for id/function-name drift before assuming it's a data-staleness issue.
 
 ### 24 Aug 2026 — Weekly Report week-key/label mismatch hid the "17 Aug – 21 Aug" tile (commit 1961ae2, PUSHED)
 
