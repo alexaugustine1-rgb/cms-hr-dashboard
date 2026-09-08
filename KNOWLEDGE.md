@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.30.3 | **Last updated:** 08 Sep 2026 — FnF Aging Distribution KPI didn't reconcile to Total Pending (188 vs 189): aging `band` was trusted verbatim from the uploaded Excel's own 'Band' column instead of being derived from the app's own recalculated `days`, so a corrupted cell (literal string `'FALSE'`) silently vanished from every band-keyed KPI.
+**Version:** 3.30.4 | **Last updated:** 08 Sep 2026 — Resignation & Backfill's "N employees left without R1 approval" banner ignored the Region/Tier/Req/R1 filters entirely while every other number on the tab respected them, reading as "the filters aren't working."
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,16 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 08 Sep 2026 — Resignation & Backfill: R1-approval banner ignored active filters (commit 7191900, PUSHED)
+
+**Trigger.** Alex, on the Resignation & Backfill tab, after an initial vague "error in the top filtering tab" report: "when i use the filter the KPI tab should also change."
+
+**Root cause.** `renderResignation()` computes almost everything from `data`, which by the time the KPI strip renders has already been through `applyFilters()` for Region/Tier/Req/R1 (the 5 KPI cards, the row list, and the "Showing X of Y" line all correctly react to filter clicks). But the red compliance banner above the KPI strip — "N employees left without R1 approval" — was built from `r1FailPast = dataPast.filter(...)`, using the **pre-filter** `dataPast`, not the filtered `filtPast`. So clicking any filter visibly changed the 5 cards and the list below, but this one banner stayed frozen at the pan-org count — which reads exactly like "the filters aren't working," even though everything else on the page was filtering correctly.
+
+**Fix.** Moved the `r1FailPast` computation to after `filtPast` is built and changed its source from `dataPast` to `filtPast`, so the banner now moves in step with Region/Tier/Req/R1 like the rest of the tab. Also deleted `r1FailActive`, a dead variable declared next to the bug and never read anywhere.
+
+**Lesson.** When a render function builds several summary numbers from the same filtered base (`data`/`filtActive`/`filtPast`) but one summary line was written against an earlier, unfiltered intermediate variable, it silently falls out of sync with the rest of the view — no error, just a number that quietly stops moving. When a KPI/banner is added to a tab that already has a filter pipeline, grep for which specific variable feeds it before assuming it inherited the filters.
 
 ### 08 Sep 2026 — FnF Aging Distribution didn't reconcile; band derived from a frozen source column (commit d853139, PUSHED)
 
