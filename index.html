@@ -14821,8 +14821,8 @@ function postUploadRefresh(type) {
     'od':          function(){ var e=document.getElementById('tab-od'); if(e&&typeof renderOD==='function') e.innerHTML=renderOD(); },
     'risks':       function(){ var e=document.getElementById('tab-risks'); if(e&&typeof renderRisks==='function') e.innerHTML=renderRisks(); },
     'absent':      function(){
-      var e=document.getElementById('tab-absent');
-      if(e){ _absentLoaded=false; if(typeof loadLongAbsent==='function') loadLongAbsent(); }
+      var e=document.getElementById('tab-absenteeism');
+      if(e){ _absentLoaded=false; if(typeof loadAbsentCases==='function') loadAbsentCases(); }
     },
     'ate':         function(){
       _ateLoaded=false; _ateAdvLoaded=false;
@@ -14833,8 +14833,8 @@ function postUploadRefresh(type) {
 
   // Which tabs to refresh per upload type
   var _refreshMap = {
-    'super_emp':  ['workforce','fnf','resignation','risks','ate'],
-    'esep':       ['workforce','fnf','resignation','risks','ate'],
+    'super_emp':  ['workforce','fnf','resignation','risks','ate','absent'],
+    'esep':       ['workforce','fnf','resignation','risks','ate','absent'],
     'od':         ['od'],
     'attendance': ['absent','risks'],
     'fnf':        ['fnf','risks'],
