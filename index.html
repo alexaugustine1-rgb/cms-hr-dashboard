@@ -9236,9 +9236,6 @@ function renderResignation(){
   // Split: active (future LWD) vs recently left (past LWD)
   var dataActive = data.filter(function(r){return (r.days_to_lwd||0)>=0;});
   var dataPast   = data.filter(function(r){return (r.days_to_lwd||0)<0;});
-  // R1 process failure: left without R1 approval
-  var r1FailPast = dataPast.filter(function(r){return r.r1_status==='Pending'||!r.r1_status;});
-  var r1FailActive = dataActive.filter(function(r){return r.r1_status==='Pending'||!r.r1_status;});
   // Apply user filters to both sets
   function applyFilters(arr) {
     var out = arr.slice();
@@ -9257,6 +9254,10 @@ function renderResignation(){
   var dataAllMerged = dataActive.concat(dataPast);
   var filtActive = applyFilters(dataActive);
   var filtPast   = applyFilters(dataPast);
+  // R1 process failure: left without R1 approval — scoped to the active filters
+  // (region/tier/req/R1) so this banner moves in step with the rest of the tab
+  // instead of always showing the pan-org count regardless of what's selected.
+  var r1FailPast = filtPast.filter(function(r){return r.r1_status==='Pending'||!r.r1_status;});
   // Combined for stat cards
   data = filtActive.concat(filtPast);
 
