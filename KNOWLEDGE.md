@@ -1,5 +1,5 @@
 # CMS HR Ops Command Centre — Project Knowledge
-**Version:** 3.30.2 | **Last updated:** 08 Sep 2026 — Long Absenteeism tab wasn't refreshing after eSep / Super Emp / Attendance uploads: `postUploadRefresh()`'s 'absent' handler targeted a nonexistent element and called a nonexistent function, so it silently did nothing.
+**Version:** 3.30.3 | **Last updated:** 08 Sep 2026 — FnF Aging Distribution KPI didn't reconcile to Total Pending (188 vs 189): aging `band` was trusted verbatim from the uploaded Excel's own 'Band' column instead of being derived from the app's own recalculated `days`, so a corrupted cell (literal string `'FALSE'`) silently vanished from every band-keyed KPI.
 
 > **This is the single source of truth for the project.** It replaces the older
 > `HRCC_Project_knowledge.MD` and `cms_hr_cc_knowledge_v2.md` files. Update this
@@ -10,6 +10,16 @@
 
 ## Recent Updates (Session Log)
 > Newest first. Add a dated entry here at the end of every session.
+
+### 08 Sep 2026 — FnF Aging Distribution didn't reconcile; band derived from a frozen source column (commit d853139, PUSHED)
+
+**Trigger.** Alex, on the FnF Settlement Tracker: "pls check the correctness of ageing distribution." The Aging Distribution strip read 69 / 4 / 3 / 55 / 19 / 38 — summing to 188 — while the Total Pending KPI above it read 189.
+
+**Root cause.** `processFnFData()` read the aging `band` verbatim from the uploaded Excel's own `'Band'` column (`g(r, 'Band')`), while the `days` field shown in the table is independently recalculated by the app itself (DOL → today for Pending, DOL → payment date for Paid). These are two separately-sourced numbers that are supposed to describe the same thing and were never reconciled. Queried `data_cache.fnf` directly in Supabase to confirm: one row (emp_code `33007800`, Shoib Mohammad Ismail Shaikh, West, 47 days pending) had `band = "FALSE"` — a corrupted/misaligned cell in that row of the source export. Since `"FALSE"` matches none of the six hardcoded band keys, the row silently dropped out of the Aging Distribution strip and the `critical`/`band_order` logic that key off `band`, with no error anywhere, while still counting toward `pending.length`. Recomputing all pending rows' bands from their live `days` value (same SQL, run against the DB) also reshuffled several *other* rows across the 45–60/60–90/0–45 buckets — the source file's own Band label was drifting from the app's own day-count for more than just the one corrupted row.
+
+**Fix.** Added `bandFromDays(d)` next to the existing `BORDER` map in `processFnFData()`, using the same six boundaries (0–45 / 45–60 / 60–90 / 90–180 / 180–365 / 365+). `band` is now computed from `calcDays` immediately after it's derived, instead of being read from the Excel `'Band'` column at all. Verified against the live DB: recomputing all 189 pending rows' bands from `days` sums to exactly 189, and the previously-invisible case now lands correctly in 45–60 Days.
+
+**Lesson — same family as the Long Absenteeism bug above:** a value trusted verbatim from an external file, when a locally-computed equivalent already exists, will drift and can silently disappear from any bucket-keyed KPI with no console error — the failure mode is a number that's just quietly wrong, not a crash. When two fields are conceptually "the same thing" (a day count and its bucket), derive one from the other; never carry both as independent inputs.
 
 ### 08 Sep 2026 — Long Absenteeism tab not refreshing after uploads (commit d25ef39, PUSHED)
 
