@@ -16528,6 +16528,18 @@ async function processFnFData(wb) {
 
   const g = (r, ...keys) => { for (const k of keys) if (r[k] !== undefined && String(r[k]).trim()) return String(r[k]).trim(); return ''; };
   const BORDER = {'0-45days':1,'45-60days':2,'60-90days':3,'90-180Days':4,'180-365days':5,'1year&above':6};
+  // Band is derived from computed days, never trusted from the source file's own
+  // 'Band' column — that column is a frozen snapshot that can drift out of sync
+  // with the recalculated days, and a bad/misaligned cell (e.g. literal 'FALSE')
+  // used to silently vanish from every band-keyed KPI with no error.
+  const bandFromDays = (d) => {
+    if (d >= 365) return '1year&above';
+    if (d >= 180) return '180-365days';
+    if (d >= 90)  return '90-180Days';
+    if (d >= 60)  return '60-90days';
+    if (d >= 45)  return '45-60days';
+    return '0-45days';
+  };
 
   const fmt = (v) => {
     if (!v || v === 'None') return '';
@@ -16548,7 +16560,6 @@ async function processFnFData(wb) {
   const newRows = rows.map(r => {
     const status   = g(r, 'Payment Status', 'Status');
     const net      = parseFloat(String(g(r,'Net FnF Due','Net Salary','NetSalary')).replace(/,/g,'')) || 0;
-    const band     = g(r, 'Band');
     const dolISO   = toISO(g(r,'DOL','DateOfLeaving','Relieving Date'));
     const pdRaw    = g(r,'Payment Date','Date of Payment','Paid Date','Payment done case');
     const pdClean  = (!pdRaw || ['None','Yes','No','Paid','Pending'].includes(pdRaw.trim())) ? '' : pdRaw;
@@ -16564,6 +16575,7 @@ async function processFnFData(wb) {
       }
       return Math.max(0, Math.round((Date.now() - dolMs) / 86400000));
     })();
+    const band = bandFromDays(calcDays);
     return {
       emp_code:     g(r,'Employee code','EmployeeCode'),
       name:         g(r,'Employee Name','EmployeeName'),
